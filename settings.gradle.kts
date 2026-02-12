@@ -21,8 +21,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "Jasmine"
 include(":app")
-include(":jasmine-core:api")
-include(":jasmine-core:client")
-include(":jasmine-core:exception")
-include(":jasmine-core:model")
-include(":jasmine-core:provider")
+include(":jasmine-core:prompt:prompt-model")
+include(":jasmine-core:prompt:prompt-llm")
+include(":jasmine-core:prompt:prompt-executor")
