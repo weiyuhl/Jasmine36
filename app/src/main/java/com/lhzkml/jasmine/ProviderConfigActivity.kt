@@ -48,19 +48,8 @@ class ProviderConfigActivity : AppCompatActivity() {
         tvModelStatus = findViewById(R.id.tvModelStatus)
         btnFetchModels = findViewById(R.id.btnFetchModels)
 
-        // 非内置供应商显示 baseUrl 字段
-        if (provider.needsBaseUrl) {
-            findViewById<LinearLayout>(R.id.layoutBaseUrl).visibility = View.VISIBLE
-        }
-
-        // 内置供应商不需要额外 margin
-        if (provider.isBuiltIn) {
-            findViewById<TextView>(R.id.tvKeyLabel).apply {
-                val lp = layoutParams as LinearLayout.LayoutParams
-                lp.topMargin = 0
-                layoutParams = lp
-            }
-        }
+        // 所有供应商都显示 API 地址字段
+        findViewById<LinearLayout>(R.id.layoutBaseUrl).visibility = View.VISIBLE
 
         // 加载已保存的配置
         ProviderManager.getApiKey(this, provider.id)?.let { etApiKey.setText(it) }
@@ -92,15 +81,11 @@ class ProviderConfigActivity : AppCompatActivity() {
             return
         }
 
-        val baseUrl = if (provider.needsBaseUrl) {
-            etBaseUrl.text.toString().trim().also {
-                if (it.isEmpty()) {
-                    Toast.makeText(this, "请先输入 API 地址", Toast.LENGTH_SHORT).show()
-                    return
-                }
+        val baseUrl = etBaseUrl.text.toString().trim().also {
+            if (it.isEmpty()) {
+                Toast.makeText(this, "请先输入 API 地址", Toast.LENGTH_SHORT).show()
+                return
             }
-        } else {
-            provider.defaultBaseUrl
         }
 
         // 显示加载状态
@@ -168,14 +153,11 @@ class ProviderConfigActivity : AppCompatActivity() {
             return
         }
 
-        val baseUrl = if (provider.needsBaseUrl) {
-            etBaseUrl.text.toString().trim().also {
-                if (it.isEmpty()) {
-                    Toast.makeText(this, "请输入 API 地址", Toast.LENGTH_SHORT).show()
-                    return
-                }
-            }
-        } else null
+        val baseUrl = etBaseUrl.text.toString().trim()
+        if (baseUrl.isEmpty()) {
+            Toast.makeText(this, "请输入 API 地址", Toast.LENGTH_SHORT).show()
+            return
+        }
 
         val model = selectedModel.ifEmpty { null }
 

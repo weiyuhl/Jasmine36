@@ -7,25 +7,21 @@ import android.content.SharedPreferences
  * 供应商配置
  * @param id 唯一标识
  * @param name 显示名称
- * @param isBuiltIn 是否框架内置供应商
- * @param defaultBaseUrl 默认 API 地址（内置供应商不需要填）
+ * @param defaultBaseUrl 默认 API 地址
  * @param defaultModel 默认模型名
- * @param needsBaseUrl 是否需要用户填写 API 地址
  */
 data class Provider(
     val id: String,
     val name: String,
-    val isBuiltIn: Boolean,
     val defaultBaseUrl: String,
-    val defaultModel: String,
-    val needsBaseUrl: Boolean = !isBuiltIn
+    val defaultModel: String
 )
 
 object ProviderManager {
 
     val providers = listOf(
-        Provider("deepseek", "DeepSeek", true, "https://api.deepseek.com", "deepseek-chat"),
-        Provider("siliconflow", "硅基流动", false, "https://api.siliconflow.cn", "deepseek-ai/DeepSeek-V3"),
+        Provider("deepseek", "DeepSeek", "https://api.deepseek.com", "deepseek-chat"),
+        Provider("siliconflow", "硅基流动", "https://api.siliconflow.cn", "deepseek-ai/DeepSeek-V3"),
     )
 
     private fun prefs(ctx: Context): SharedPreferences =
@@ -68,18 +64,17 @@ object ProviderManager {
     }
 
     /** 获取当前启用的完整配置 */
-    data class ActiveConfig(val providerId: String, val baseUrl: String, val model: String, val apiKey: String, val isBuiltIn: Boolean)
+    data class ActiveConfig(val providerId: String, val baseUrl: String, val model: String, val apiKey: String)
 
     fun getActiveConfig(ctx: Context): ActiveConfig? {
         val id = getActiveId(ctx) ?: return null
         val key = getApiKey(ctx, id) ?: return null
-        val provider = providers.find { it.id == id } ?: return null
+        providers.find { it.id == id } ?: return null
         return ActiveConfig(
             providerId = id,
             baseUrl = getBaseUrl(ctx, id),
             model = getModel(ctx, id),
-            apiKey = key,
-            isBuiltIn = provider.isBuiltIn
+            apiKey = key
         )
     }
 }

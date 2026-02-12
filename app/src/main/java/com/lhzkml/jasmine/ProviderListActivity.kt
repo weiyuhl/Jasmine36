@@ -40,11 +40,6 @@ class ProviderListActivity : AppCompatActivity() {
 
             view.findViewById<TextView>(R.id.tvProviderName).text = provider.name
 
-            val tagView = view.findViewById<TextView>(R.id.tvBuiltInTag)
-            if (provider.isBuiltIn) {
-                tagView.visibility = View.VISIBLE
-            }
-
             val switch = view.findViewById<SwitchCompat>(R.id.switchProvider)
             switches[provider.id] = switch
 
