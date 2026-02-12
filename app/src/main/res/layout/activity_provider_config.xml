@@ -95,38 +95,6 @@
                         android:importantForAutofill="no" />
                 </LinearLayout>
 
-                <!-- 模型名称（仅自定义供应商显示） -->
-                <LinearLayout
-                    android:id="@+id/layoutModel"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone"
-                    android:layout_marginTop="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="模型名称"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_primary"
-                        android:textStyle="bold" />
-
-                    <EditText
-                        android:id="@+id/etModel"
-                        android:layout_width="match_parent"
-                        android:layout_height="44dp"
-                        android:layout_marginTop="8dp"
-                        android:textColorHint="@color/text_secondary"
-                        android:textColor="@color/text_primary"
-                        android:textSize="13sp"
-                        android:inputType="text"
-                        android:background="@drawable/bg_input"
-                        android:paddingHorizontal="16dp"
-                        android:fontFamily="monospace"
-                        android:importantForAutofill="no" />
-                </LinearLayout>
-
                 <!-- API Key -->
                 <TextView
                     android:id="@+id/tvKeyLabel"
@@ -152,6 +120,73 @@
                     android:paddingHorizontal="16dp"
                     android:fontFamily="monospace"
                     android:importantForAutofill="no" />
+
+                <!-- 模型选择 -->
+                <LinearLayout
+                    android:id="@+id/layoutModel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="模型"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/tvSelectedModel"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_input"
+                            android:paddingHorizontal="16dp"
+                            android:gravity="center_vertical"
+                            android:textSize="13sp"
+                            android:textColor="@color/text_primary"
+                            android:fontFamily="monospace"
+                            android:hint="点击右侧按钮获取"
+                            android:textColorHint="@color/text_secondary"
+                            android:singleLine="true"
+                            android:ellipsize="middle" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnFetchModels"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="8dp"
+                            android:text="获取列表"
+                            android:textSize="13sp"
+                            android:textColor="@color/accent"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="12dp"
+                            android:background="@drawable/bg_input"
+                            android:stateListAnimator="@null"
+                            app:elevation="0dp"
+                            app:rippleColor="@color/divider" />
+                    </LinearLayout>
+
+                    <!-- 加载状态 -->
+                    <TextView
+                        android:id="@+id/tvModelStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSave"
