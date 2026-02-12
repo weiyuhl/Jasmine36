@@ -25,10 +25,6 @@ object ProviderManager {
 
     val providers = listOf(
         Provider("deepseek", "DeepSeek", true, "https://api.deepseek.com", "deepseek-chat"),
-        Provider("openai", "OpenAI", true, "https://api.openai.com", "gpt-4o"),
-        Provider("google", "Google Gemini", true, "https://generativelanguage.googleapis.com", "gemini-2.5-pro"),
-        Provider("anthropic", "Anthropic Claude", true, "https://api.anthropic.com", "claude-sonnet-4-20250514"),
-        Provider("openrouter", "OpenRouter", true, "https://openrouter.ai", "openai/gpt-4o"),
         Provider("siliconflow", "硅基流动", false, "https://api.siliconflow.cn", "deepseek-ai/DeepSeek-V3"),
     )
 
