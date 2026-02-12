@@ -32,6 +32,9 @@
         <activity
             android:name=".ProviderConfigActivity"
             android:exported="false" />
+        <activity
+            android:name=".ConversationHistoryActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

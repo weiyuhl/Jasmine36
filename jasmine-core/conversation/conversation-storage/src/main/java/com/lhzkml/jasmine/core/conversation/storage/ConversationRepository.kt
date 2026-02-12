@@ -1,0 +1,149 @@
+package com.lhzkml.jasmine.core.conversation.storage
+
+import android.content.Context
+import com.lhzkml.jasmine.core.conversation.storage.entity.ConversationEntity
+import com.lhzkml.jasmine.core.conversation.storage.entity.MessageEntity
+import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import java.util.UUID
+
+/**
+ * 对话信息（用于 UI 展示）
+ */
+data class ConversationInfo(
+    val id: String,
+    val title: String,
+    val providerId: String,
+    val model: String,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
+/**
+ * 对话仓库，提供对话和消息的增删改查
+ * 这是框架层对外暴露的主要 API
+ */
+class ConversationRepository(context: Context) {
+
+    private val dao = JasmineDatabase.getInstance(context).conversationDao()
+
+    // ========== 对话管理 ==========
+
+    /**
+     * 创建新对话
+     * @return 新对话的 ID
+     */
+    suspend fun createConversation(
+        title: String,
+        providerId: String,
+        model: String
+    ): String {
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        dao.insertConversation(
+            ConversationEntity(
+                id = id,
+                title = title,
+                providerId = providerId,
+                model = model,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        return id
+    }
+
+    /** 获取所有对话列表（实时观察） */
+    fun observeConversations(): Flow<List<ConversationInfo>> {
+        return dao.getAllConversations().map { list ->
+            list.map { it.toInfo() }
+        }
+    }
+
+    /** 获取单个对话信息 */
+    suspend fun getConversation(id: String): ConversationInfo? {
+        return dao.getConversation(id)?.toInfo()
+    }
+
+    /** 更新对话标题 */
+    suspend fun updateTitle(conversationId: String, title: String) {
+        val entity = dao.getConversation(conversationId) ?: return
+        dao.updateConversation(entity.copy(title = title, updatedAt = System.currentTimeMillis()))
+    }
+
+    /** 删除对话（消息会级联删除） */
+    suspend fun deleteConversation(id: String) {
+        dao.deleteConversation(id)
+    }
+
+    /** 删除所有对话 */
+    suspend fun deleteAllConversations() {
+        dao.deleteAllConversations()
+    }
+
+    // ========== 消息管理 ==========
+
+    /**
+     * 添加一条消息到对话
+     */
+    suspend fun addMessage(conversationId: String, message: ChatMessage) {
+        dao.insertMessage(
+            MessageEntity(
+                conversationId = conversationId,
+                role = message.role,
+                content = message.content,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+        // 更新对话的最后修改时间
+        val conversation = dao.getConversation(conversationId) ?: return
+        dao.updateConversation(conversation.copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    /**
+     * 批量添加消息
+     */
+    suspend fun addMessages(conversationId: String, messages: List<ChatMessage>) {
+        val now = System.currentTimeMillis()
+        val entities = messages.mapIndexed { index, msg ->
+            MessageEntity(
+                conversationId = conversationId,
+                role = msg.role,
+                content = msg.content,
+                createdAt = now + index // 保证顺序
+            )
+        }
+        dao.insertMessages(entities)
+        val conversation = dao.getConversation(conversationId) ?: return
+        dao.updateConversation(conversation.copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    /** 获取对话的所有消息（转为 ChatMessage） */
+    suspend fun getMessages(conversationId: String): List<ChatMessage> {
+        return dao.getMessages(conversationId).map { it.toChatMessage() }
+    }
+
+    /** 实时观察对话消息 */
+    fun observeMessages(conversationId: String): Flow<List<ChatMessage>> {
+        return dao.observeMessages(conversationId).map { list ->
+            list.map { it.toChatMessage() }
+        }
+    }
+
+    // ========== 转换方法 ==========
+
+    private fun ConversationEntity.toInfo() = ConversationInfo(
+        id = id,
+        title = title,
+        providerId = providerId,
+        model = model,
+        createdAt = createdAt,
+        updatedAt = updatedAt
+    )
+
+    private fun MessageEntity.toChatMessage() = ChatMessage(
+        role = role,
+        content = content
+    )
+}

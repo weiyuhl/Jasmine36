@@ -42,6 +42,7 @@ dependencies {
 
     // Jasmine 框架核心
     implementation(project(":jasmine-core:prompt:prompt-executor"))
+    implementation(project(":jasmine-core:conversation:conversation-storage"))
 
     // Coroutines（UI 层需要协程来调用框架）
     implementation(libs.kotlinx.coroutines.core)
