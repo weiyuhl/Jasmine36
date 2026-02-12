@@ -21,4 +21,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "Jasmine"
 include(":app")
-include(":jasmine-core")
+include(":jasmine-core:api")
+include(":jasmine-core:client")
+include(":jasmine-core:exception")
+include(":jasmine-core:model")
+include(":jasmine-core:provider")

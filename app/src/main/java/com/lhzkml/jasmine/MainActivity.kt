@@ -9,7 +9,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
-import com.lhzkml.jasmine.core.ChatClient
+import com.lhzkml.jasmine.core.api.ChatClient
 import com.lhzkml.jasmine.core.client.DeepSeekClient
 import com.lhzkml.jasmine.core.client.SiliconFlowClient
 import com.lhzkml.jasmine.core.model.ChatMessage

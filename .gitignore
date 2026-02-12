@@ -10,7 +10,7 @@
 .DS_Store
 /build
 /app/build
-/jasmine-core/build
+**/build
 /koog-0.6.2
 /captures
 .externalNativeBuild
