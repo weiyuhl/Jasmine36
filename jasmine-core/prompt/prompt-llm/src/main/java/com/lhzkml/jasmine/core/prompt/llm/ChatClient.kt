@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 
 /**
  * 聊天客户端接口
@@ -18,4 +19,10 @@ interface ChatClient : AutoCloseable {
      * @return 助手回复的文本内容
      */
     suspend fun chat(messages: List<ChatMessage>, model: String): String
+
+    /**
+     * 获取供应商可用的模型列表
+     * @return 模型信息列表
+     */
+    suspend fun listModels(): List<ModelInfo>
 }

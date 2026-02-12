@@ -5,6 +5,8 @@ import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatRequest
 import com.lhzkml.jasmine.core.prompt.model.ChatResponse
+import com.lhzkml.jasmine.core.prompt.model.ModelInfo
+import com.lhzkml.jasmine.core.prompt.model.ModelListResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
@@ -49,6 +51,17 @@ abstract class OpenAICompatibleClient(
             throw e
         } catch (e: Exception) {
             throw ChatClientException(provider.name, "请求失败: ${e.message}", e)
+        }
+    }
+
+    override suspend fun listModels(): List<ModelInfo> {
+        try {
+            val response: ModelListResponse = httpClient.get("${baseUrl}/v1/models") {
+                header("Authorization", "Bearer $apiKey")
+            }.body()
+            return response.data
+        } catch (e: Exception) {
+            throw ChatClientException(provider.name, "获取模型列表失败: ${e.message}", e)
         }
     }
 
