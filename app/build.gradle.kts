@@ -40,5 +40,12 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
 
+    // Jasmine 框架核心
+    implementation(project(":jasmine-core"))
+
+    // Coroutines（UI 层需要协程来调用框架）
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.coroutines.android)
+
     testImplementation(libs.junit)
 }

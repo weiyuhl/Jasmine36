@@ -9,6 +9,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
+import com.lhzkml.jasmine.core.ChatClient
+import com.lhzkml.jasmine.core.client.DeepSeekClient
+import com.lhzkml.jasmine.core.client.SiliconFlowClient
+import com.lhzkml.jasmine.core.model.ChatMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -16,6 +24,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSend: MaterialButton
     private lateinit var tvOutput: TextView
     private lateinit var scrollView: ScrollView
+
+    private var chatClient: ChatClient? = null
+    private var currentProviderId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +47,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        chatClient?.close()
+    }
+
+    /**
+     * 根据当前配置获取或创建 ChatClient。
+     * 如果供应商切换了，会关闭旧客户端并创建新的。
+     */
+    private fun getOrCreateClient(config: ProviderManager.ActiveConfig): ChatClient {
+        if (currentProviderId == config.providerId) {
+            chatClient?.let { return it }
+        }
+
+        // 关闭旧客户端
+        chatClient?.close()
+
+        val client = when (config.providerId) {
+            "deepseek" -> DeepSeekClient(
+                apiKey = config.apiKey,
+                baseUrl = config.baseUrl
+            )
+            "siliconflow" -> SiliconFlowClient(
+                apiKey = config.apiKey,
+                baseUrl = config.baseUrl
+            )
+            else -> SiliconFlowClient(
+                apiKey = config.apiKey,
+                baseUrl = config.baseUrl
+            )
+        }
+
+        chatClient = client
+        currentProviderId = config.providerId
+        return client
+    }
+
     private fun sendMessage(message: String) {
         val config = ProviderManager.getActiveConfig(this)
         if (config == null) {
@@ -48,9 +96,29 @@ class MainActivity : AppCompatActivity() {
         tvOutput.append("You: $message\n\n")
         etInput.text.clear()
 
-        // TODO: 接入框架层发送消息
-        tvOutput.append("AI: （框架未接入）\n\n")
-        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-        btnSend.isEnabled = true
+        val client = getOrCreateClient(config)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val messages = listOf(
+                    ChatMessage.system("You are a helpful assistant."),
+                    ChatMessage.user(message)
+                )
+                val result = client.chat(messages, config.model)
+                withContext(Dispatchers.Main) {
+                    tvOutput.append("AI: $result\n\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    tvOutput.append("Error: ${e.message}\n\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    btnSend.isEnabled = true
+                }
+            }
+        }
     }
 }
