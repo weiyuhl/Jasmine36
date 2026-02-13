@@ -144,7 +144,6 @@ class MainActivity : AppCompatActivity() {
             conversationRepo.observeConversations().collectLatest { list ->
                 drawerAdapter.submitList(list)
                 tvDrawerEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-                rvDrawerConversations.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
             }
         }
 
