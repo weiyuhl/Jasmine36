@@ -89,6 +89,16 @@ class MainActivity : AppCompatActivity() {
         // 不显示阴影遮罩
         drawerLayout.setScrimColor(0x00000000)
 
+        // 增大右侧边缘手势触发宽度
+        try {
+            val draggerField = drawerLayout.javaClass.getDeclaredField("mRightDragger")
+            draggerField.isAccessible = true
+            val dragger = draggerField.get(drawerLayout)
+            val edgeField = dragger.javaClass.getDeclaredField("mEdgeSize")
+            edgeField.isAccessible = true
+            edgeField.setInt(dragger, (60 * resources.displayMetrics.density).toInt())
+        } catch (_: Exception) { }
+
         // 打开侧边栏
         findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener {
             drawerLayout.openDrawer(Gravity.END)
