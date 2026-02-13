@@ -22,4 +22,7 @@ android {
 
 dependencies {
     api(project(":jasmine-core:prompt:prompt-model"))
+    implementation(libs.kotlinx.coroutines.core)
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

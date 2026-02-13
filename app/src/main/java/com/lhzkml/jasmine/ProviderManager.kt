@@ -63,6 +63,15 @@ object ProviderManager {
         return prefs(ctx).getString("${id}_model", null) ?: provider?.defaultModel ?: ""
     }
 
+    /** 是否启用流式输出 */
+    fun isStreamEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("stream_enabled", true)
+
+    /** 设置流式输出开关 */
+    fun setStreamEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("stream_enabled", enabled).apply()
+    }
+
     /** 获取当前启用的完整配置 */
     data class ActiveConfig(val providerId: String, val baseUrl: String, val model: String, val apiKey: String)
 

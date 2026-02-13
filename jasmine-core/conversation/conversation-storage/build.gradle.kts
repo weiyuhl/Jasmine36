@@ -27,4 +27,5 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     implementation(libs.kotlinx.coroutines.core)
+    testImplementation(libs.junit)
 }

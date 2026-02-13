@@ -245,19 +245,45 @@ class MainActivity : AppCompatActivity() {
                 messageHistory.add(userMsg)
                 conversationRepo.addMessage(currentConversationId!!, userMsg)
 
-                val result = client.chat(messageHistory.toList(), config.model)
+                val useStream = ProviderManager.isStreamEnabled(this@MainActivity)
+                val result: String
+
+                if (useStream) {
+                    // 流式输出：逐块显示
+                    val fullResponse = StringBuilder()
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append("AI: ")
+                    }
+
+                    client.chatStream(messageHistory.toList(), config.model).collect { chunk ->
+                        fullResponse.append(chunk)
+                        withContext(Dispatchers.Main) {
+                            tvOutput.append(chunk)
+                            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        }
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append("\n\n")
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+
+                    result = fullResponse.toString()
+                } else {
+                    // 非流式：一次性返回
+                    result = client.chat(messageHistory.toList(), config.model)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append("AI: $result\n\n")
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
 
                 val assistantMsg = ChatMessage.assistant(result)
                 messageHistory.add(assistantMsg)
                 conversationRepo.addMessage(currentConversationId!!, assistantMsg)
-
-                withContext(Dispatchers.Main) {
-                    tvOutput.append("AI: $result\n\n")
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("Error: ${e.message}\n\n")
+                    tvOutput.append("\nError: ${e.message}\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             } finally {

@@ -5,6 +5,7 @@ import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatRequest
 import com.lhzkml.jasmine.core.prompt.model.ChatResponse
+import com.lhzkml.jasmine.core.prompt.model.ChatStreamResponse
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import com.lhzkml.jasmine.core.prompt.model.ModelListResponse
 import io.ktor.client.*
@@ -12,8 +13,12 @@ import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
 
 /**
@@ -22,15 +27,16 @@ import kotlinx.serialization.json.Json
  */
 abstract class OpenAICompatibleClient(
     protected val apiKey: String,
-    protected val baseUrl: String
+    protected val baseUrl: String,
+    httpClient: HttpClient? = null
 ) : ChatClient {
 
-    private val json = Json {
+    internal val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    private val httpClient = HttpClient(OkHttp) {
+    internal val httpClient: HttpClient = httpClient ?: HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json(this@OpenAICompatibleClient.json)
         }
@@ -51,6 +57,56 @@ abstract class OpenAICompatibleClient(
             throw e
         } catch (e: Exception) {
             throw ChatClientException(provider.name, "请求失败: ${e.message}", e)
+        }
+    }
+
+    override fun chatStream(messages: List<ChatMessage>, model: String): Flow<String> = flow {
+        try {
+            val request = ChatRequest(model = model, messages = messages, stream = true)
+            val statement = httpClient.preparePost("${baseUrl}/v1/chat/completions") {
+                contentType(ContentType.Application.Json)
+                header("Authorization", "Bearer $apiKey")
+                setBody(request)
+            }
+
+            statement.execute { response ->
+                if (!response.status.isSuccess()) {
+                    throw ChatClientException(
+                        provider.name,
+                        "请求失败，状态码: ${response.status.value}"
+                    )
+                }
+
+                val channel: ByteReadChannel = response.bodyAsChannel()
+
+                while (!channel.isClosedForRead) {
+                    val line = try {
+                        channel.readUTF8Line()
+                    } catch (_: Exception) {
+                        break
+                    } ?: break
+
+                    if (line.startsWith("data: ")) {
+                        val data = line.removePrefix("data: ").trim()
+                        if (data == "[DONE]") return@execute
+                        if (data.isNotEmpty()) {
+                            try {
+                                val chunk = json.decodeFromString<ChatStreamResponse>(data)
+                                val content = chunk.choices.firstOrNull()?.delta?.content
+                                if (!content.isNullOrEmpty()) {
+                                    emit(content)
+                                }
+                            } catch (_: Exception) {
+                                // 跳过无法解析的行
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: ChatClientException) {
+            throw e
+        } catch (e: Exception) {
+            throw ChatClientException(provider.name, "流式请求失败: ${e.message}", e)
         }
     }
 
