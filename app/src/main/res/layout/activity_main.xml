@@ -137,37 +137,13 @@
             android:layout_width="280dp"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:background="@color/white">
+            android:background="@color/bg_primary">
 
-            <!-- 侧边栏标题栏（与主标题栏等高） -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="16dp"
-                android:background="@color/white">
-
-                <TextView
-                    android:id="@+id/btnCloseDrawer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="←"
-                    android:textSize="18sp"
-                    android:textColor="@color/text_primary"
-                    android:paddingEnd="12dp"
-                    android:clickable="true"
-                    android:focusable="true" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1" />
-            </LinearLayout>
-
+            <!-- 顶部占位（与主标题栏等高，保持对齐） -->
             <View
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/divider" />
+                android:layout_height="41dp"
+                android:background="@color/white" />
 
             <!-- 新对话按钮 -->
             <TextView
@@ -177,7 +153,7 @@
                 android:gravity="center_vertical"
                 android:paddingHorizontal="16dp"
                 android:text="＋ 新对话"
-                android:textSize="15sp"
+                android:textSize="16sp"
                 android:textColor="@color/accent"
                 android:clickable="true"
                 android:focusable="true"
@@ -217,19 +193,15 @@
                 android:clipToPadding="false"
                 android:paddingHorizontal="8dp" />
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/divider" />
-
+            <!-- 设置入口 -->
             <TextView
                 android:id="@+id/btnSettings"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="56dp"
                 android:gravity="center_vertical"
                 android:paddingHorizontal="16dp"
                 android:text="⚙ 设置"
-                android:textSize="15sp"
+                android:textSize="17sp"
                 android:textColor="@color/text_primary"
                 android:clickable="true"
                 android:focusable="true"

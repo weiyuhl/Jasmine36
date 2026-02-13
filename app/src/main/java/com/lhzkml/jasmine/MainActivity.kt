@@ -89,7 +89,6 @@ class MainActivity : AppCompatActivity() {
 
         // 打开/关闭侧边栏
         findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener { toggleDrawer() }
-        findViewById<TextView>(R.id.btnCloseDrawer).setOnClickListener { closeDrawer() }
 
         // 设置
         findViewById<TextView>(R.id.btnSettings).setOnClickListener {
