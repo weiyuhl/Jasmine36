@@ -79,15 +79,15 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawer(Gravity.END)
         }
 
-        // 设置右侧边缘滑动区域为屏幕高度的一半（居中）
+        // 设置右侧边缘滑动区域：全屏高度，宽度增加到 40dp
         try {
             val draggerField = drawerLayout.javaClass.getDeclaredField("mRightDragger")
             draggerField.isAccessible = true
             val dragger = draggerField.get(drawerLayout)
             val edgeField = dragger.javaClass.getDeclaredField("mEdgeSize")
             edgeField.isAccessible = true
-            val displayHeight = resources.displayMetrics.heightPixels
-            edgeField.setInt(dragger, displayHeight / 2)
+            val edgeWidth = (40 * resources.displayMetrics.density).toInt()
+            edgeField.setInt(dragger, edgeWidth)
         } catch (_: Exception) {
             // 反射失败时使用默认边缘大小
         }
