@@ -79,7 +79,7 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawer(Gravity.END)
         }
 
-        // 设置右侧边缘滑动区域：全屏高度，宽度增加到 40dp
+        // 设置右侧边缘滑动触发宽度增大到 40dp
         try {
             val draggerField = drawerLayout.javaClass.getDeclaredField("mRightDragger")
             draggerField.isAccessible = true
@@ -88,9 +88,7 @@ class MainActivity : AppCompatActivity() {
             edgeField.isAccessible = true
             val edgeWidth = (40 * resources.displayMetrics.density).toInt()
             edgeField.setInt(dragger, edgeWidth)
-        } catch (_: Exception) {
-            // 反射失败时使用默认边缘大小
-        }
+        } catch (_: Exception) { }
 
         // 侧边栏：新对话
         findViewById<TextView>(R.id.btnNewChat).setOnClickListener {
