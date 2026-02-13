@@ -26,6 +26,7 @@ import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
+import com.lhzkml.jasmine.core.conversation.storage.TimedMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -178,6 +179,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadConversation(conversationId: String) {
         CoroutineScope(Dispatchers.IO).launch {
             val info = conversationRepo.getConversation(conversationId)
+            val timedMessages = conversationRepo.getTimedMessages(conversationId)
             val messages = conversationRepo.getMessages(conversationId)
             val usageList = conversationRepo.getUsageList(conversationId)
             withContext(Dispatchers.Main) {
@@ -191,13 +193,17 @@ class MainActivity : AppCompatActivity() {
 
                 val sb = StringBuilder()
                 var usageIndex = 0
-                for (msg in messages) {
+                for (msg in timedMessages) {
+                    val time = formatTime(msg.createdAt)
                     when (msg.role) {
-                        "user" -> sb.append("You: ${msg.content}\n\n")
+                        "user" -> sb.append("You: ${msg.content}\n$time\n\n")
                         "assistant" -> {
                             sb.append("AI: ${msg.content}")
                             val usage = usageList.getOrNull(usageIndex)
-                            sb.append(formatUsageLine(usage))
+                            if (usage != null) {
+                                sb.append("\n[提示: ${usage.promptTokens} tokens | 回复: ${usage.completionTokens} tokens | 总计: ${usage.totalTokens} tokens]")
+                            }
+                            sb.append("\n$time\n\n")
                             usageIndex++
                         }
                     }
@@ -232,7 +238,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnSend.isEnabled = false
-        tvOutput.append("You: $message\n\n")
+        val now = formatTime(System.currentTimeMillis())
+        tvOutput.append("You: $message\n$now\n\n")
         etInput.text.clear()
 
         val client = getOrCreateClient(config)
@@ -322,8 +329,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun formatUsageLine(usage: Usage?): String {
-        if (usage == null) return "\n\n"
-        return "\n[提示: ${usage.promptTokens} tokens | 回复: ${usage.completionTokens} tokens | 总计: ${usage.totalTokens} tokens]\n\n"
+        val time = formatTime(System.currentTimeMillis())
+        if (usage == null) return "\n$time\n\n"
+        return "\n[提示: ${usage.promptTokens} tokens | 回复: ${usage.completionTokens} tokens | 总计: ${usage.totalTokens} tokens]\n$time\n\n"
+    }
+
+    private fun formatTime(timestamp: Long): String {
+        return SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(Date(timestamp))
     }
 
     /** 侧边栏对话列表适配器 */

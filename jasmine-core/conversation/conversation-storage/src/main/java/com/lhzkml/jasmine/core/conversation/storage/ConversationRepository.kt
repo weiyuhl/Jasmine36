@@ -25,6 +25,15 @@ data class ConversationInfo(
 )
 
 /**
+ * 带时间戳的消息（用于 UI 展示）
+ */
+data class TimedMessage(
+    val role: String,
+    val content: String,
+    val createdAt: Long
+)
+
+/**
  * 对话仓库，提供对话和消息的增删改查
  * 这是框架层对外暴露的主要 API
  */
@@ -138,6 +147,13 @@ class ConversationRepository(context: Context) {
     /** 获取对话的所有消息（转为 ChatMessage） */
     suspend fun getMessages(conversationId: String): List<ChatMessage> {
         return dao.getMessages(conversationId).map { it.toChatMessage() }
+    }
+
+    /** 获取对话的所有消息（带时间戳） */
+    suspend fun getTimedMessages(conversationId: String): List<TimedMessage> {
+        return dao.getMessages(conversationId).map {
+            TimedMessage(role = it.role, content = it.content, createdAt = it.createdAt)
+        }
     }
 
     /** 实时观察对话消息 */
