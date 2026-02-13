@@ -45,13 +45,13 @@ abstract class OpenAICompatibleClient(
         }
     }
 
-    override suspend fun chat(messages: List<ChatMessage>, model: String): String {
-        return chatWithUsage(messages, model).content
+    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?): String {
+        return chatWithUsage(messages, model, maxTokens).content
     }
 
-    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String): ChatResult {
+    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?): ChatResult {
         try {
-            val request = ChatRequest(model = model, messages = messages)
+            val request = ChatRequest(model = model, messages = messages, maxTokens = maxTokens)
             val response: ChatResponse = httpClient.post("${baseUrl}/v1/chat/completions") {
                 contentType(ContentType.Application.Json)
                 header("Authorization", "Bearer $apiKey")
@@ -69,8 +69,8 @@ abstract class OpenAICompatibleClient(
         }
     }
 
-    override fun chatStream(messages: List<ChatMessage>, model: String): Flow<String> = flow {
-        chatStreamWithUsage(messages, model) { chunk ->
+    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?): Flow<String> = flow {
+        chatStreamWithUsage(messages, model, maxTokens) { chunk ->
             emit(chunk)
         }
     }
@@ -78,10 +78,11 @@ abstract class OpenAICompatibleClient(
     override suspend fun chatStreamWithUsage(
         messages: List<ChatMessage>,
         model: String,
+        maxTokens: Int?,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         try {
-            val request = ChatRequest(model = model, messages = messages, stream = true)
+            val request = ChatRequest(model = model, messages = messages, stream = true, maxTokens = maxTokens)
             val statement = httpClient.preparePost("${baseUrl}/v1/chat/completions") {
                 contentType(ContentType.Application.Json)
                 header("Authorization", "Bearer $apiKey")

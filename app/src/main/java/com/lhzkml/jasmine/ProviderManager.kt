@@ -81,6 +81,15 @@ object ProviderManager {
         prefs(ctx).edit().putString("default_system_prompt", prompt).apply()
     }
 
+    /** 获取最大回复 token 数，0 表示不限制 */
+    fun getMaxTokens(ctx: Context): Int =
+        prefs(ctx).getInt("max_tokens", 0)
+
+    /** 设置最大回复 token 数，0 表示不限制 */
+    fun setMaxTokens(ctx: Context, maxTokens: Int) {
+        prefs(ctx).edit().putInt("max_tokens", maxTokens).apply()
+    }
+
     /** 获取当前启用的完整配置 */
     data class ActiveConfig(val providerId: String, val baseUrl: String, val model: String, val apiKey: String)
 

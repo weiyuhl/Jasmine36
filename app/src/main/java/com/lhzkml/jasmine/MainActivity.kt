@@ -254,6 +254,8 @@ class MainActivity : AppCompatActivity() {
                 val trimmedMessages = contextManager.trimMessages(messageHistory.toList())
 
                 val useStream = ProviderManager.isStreamEnabled(this@MainActivity)
+                val maxTokensVal = ProviderManager.getMaxTokens(this@MainActivity)
+                val maxTokens = if (maxTokensVal > 0) maxTokensVal else null
                 val result: String
                 var usage: Usage? = null
 
@@ -263,7 +265,7 @@ class MainActivity : AppCompatActivity() {
                         tvOutput.append("AI: ")
                     }
 
-                    val streamResult = client.chatStreamWithUsage(trimmedMessages, config.model) { chunk ->
+                    val streamResult = client.chatStreamWithUsage(trimmedMessages, config.model, maxTokens) { chunk ->
                         withContext(Dispatchers.Main) {
                             tvOutput.append(chunk)
                             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -279,7 +281,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else {
                     // 非流式：一次性返回
-                    val chatResult = client.chatWithUsage(trimmedMessages, config.model)
+                    val chatResult = client.chatWithUsage(trimmedMessages, config.model, maxTokens)
                     result = chatResult.content
                     usage = chatResult.usage
                     withContext(Dispatchers.Main) {

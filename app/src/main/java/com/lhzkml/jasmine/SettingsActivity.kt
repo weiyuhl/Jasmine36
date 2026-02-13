@@ -20,6 +20,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var tvActiveProvider: TextView
     private lateinit var switchStream: SwitchCompat
+    private lateinit var tvMaxTokens: TextView
     private lateinit var tvSystemPrompt: TextView
     private lateinit var tvPromptTokens: TextView
     private lateinit var tvCompletionTokens: TextView
@@ -34,6 +35,7 @@ class SettingsActivity : AppCompatActivity() {
 
         tvActiveProvider = findViewById(R.id.tvActiveProvider)
         switchStream = findViewById(R.id.switchStream)
+        tvMaxTokens = findViewById(R.id.tvMaxTokens)
         tvSystemPrompt = findViewById(R.id.tvSystemPrompt)
         tvPromptTokens = findViewById(R.id.tvPromptTokens)
         tvCompletionTokens = findViewById(R.id.tvCompletionTokens)
@@ -55,12 +57,18 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<LinearLayout>(R.id.layoutSystemPrompt).setOnClickListener {
             showSystemPromptDialog()
         }
+
+        // 最大回复 Token 数
+        findViewById<LinearLayout>(R.id.layoutMaxTokens).setOnClickListener {
+            showMaxTokensDialog()
+        }
     }
 
     override fun onResume() {
         super.onResume()
         refreshProviderStatus()
         refreshSystemPrompt()
+        refreshMaxTokens()
         refreshUsageStats()
     }
 
@@ -77,6 +85,33 @@ class SettingsActivity : AppCompatActivity() {
     private fun refreshSystemPrompt() {
         val prompt = ProviderManager.getDefaultSystemPrompt(this)
         tvSystemPrompt.text = if (prompt.length > 30) prompt.substring(0, 30) + "..." else prompt
+    }
+
+    private fun refreshMaxTokens() {
+        val maxTokens = ProviderManager.getMaxTokens(this)
+        tvMaxTokens.text = if (maxTokens > 0) "$maxTokens" else "不限制"
+    }
+
+    private fun showMaxTokensDialog() {
+        val current = ProviderManager.getMaxTokens(this)
+        val editText = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "0 表示不限制"
+            if (current > 0) setText(current.toString())
+            setPadding(48, 32, 48, 32)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("最大回复 Token 数")
+            .setMessage("设置每条 AI 回复的最大 token 数量，0 或留空表示不限制。常用值：512、1024、2048、4096")
+            .setView(editText)
+            .setPositiveButton("保存") { _, _ ->
+                val value = editText.text.toString().trim().toIntOrNull() ?: 0
+                ProviderManager.setMaxTokens(this, value)
+                refreshMaxTokens()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun showSystemPromptDialog() {
