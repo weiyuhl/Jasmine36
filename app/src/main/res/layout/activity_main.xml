@@ -1,210 +1,240 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.drawerlayout.widget.DrawerLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary">
 
-    <!-- 主内容 -->
+    <!-- 可平移的容器：主内容 + 侧边栏并排 -->
     <LinearLayout
-        android:layout_width="match_parent"
+        android:id="@+id/slidingContainer"
+        android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="@color/bg_primary">
+        android:orientation="horizontal">
 
-        <!-- 顶部标题栏 -->
+        <!-- 主内容（宽度 = 屏幕宽度） -->
         <LinearLayout
-            android:id="@+id/titleBar"
+            android:id="@+id/mainContent"
             android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="16dp"
-            android:background="@color/white"
-            android:elevation="4dp">
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="@color/bg_primary">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
+            <!-- 顶部标题栏 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="16dp"
+                android:background="@color/white">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Jasmine"
+                    android:textSize="17sp"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-medium" />
+
+                <ImageButton
+                    android:id="@+id/btnDrawer"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@drawable/ic_menu"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="打开侧边栏"
+                    android:scaleType="centerInside" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <!-- 聊天内容区域 -->
+            <ScrollView
+                android:id="@+id/scrollView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
                 android:layout_weight="1"
-                android:text="Jasmine"
-                android:textSize="17sp"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold"
-                android:fontFamily="sans-serif-medium" />
+                android:fillViewport="true"
+                android:scrollbars="none"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="12dp"
+                android:clipToPadding="false">
 
-            <ImageButton
-                android:id="@+id/btnDrawer"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:src="@drawable/ic_menu"
-                android:background="@android:color/transparent"
-                android:contentDescription="打开侧边栏"
-                android:scaleType="centerInside"
-                android:stateListAnimator="@null" />
-        </LinearLayout>
+                <TextView
+                    android:id="@+id/tvOutput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary"
+                    android:lineSpacingExtra="6dp"
+                    android:fontFamily="sans-serif"
+                    android:text=""
+                    android:importantForAccessibility="yes"
+                    android:contentDescription="Chat output" />
+            </ScrollView>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/divider" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
 
-        <!-- 聊天内容区域 -->
-        <ScrollView
-            android:id="@+id/scrollView"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:fillViewport="true"
-            android:scrollbars="none"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="12dp"
-            android:clipToPadding="false">
-
-            <TextView
-                android:id="@+id/tvOutput"
+            <!-- 底部输入区域 -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="15sp"
-                android:textColor="@color/text_primary"
-                android:lineSpacingExtra="6dp"
-                android:fontFamily="sans-serif"
-                android:text=""
-                android:importantForAccessibility="yes"
-                android:contentDescription="Chat output" />
-        </ScrollView>
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="12dp"
+                android:background="@color/white">
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/divider" />
+                <EditText
+                    android:id="@+id/etInput"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:hint="输入消息..."
+                    android:textColorHint="@color/text_secondary"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
+                    android:inputType="text"
+                    android:background="@drawable/bg_input"
+                    android:paddingHorizontal="16dp"
+                    android:fontFamily="sans-serif"
+                    android:maxLines="1"
+                    android:importantForAutofill="no"
+                    android:autofillHints="no" />
 
-        <!-- 底部输入区域 -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSend"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="10dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="↑"
+                    android:textSize="18sp"
+                    app:cornerRadius="22dp"
+                    app:backgroundTint="@color/accent"
+                    android:textColor="@color/white"
+                    app:iconPadding="0dp"
+                    android:padding="0dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:stateListAnimator="@null"
+                    app:elevation="0dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 侧边栏（紧跟主内容右侧，初始在屏幕外） -->
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:padding="12dp"
+            android:id="@+id/drawerPanel"
+            android:layout_width="280dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
             android:background="@color/white">
 
-            <EditText
-                android:id="@+id/etInput"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:hint="输入消息..."
-                android:textColorHint="@color/text_secondary"
-                android:textColor="@color/text_primary"
-                android:textSize="15sp"
-                android:inputType="text"
-                android:background="@drawable/bg_input"
+            <!-- 侧边栏标题栏（与主标题栏等高） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:gravity="center_vertical"
                 android:paddingHorizontal="16dp"
-                android:fontFamily="sans-serif"
-                android:maxLines="1"
-                android:importantForAutofill="no"
-                android:autofillHints="no" />
+                android:background="@color/white">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSend"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="10dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="↑"
-                android:textSize="18sp"
-                app:cornerRadius="22dp"
-                app:backgroundTint="@color/accent"
-                android:textColor="@color/white"
-                app:iconPadding="0dp"
-                android:padding="0dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:stateListAnimator="@null"
-                app:elevation="0dp" />
+                <TextView
+                    android:id="@+id/btnCloseDrawer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="←"
+                    android:textSize="18sp"
+                    android:textColor="@color/text_primary"
+                    android:paddingEnd="12dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <!-- 新对话按钮 -->
+            <TextView
+                android:id="@+id/btnNewChat"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="16dp"
+                android:text="＋ 新对话"
+                android:textSize="15sp"
+                android:textColor="@color/accent"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="6dp"
+                android:text="历史对话"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary" />
+
+            <TextView
+                android:id="@+id/tvDrawerEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingVertical="32dp"
+                android:text="暂无历史对话"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvDrawerConversations"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingHorizontal="8dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <TextView
+                android:id="@+id/btnSettings"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="16dp"
+                android:text="⚙ 设置"
+                android:textSize="15sp"
+                android:textColor="@color/text_primary"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground" />
         </LinearLayout>
-    </LinearLayout>
-
-    <!-- 右侧侧边栏（顶部留出标题栏高度的 padding） -->
-    <LinearLayout
-        android:id="@+id/drawerPanel"
-        android:layout_width="280dp"
-        android:layout_height="match_parent"
-        android:layout_gravity="end"
-        android:orientation="vertical"
-        android:background="@color/white"
-        android:paddingTop="41dp">
-
-        <!-- 新对话按钮 -->
-        <TextView
-            android:id="@+id/btnNewChat"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="16dp"
-            android:text="＋ 新对话"
-            android:textSize="15sp"
-            android:textColor="@color/accent"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/divider" />
-
-        <!-- 历史对话标签 -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="6dp"
-            android:text="历史对话"
-            android:textSize="12sp"
-            android:textColor="@color/text_secondary" />
-
-        <!-- 空状态 -->
-        <TextView
-            android:id="@+id/tvDrawerEmpty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:paddingVertical="32dp"
-            android:text="暂无历史对话"
-            android:textSize="14sp"
-            android:textColor="@color/text_secondary"
-            android:visibility="gone" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvDrawerConversations"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:clipToPadding="false"
-            android:paddingHorizontal="8dp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/divider" />
-
-        <!-- 设置入口 -->
-        <TextView
-            android:id="@+id/btnSettings"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="16dp"
-            android:text="⚙ 设置"
-            android:textSize="15sp"
-            android:textColor="@color/text_primary"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground" />
 
     </LinearLayout>
 
-</androidx.drawerlayout.widget.DrawerLayout>
+</FrameLayout>

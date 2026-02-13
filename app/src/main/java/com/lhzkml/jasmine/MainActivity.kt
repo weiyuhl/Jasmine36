@@ -1,19 +1,22 @@
 package com.lhzkml.jasmine
 
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.os.Bundle
-import android.view.Gravity
+import android.view.GestureDetector
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -36,9 +39,12 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CONVERSATION_ID = "conversation_id"
+        /** 侧边栏宽度 dp */
+        private const val DRAWER_WIDTH_DP = 280
     }
 
-    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var slidingContainer: LinearLayout
+    private lateinit var mainContent: LinearLayout
     private lateinit var etInput: EditText
     private lateinit var btnSend: MaterialButton
     private lateinit var tvOutput: TextView
@@ -54,13 +60,20 @@ class MainActivity : AppCompatActivity() {
     private val messageHistory = mutableListOf<ChatMessage>()
     private val drawerAdapter = DrawerConversationAdapter()
 
+    /** 侧边栏是否打开 */
+    private var isDrawerOpen = false
+    /** 侧边栏宽度（像素） */
+    private var drawerWidthPx = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         conversationRepo = ConversationRepository(this)
+        drawerWidthPx = (DRAWER_WIDTH_DP * resources.displayMetrics.density).toInt()
 
-        drawerLayout = findViewById(R.id.drawerLayout)
+        slidingContainer = findViewById(R.id.slidingContainer)
+        mainContent = findViewById(R.id.mainContent)
         etInput = findViewById(R.id.etInput)
         btnSend = findViewById(R.id.btnSend)
         tvOutput = findViewById(R.id.tvOutput)
@@ -68,41 +81,35 @@ class MainActivity : AppCompatActivity() {
         tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
         rvDrawerConversations = findViewById(R.id.rvDrawerConversations)
 
-        // 标题栏按钮
-        findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener {
-            drawerLayout.openDrawer(Gravity.END)
-        }
+        // 主内容宽度 = 屏幕宽度
+        mainContent.layoutParams = LinearLayout.LayoutParams(
+            resources.displayMetrics.widthPixels,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
 
-        // 侧边栏底部：设置
+        // 打开/关闭侧边栏
+        findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener { toggleDrawer() }
+        findViewById<TextView>(R.id.btnCloseDrawer).setOnClickListener { closeDrawer() }
+
+        // 设置
         findViewById<TextView>(R.id.btnSettings).setOnClickListener {
+            closeDrawer()
             startActivity(Intent(this, SettingsActivity::class.java))
-            drawerLayout.closeDrawer(Gravity.END)
         }
 
-        // 设置右侧边缘滑动触发宽度增大到 40dp
-        try {
-            val draggerField = drawerLayout.javaClass.getDeclaredField("mRightDragger")
-            draggerField.isAccessible = true
-            val dragger = draggerField.get(drawerLayout)
-            val edgeField = dragger.javaClass.getDeclaredField("mEdgeSize")
-            edgeField.isAccessible = true
-            val edgeWidth = (40 * resources.displayMetrics.density).toInt()
-            edgeField.setInt(dragger, edgeWidth)
-        } catch (_: Exception) { }
-
-        // 侧边栏：新对话
+        // 新对话
         findViewById<TextView>(R.id.btnNewChat).setOnClickListener {
             startNewConversation()
-            drawerLayout.closeDrawer(Gravity.END)
+            closeDrawer()
         }
 
-        // 侧边栏：历史对话列表
+        // 历史对话列表
         rvDrawerConversations.layoutManager = LinearLayoutManager(this)
         rvDrawerConversations.adapter = drawerAdapter
 
         drawerAdapter.onItemClick = { info ->
             loadConversation(info.id)
-            drawerLayout.closeDrawer(Gravity.END)
+            closeDrawer()
         }
         drawerAdapter.onDeleteClick = { info ->
             AlertDialog.Builder(this)
@@ -110,7 +117,6 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("删除") { _, _ ->
                     CoroutineScope(Dispatchers.IO).launch {
                         conversationRepo.deleteConversation(info.id)
-                        // 如果删的是当前对话，清空界面
                         if (info.id == currentConversationId) {
                             withContext(Dispatchers.Main) { startNewConversation() }
                         }
@@ -129,13 +135,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 发送按钮
         btnSend.setOnClickListener {
             val msg = etInput.text.toString().trim()
             if (msg.isNotEmpty()) sendMessage(msg)
         }
 
-        // 从历史对话进入
+        // 设置滑动手势
+        setupSwipeGesture()
+
         intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
     }
 
@@ -148,6 +155,77 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         chatClient?.close()
     }
+
+    /** 返回键关闭侧边栏 */
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (isDrawerOpen) {
+            closeDrawer()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
+    // ========== 侧边栏动画 ==========
+
+    private fun toggleDrawer() {
+        if (isDrawerOpen) closeDrawer() else openDrawer()
+    }
+
+    private fun openDrawer() {
+        if (isDrawerOpen) return
+        animateSlide(0f, -drawerWidthPx.toFloat())
+        isDrawerOpen = true
+    }
+
+    private fun closeDrawer() {
+        if (!isDrawerOpen) return
+        animateSlide(-drawerWidthPx.toFloat(), 0f)
+        isDrawerOpen = false
+    }
+
+    private fun animateSlide(from: Float, to: Float) {
+        ValueAnimator.ofFloat(from, to).apply {
+            duration = 250
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { slidingContainer.translationX = it.animatedValue as Float }
+            start()
+        }
+    }
+
+    /** 从右边缘向左滑打开，从左向右滑关闭 */
+    private fun setupSwipeGesture() {
+        val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent,
+                velocityX: Float, velocityY: Float
+            ): Boolean {
+                if (e1 == null) return false
+                val dx = e2.x - e1.x
+                val dy = e2.y - e1.y
+                // 水平滑动幅度大于垂直
+                if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 80) {
+                    if (dx < 0 && !isDrawerOpen) {
+                        // 向左滑 → 打开
+                        openDrawer()
+                        return true
+                    } else if (dx > 0 && isDrawerOpen) {
+                        // 向右滑 → 关闭
+                        closeDrawer()
+                        return true
+                    }
+                }
+                return false
+            }
+        })
+
+        slidingContainer.setOnTouchListener { _, event ->
+            detector.onTouchEvent(event)
+            false
+        }
+    }
+
+    // ========== 对话逻辑 ==========
 
     private fun startNewConversation() {
         currentConversationId = null
@@ -251,7 +329,6 @@ class MainActivity : AppCompatActivity() {
 
     /** 侧边栏对话列表适配器 */
     private class DrawerConversationAdapter : RecyclerView.Adapter<DrawerConversationAdapter.VH>() {
-
         private var items = listOf<ConversationInfo>()
         var onItemClick: ((ConversationInfo) -> Unit)? = null
         var onDeleteClick: ((ConversationInfo) -> Unit)? = null
