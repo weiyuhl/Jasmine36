@@ -131,6 +131,12 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- 侧边栏分隔线 -->
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="@color/divider" />
+
         <!-- 侧边栏（紧跟主内容右侧，初始在屏幕外） -->
         <LinearLayout
             android:id="@+id/drawerPanel"
