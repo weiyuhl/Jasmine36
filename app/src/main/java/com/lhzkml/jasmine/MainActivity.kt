@@ -179,6 +179,7 @@ class MainActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             val info = conversationRepo.getConversation(conversationId)
             val messages = conversationRepo.getMessages(conversationId)
+            val usageList = conversationRepo.getUsageList(conversationId)
             withContext(Dispatchers.Main) {
                 if (info == null) {
                     Toast.makeText(this@MainActivity, "对话不存在", Toast.LENGTH_SHORT).show()
@@ -189,10 +190,16 @@ class MainActivity : AppCompatActivity() {
                 messageHistory.addAll(messages)
 
                 val sb = StringBuilder()
+                var usageIndex = 0
                 for (msg in messages) {
                     when (msg.role) {
                         "user" -> sb.append("You: ${msg.content}\n\n")
-                        "assistant" -> sb.append("AI: ${msg.content}\n\n")
+                        "assistant" -> {
+                            sb.append("AI: ${msg.content}")
+                            val usage = usageList.getOrNull(usageIndex)
+                            sb.append(formatUsageLine(usage))
+                            usageIndex++
+                        }
                     }
                 }
                 tvOutput.text = sb.toString()

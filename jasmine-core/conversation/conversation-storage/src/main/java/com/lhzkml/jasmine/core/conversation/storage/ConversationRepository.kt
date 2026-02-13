@@ -189,6 +189,16 @@ class ConversationRepository(context: Context) {
     }
 
     /**
+     * 获取某个对话的所有用量记录（按时间正序）
+     * 用于恢复对话时匹配每条 assistant 消息的用量
+     */
+    suspend fun getUsageList(conversationId: String): List<Usage> {
+        return dao.getUsageList(conversationId).map {
+            Usage(promptTokens = it.promptTokens, completionTokens = it.completionTokens, totalTokens = it.totalTokens)
+        }
+    }
+
+    /**
      * 获取某个对话的累计用量
      */
     suspend fun getConversationUsage(conversationId: String): UsageStats {

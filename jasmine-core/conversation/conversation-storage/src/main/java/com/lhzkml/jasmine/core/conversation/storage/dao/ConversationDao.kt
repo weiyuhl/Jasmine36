@@ -78,6 +78,10 @@ interface ConversationDao {
     @Insert
     suspend fun insertUsage(usage: UsageEntity): Long
 
+    /** 获取某个对话的所有用量记录，按时间正序 */
+    @Query("SELECT * FROM usage_records WHERE conversationId = :conversationId ORDER BY createdAt ASC")
+    suspend fun getUsageList(conversationId: String): List<UsageEntity>
+
     /** 获取某个对话的用量汇总 */
     @Query("SELECT COALESCE(SUM(promptTokens), 0) as promptTokens, COALESCE(SUM(completionTokens), 0) as completionTokens, COALESCE(SUM(totalTokens), 0) as totalTokens FROM usage_records WHERE conversationId = :conversationId")
     suspend fun getConversationUsage(conversationId: String): UsageSummary
