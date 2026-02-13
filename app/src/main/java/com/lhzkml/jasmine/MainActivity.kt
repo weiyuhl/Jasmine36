@@ -96,7 +96,7 @@ class MainActivity : AppCompatActivity() {
             val dragger = draggerField.get(drawerLayout)
             val edgeField = dragger.javaClass.getDeclaredField("mEdgeSize")
             edgeField.isAccessible = true
-            edgeField.setInt(dragger, (180 * resources.displayMetrics.density).toInt())
+            edgeField.setInt(dragger, resources.displayMetrics.widthPixels / 2)
         } catch (_: Exception) { }
 
         // 打开侧边栏
