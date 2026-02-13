@@ -2,43 +2,57 @@ package com.lhzkml.jasmine
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
 import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        /** 从历史对话列表传入的对话 ID */
         const val EXTRA_CONVERSATION_ID = "conversation_id"
     }
 
+    private lateinit var drawerLayout: DrawerLayout
     private lateinit var etInput: EditText
     private lateinit var btnSend: MaterialButton
     private lateinit var tvOutput: TextView
     private lateinit var scrollView: ScrollView
+    private lateinit var tvDrawerEmpty: TextView
+    private lateinit var rvDrawerConversations: RecyclerView
 
     private var chatClient: ChatClient? = null
     private var currentProviderId: String? = null
 
     private lateinit var conversationRepo: ConversationRepository
-    /** 当前对话 ID，null 表示还没创建对话 */
     private var currentConversationId: String? = null
-    /** 内存中的消息历史，用于多轮对话 */
     private val messageHistory = mutableListOf<ChatMessage>()
+    private val drawerAdapter = DrawerConversationAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,43 +60,74 @@ class MainActivity : AppCompatActivity() {
 
         conversationRepo = ConversationRepository(this)
 
+        drawerLayout = findViewById(R.id.drawerLayout)
         etInput = findViewById(R.id.etInput)
         btnSend = findViewById(R.id.btnSend)
         tvOutput = findViewById(R.id.tvOutput)
         scrollView = findViewById(R.id.scrollView)
+        tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
+        rvDrawerConversations = findViewById(R.id.rvDrawerConversations)
 
+        // 标题栏按钮
+        findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener {
+            drawerLayout.openDrawer(Gravity.END)
+        }
         findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
-        // 新对话按钮
-        findViewById<ImageButton>(R.id.btnNewChat).setOnClickListener {
+        // 侧边栏：新对话
+        findViewById<TextView>(R.id.btnNewChat).setOnClickListener {
             startNewConversation()
+            drawerLayout.closeDrawer(Gravity.END)
         }
 
-        // 历史对话按钮
-        findViewById<ImageButton>(R.id.btnHistory).setOnClickListener {
-            startActivity(Intent(this, ConversationHistoryActivity::class.java))
+        // 侧边栏：历史对话列表
+        rvDrawerConversations.layoutManager = LinearLayoutManager(this)
+        rvDrawerConversations.adapter = drawerAdapter
+
+        drawerAdapter.onItemClick = { info ->
+            loadConversation(info.id)
+            drawerLayout.closeDrawer(Gravity.END)
+        }
+        drawerAdapter.onDeleteClick = { info ->
+            AlertDialog.Builder(this)
+                .setMessage("确定删除这个对话吗？")
+                .setPositiveButton("删除") { _, _ ->
+                    CoroutineScope(Dispatchers.IO).launch {
+                        conversationRepo.deleteConversation(info.id)
+                        // 如果删的是当前对话，清空界面
+                        if (info.id == currentConversationId) {
+                            withContext(Dispatchers.Main) { startNewConversation() }
+                        }
+                    }
+                }
+                .setNegativeButton("取消", null)
+                .show()
         }
 
+        // 实时观察对话列表
+        CoroutineScope(Dispatchers.Main).launch {
+            conversationRepo.observeConversations().collectLatest { list ->
+                drawerAdapter.submitList(list)
+                tvDrawerEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+                rvDrawerConversations.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
+            }
+        }
+
+        // 发送按钮
         btnSend.setOnClickListener {
             val msg = etInput.text.toString().trim()
             if (msg.isNotEmpty()) sendMessage(msg)
         }
 
-        // 如果是从历史对话进入，加载该对话
-        val loadId = intent.getStringExtra(EXTRA_CONVERSATION_ID)
-        if (loadId != null) {
-            loadConversation(loadId)
-        }
+        // 从历史对话进入
+        intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        val loadId = intent.getStringExtra(EXTRA_CONVERSATION_ID)
-        if (loadId != null) {
-            loadConversation(loadId)
-        }
+        intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
     }
 
     override fun onDestroy() {
@@ -90,14 +135,12 @@ class MainActivity : AppCompatActivity() {
         chatClient?.close()
     }
 
-    /** 开始新对话，清空界面和历史 */
     private fun startNewConversation() {
         currentConversationId = null
         messageHistory.clear()
         tvOutput.text = ""
     }
 
-    /** 从数据库加载历史对话 */
     private fun loadConversation(conversationId: String) {
         CoroutineScope(Dispatchers.IO).launch {
             val info = conversationRepo.getConversation(conversationId)
@@ -111,13 +154,11 @@ class MainActivity : AppCompatActivity() {
                 messageHistory.clear()
                 messageHistory.addAll(messages)
 
-                // 渲染历史消息到界面
                 val sb = StringBuilder()
                 for (msg in messages) {
                     when (msg.role) {
                         "user" -> sb.append("You: ${msg.content}\n\n")
                         "assistant" -> sb.append("AI: ${msg.content}\n\n")
-                        // system 消息不显示
                     }
                 }
                 tvOutput.text = sb.toString()
@@ -126,15 +167,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 根据当前配置获取或创建 ChatClient
-     */
     private fun getOrCreateClient(config: ProviderManager.ActiveConfig): ChatClient {
         if (currentProviderId == config.providerId) {
             chatClient?.let { return it }
         }
         chatClient?.close()
-
         val client = when (config.providerId) {
             "deepseek" -> DeepSeekClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
             "siliconflow" -> SiliconFlowClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
@@ -162,7 +199,6 @@ class MainActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 如果是第一条消息，创建新对话并持久化
                 if (currentConversationId == null) {
                     val title = if (message.length > 20) message.substring(0, 20) + "..." else message
                     currentConversationId = conversationRepo.createConversation(
@@ -170,20 +206,16 @@ class MainActivity : AppCompatActivity() {
                         providerId = config.providerId,
                         model = config.model
                     )
-                    // 添加 system 消息
                     val systemMsg = ChatMessage.system("You are a helpful assistant.")
                     messageHistory.add(systemMsg)
                     conversationRepo.addMessage(currentConversationId!!, systemMsg)
                 }
 
-                // 添加用户消息到历史和数据库
                 messageHistory.add(userMsg)
                 conversationRepo.addMessage(currentConversationId!!, userMsg)
 
-                // 发送完整历史给 LLM（多轮对话）
                 val result = client.chat(messageHistory.toList(), config.model)
 
-                // 保存 AI 回复
                 val assistantMsg = ChatMessage.assistant(result)
                 messageHistory.add(assistantMsg)
                 conversationRepo.addMessage(currentConversationId!!, assistantMsg)
@@ -198,10 +230,47 @@ class MainActivity : AppCompatActivity() {
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             } finally {
-                withContext(Dispatchers.Main) {
-                    btnSend.isEnabled = true
-                }
+                withContext(Dispatchers.Main) { btnSend.isEnabled = true }
             }
+        }
+    }
+
+    /** 侧边栏对话列表适配器 */
+    private class DrawerConversationAdapter : RecyclerView.Adapter<DrawerConversationAdapter.VH>() {
+
+        private var items = listOf<ConversationInfo>()
+        var onItemClick: ((ConversationInfo) -> Unit)? = null
+        var onDeleteClick: ((ConversationInfo) -> Unit)? = null
+
+        fun submitList(list: List<ConversationInfo>) {
+            items = list
+            notifyDataSetChanged()
+        }
+
+        override fun getItemCount() = items.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_drawer_conversation, parent, false)
+            return VH(view)
+        }
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val info = items[position]
+            holder.tvTitle.text = info.title
+            val providerName = ProviderManager.providers
+                .find { it.id == info.providerId }?.name ?: info.providerId
+            val dateStr = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
+                .format(Date(info.updatedAt))
+            holder.tvMeta.text = "$providerName · $dateStr"
+            holder.itemView.setOnClickListener { onItemClick?.invoke(info) }
+            holder.btnDelete.setOnClickListener { onDeleteClick?.invoke(info) }
+        }
+
+        class VH(view: View) : RecyclerView.ViewHolder(view) {
+            val tvTitle: TextView = view.findViewById(R.id.tvTitle)
+            val tvMeta: TextView = view.findViewById(R.id.tvMeta)
+            val btnDelete: TextView = view.findViewById(R.id.btnDelete)
         }
     }
 }
