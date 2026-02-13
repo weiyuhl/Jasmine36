@@ -72,8 +72,24 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener {
             drawerLayout.openDrawer(Gravity.END)
         }
-        findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
+
+        // 侧边栏底部：设置
+        findViewById<TextView>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+            drawerLayout.closeDrawer(Gravity.END)
+        }
+
+        // 设置右侧边缘滑动区域为屏幕高度的一半（居中）
+        try {
+            val draggerField = drawerLayout.javaClass.getDeclaredField("mRightDragger")
+            draggerField.isAccessible = true
+            val dragger = draggerField.get(drawerLayout)
+            val edgeField = dragger.javaClass.getDeclaredField("mEdgeSize")
+            edgeField.isAccessible = true
+            val displayHeight = resources.displayMetrics.heightPixels
+            edgeField.setInt(dragger, displayHeight / 2)
+        } catch (_: Exception) {
+            // 反射失败时使用默认边缘大小
         }
 
         // 侧边栏：新对话

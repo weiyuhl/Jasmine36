@@ -29,20 +29,9 @@
             android:id="@+id/btnDrawer"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:layout_marginEnd="8dp"
             android:src="@drawable/ic_menu"
             android:background="@android:color/transparent"
             android:contentDescription="打开侧边栏"
-            android:scaleType="centerInside"
-            android:stateListAnimator="@null" />
-
-        <ImageButton
-            android:id="@+id/btnSettings"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@drawable/ic_settings"
-            android:background="@android:color/transparent"
-            android:contentDescription="设置"
             android:scaleType="centerInside"
             android:stateListAnimator="@null" />
     </LinearLayout>
@@ -152,27 +141,6 @@
             android:orientation="vertical"
             android:background="@color/white">
 
-            <!-- 侧边栏标题 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="对话"
-                    android:textSize="17sp"
-                    android:textColor="@color/text_primary"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/divider" />
-
             <!-- 新对话按钮 -->
             <TextView
                 android:id="@+id/btnNewChat"
@@ -222,6 +190,25 @@
                 android:layout_weight="1"
                 android:clipToPadding="false"
                 android:paddingHorizontal="8dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <!-- 设置入口 -->
+            <TextView
+                android:id="@+id/btnSettings"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="16dp"
+                android:text="⚙ 设置"
+                android:textSize="15sp"
+                android:textColor="@color/text_primary"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground" />
 
         </LinearLayout>
 
