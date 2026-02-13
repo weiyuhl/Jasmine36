@@ -89,15 +89,8 @@ class MainActivity : AppCompatActivity() {
         // 不显示阴影遮罩
         drawerLayout.setScrimColor(0x00000000)
 
-        // 增大右侧边缘手势触发宽度
-        try {
-            val draggerField = drawerLayout.javaClass.getDeclaredField("mRightDragger")
-            draggerField.isAccessible = true
-            val dragger = draggerField.get(drawerLayout)
-            val edgeField = dragger.javaClass.getDeclaredField("mEdgeSize")
-            edgeField.isAccessible = true
-            edgeField.setInt(dragger, resources.displayMetrics.widthPixels / 2)
-        } catch (_: Exception) { }
+        // 增大右侧边缘手势触发宽度（屏幕一半）
+        widenDrawerEdge(drawerLayout, resources.displayMetrics.widthPixels / 2)
 
         // 打开侧边栏
         findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener {
@@ -274,6 +267,28 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) { btnSend.isEnabled = true }
             }
         }
+    }
+
+    /**
+     * 通过反射获取 DrawerLayout 内部的 ViewDragHelper，
+     * 然后调用公开 API setEdgeSize() 增大边缘手势触发区域
+     */
+    private fun widenDrawerEdge(drawer: DrawerLayout, edgeSizePx: Int) {
+        try {
+            val draggerField = DrawerLayout::class.java.getDeclaredField("mRightDragger")
+            draggerField.isAccessible = true
+            val dragger = draggerField.get(drawer)
+            // 优先使用公开 API（customview >= 1.1.0）
+            try {
+                val setEdgeSize = dragger.javaClass.getMethod("setEdgeSize", Int::class.javaPrimitiveType)
+                setEdgeSize.invoke(dragger, edgeSizePx)
+            } catch (_: NoSuchMethodException) {
+                // 旧版本回退：直接修改私有字段
+                val edgeField = dragger.javaClass.getDeclaredField("mEdgeSize")
+                edgeField.isAccessible = true
+                edgeField.setInt(dragger, edgeSizePx)
+            }
+        } catch (_: Exception) { }
     }
 
     /** 侧边栏对话列表适配器 */
