@@ -65,6 +65,8 @@ class MainActivity : AppCompatActivity() {
     /** 侧边栏宽度（像素） */
     private var drawerWidthPx = 0
 
+    private lateinit var gestureDetector: GestureDetector
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -81,11 +83,9 @@ class MainActivity : AppCompatActivity() {
         tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
         rvDrawerConversations = findViewById(R.id.rvDrawerConversations)
 
-        // 主内容宽度 = 屏幕宽度
-        mainContent.layoutParams = LinearLayout.LayoutParams(
-            resources.displayMetrics.widthPixels,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
+        // 主内容宽度 = 屏幕宽度（固定像素，避免 match_parent 在水平 LinearLayout 里的问题）
+        val screenWidth = resources.displayMetrics.widthPixels
+        mainContent.layoutParams = LinearLayout.LayoutParams(screenWidth, ViewGroup.LayoutParams.MATCH_PARENT)
 
         // 打开/关闭侧边栏
         findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener { toggleDrawer() }
@@ -140,10 +140,43 @@ class MainActivity : AppCompatActivity() {
             if (msg.isNotEmpty()) sendMessage(msg)
         }
 
-        // 设置滑动手势
-        setupSwipeGesture()
+        // 初始化手势检测
+        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent,
+                velocityX: Float, velocityY: Float
+            ): Boolean {
+                if (e1 == null) return false
+                val dx = e2.x - e1.x
+                val dy = e2.y - e1.y
+                if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 80) {
+                    if (dx < 0 && !isDrawerOpen) {
+                        openDrawer()
+                        return true
+                    } else if (dx > 0 && isDrawerOpen) {
+                        closeDrawer()
+                        return true
+                    }
+                }
+                return false
+            }
+        })
 
         intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
+    }
+
+    /** Activity 级别拦截触摸事件，确保手势不被 ScrollView 吃掉 */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        gestureDetector.onTouchEvent(ev)
+        // 侧边栏打开时，点击主内容区域（左侧露出部分）关闭
+        if (ev.action == MotionEvent.ACTION_UP && isDrawerOpen) {
+            val mainVisibleWidth = resources.displayMetrics.widthPixels - drawerWidthPx
+            if (ev.x < mainVisibleWidth) {
+                closeDrawer()
+                return true
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -190,38 +223,6 @@ class MainActivity : AppCompatActivity() {
             interpolator = DecelerateInterpolator()
             addUpdateListener { slidingContainer.translationX = it.animatedValue as Float }
             start()
-        }
-    }
-
-    /** 从右边缘向左滑打开，从左向右滑关闭 */
-    private fun setupSwipeGesture() {
-        val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onFling(
-                e1: MotionEvent?, e2: MotionEvent,
-                velocityX: Float, velocityY: Float
-            ): Boolean {
-                if (e1 == null) return false
-                val dx = e2.x - e1.x
-                val dy = e2.y - e1.y
-                // 水平滑动幅度大于垂直
-                if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 80) {
-                    if (dx < 0 && !isDrawerOpen) {
-                        // 向左滑 → 打开
-                        openDrawer()
-                        return true
-                    } else if (dx > 0 && isDrawerOpen) {
-                        // 向右滑 → 关闭
-                        closeDrawer()
-                        return true
-                    }
-                }
-                return false
-            }
-        })
-
-        slidingContainer.setOnTouchListener { _, event ->
-            detector.onTouchEvent(event)
-            false
         }
     }
 
