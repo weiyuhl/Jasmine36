@@ -235,12 +235,14 @@ class MainActivity : AppCompatActivity() {
             try {
                 if (currentConversationId == null) {
                     val title = if (message.length > 20) message.substring(0, 20) + "..." else message
+                    val systemPrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
                     currentConversationId = conversationRepo.createConversation(
                         title = title,
                         providerId = config.providerId,
-                        model = config.model
+                        model = config.model,
+                        systemPrompt = systemPrompt
                     )
-                    val systemMsg = ChatMessage.system("You are a helpful assistant.")
+                    val systemMsg = ChatMessage.system(systemPrompt)
                     messageHistory.add(systemMsg)
                     conversationRepo.addMessage(currentConversationId!!, systemMsg)
                 }

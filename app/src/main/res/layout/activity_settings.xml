@@ -127,6 +127,52 @@
                 android:layout_height="wrap_content" />
         </LinearLayout>
 
+        <!-- 系统提示词 -->
+        <LinearLayout
+            android:id="@+id/layoutSystemPrompt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="12dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="系统提示词"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/tvSystemPrompt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="You are a helpful assistant."
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="›"
+                android:textSize="18sp"
+                android:textColor="@color/text_secondary" />
+        </LinearLayout>
+
         <!-- Token 用量统计 -->
         <LinearLayout
             android:layout_width="match_parent"

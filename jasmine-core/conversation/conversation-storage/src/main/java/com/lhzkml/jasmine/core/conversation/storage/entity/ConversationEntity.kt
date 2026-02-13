@@ -16,6 +16,8 @@ data class ConversationEntity(
     val providerId: String,
     /** 使用的模型名称 */
     val model: String,
+    /** 该对话使用的系统提示词 */
+    val systemPrompt: String = "You are a helpful assistant.",
     /** 创建时间戳（毫秒） */
     val createdAt: Long,
     /** 最后更新时间戳（毫秒） */

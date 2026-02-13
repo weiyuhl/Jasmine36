@@ -2,12 +2,15 @@ package com.lhzkml.jasmine
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
+import com.lhzkml.jasmine.core.prompt.llm.SystemPromptManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -17,6 +20,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var tvActiveProvider: TextView
     private lateinit var switchStream: SwitchCompat
+    private lateinit var tvSystemPrompt: TextView
     private lateinit var tvPromptTokens: TextView
     private lateinit var tvCompletionTokens: TextView
     private lateinit var tvTotalTokens: TextView
@@ -30,6 +34,7 @@ class SettingsActivity : AppCompatActivity() {
 
         tvActiveProvider = findViewById(R.id.tvActiveProvider)
         switchStream = findViewById(R.id.switchStream)
+        tvSystemPrompt = findViewById(R.id.tvSystemPrompt)
         tvPromptTokens = findViewById(R.id.tvPromptTokens)
         tvCompletionTokens = findViewById(R.id.tvCompletionTokens)
         tvTotalTokens = findViewById(R.id.tvTotalTokens)
@@ -45,11 +50,17 @@ class SettingsActivity : AppCompatActivity() {
         switchStream.setOnCheckedChangeListener { _, isChecked ->
             ProviderManager.setStreamEnabled(this, isChecked)
         }
+
+        // 系统提示词编辑
+        findViewById<LinearLayout>(R.id.layoutSystemPrompt).setOnClickListener {
+            showSystemPromptDialog()
+        }
     }
 
     override fun onResume() {
         super.onResume()
         refreshProviderStatus()
+        refreshSystemPrompt()
         refreshUsageStats()
     }
 
@@ -61,6 +72,49 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             tvActiveProvider.text = "未配置"
         }
+    }
+
+    private fun refreshSystemPrompt() {
+        val prompt = ProviderManager.getDefaultSystemPrompt(this)
+        tvSystemPrompt.text = if (prompt.length > 30) prompt.substring(0, 30) + "..." else prompt
+    }
+
+    private fun showSystemPromptDialog() {
+        val currentPrompt = ProviderManager.getDefaultSystemPrompt(this)
+
+        val editText = EditText(this).apply {
+            setText(currentPrompt)
+            setSelection(currentPrompt.length)
+            minLines = 3
+            maxLines = 8
+            setPadding(48, 32, 48, 32)
+        }
+
+        // 构建预设选项
+        val presetNames = SystemPromptManager.presets.map { it.name }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("系统提示词")
+            .setView(editText)
+            .setPositiveButton("保存") { _, _ ->
+                val newPrompt = editText.text.toString().trim()
+                if (newPrompt.isNotEmpty()) {
+                    ProviderManager.setDefaultSystemPrompt(this, newPrompt)
+                    refreshSystemPrompt()
+                }
+            }
+            .setNeutralButton("预设模板") { _, _ ->
+                AlertDialog.Builder(this)
+                    .setTitle("选择预设模板")
+                    .setItems(presetNames) { _, which ->
+                        val preset = SystemPromptManager.presets[which]
+                        ProviderManager.setDefaultSystemPrompt(this, preset.prompt)
+                        refreshSystemPrompt()
+                    }
+                    .show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun refreshUsageStats() {

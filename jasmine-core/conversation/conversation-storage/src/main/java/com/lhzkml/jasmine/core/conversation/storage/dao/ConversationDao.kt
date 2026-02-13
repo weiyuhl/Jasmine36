@@ -38,6 +38,10 @@ interface ConversationDao {
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteConversation(id: String)
 
+    /** 更新对话的系统提示词 */
+    @Query("UPDATE conversations SET systemPrompt = :systemPrompt, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateSystemPrompt(id: String, systemPrompt: String, updatedAt: Long)
+
     /** 删除所有对话 */
     @Query("DELETE FROM conversations")
     suspend fun deleteAllConversations()

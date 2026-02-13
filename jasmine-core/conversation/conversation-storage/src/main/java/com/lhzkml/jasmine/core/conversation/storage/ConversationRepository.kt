@@ -19,6 +19,7 @@ data class ConversationInfo(
     val title: String,
     val providerId: String,
     val model: String,
+    val systemPrompt: String,
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -40,7 +41,8 @@ class ConversationRepository(context: Context) {
     suspend fun createConversation(
         title: String,
         providerId: String,
-        model: String
+        model: String,
+        systemPrompt: String = "You are a helpful assistant."
     ): String {
         val id = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
@@ -50,6 +52,7 @@ class ConversationRepository(context: Context) {
                 title = title,
                 providerId = providerId,
                 model = model,
+                systemPrompt = systemPrompt,
                 createdAt = now,
                 updatedAt = now
             )
@@ -73,6 +76,16 @@ class ConversationRepository(context: Context) {
     suspend fun updateTitle(conversationId: String, title: String) {
         val entity = dao.getConversation(conversationId) ?: return
         dao.updateConversation(entity.copy(title = title, updatedAt = System.currentTimeMillis()))
+    }
+
+    /** 更新对话的系统提示词 */
+    suspend fun updateSystemPrompt(conversationId: String, systemPrompt: String) {
+        dao.updateSystemPrompt(conversationId, systemPrompt, System.currentTimeMillis())
+    }
+
+    /** 获取对话的系统提示词 */
+    suspend fun getSystemPrompt(conversationId: String): String? {
+        return dao.getConversation(conversationId)?.systemPrompt
     }
 
     /** 删除对话（消息会级联删除） */
@@ -141,6 +154,7 @@ class ConversationRepository(context: Context) {
         title = title,
         providerId = providerId,
         model = model,
+        systemPrompt = systemPrompt,
         createdAt = createdAt,
         updatedAt = updatedAt
     )

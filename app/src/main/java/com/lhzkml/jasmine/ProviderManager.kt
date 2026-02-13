@@ -72,6 +72,15 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("stream_enabled", enabled).apply()
     }
 
+    /** 获取默认系统提示词 */
+    fun getDefaultSystemPrompt(ctx: Context): String =
+        prefs(ctx).getString("default_system_prompt", null) ?: "You are a helpful assistant."
+
+    /** 设置默认系统提示词 */
+    fun setDefaultSystemPrompt(ctx: Context, prompt: String) {
+        prefs(ctx).edit().putString("default_system_prompt", prompt).apply()
+    }
+
     /** 获取当前启用的完整配置 */
     data class ActiveConfig(val providerId: String, val baseUrl: String, val model: String, val apiKey: String)
 
