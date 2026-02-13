@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.lhzkml.jasmine.core.conversation.storage.entity.ConversationEntity
 import com.lhzkml.jasmine.core.conversation.storage.entity.MessageEntity
+import com.lhzkml.jasmine.core.conversation.storage.entity.UsageEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -66,4 +67,33 @@ interface ConversationDao {
     /** 获取某个对话的消息数量 */
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId")
     suspend fun getMessageCount(conversationId: String): Int
+
+    // ========== 用量操作 ==========
+
+    /** 插入一条用量记录 */
+    @Insert
+    suspend fun insertUsage(usage: UsageEntity): Long
+
+    /** 获取某个对话的用量汇总 */
+    @Query("SELECT COALESCE(SUM(promptTokens), 0) as promptTokens, COALESCE(SUM(completionTokens), 0) as completionTokens, COALESCE(SUM(totalTokens), 0) as totalTokens FROM usage_records WHERE conversationId = :conversationId")
+    suspend fun getConversationUsage(conversationId: String): UsageSummary
+
+    /** 获取全局用量汇总 */
+    @Query("SELECT COALESCE(SUM(promptTokens), 0) as promptTokens, COALESCE(SUM(completionTokens), 0) as completionTokens, COALESCE(SUM(totalTokens), 0) as totalTokens FROM usage_records")
+    suspend fun getTotalUsage(): UsageSummary
+
+    /** 获取全局用量汇总（实时观察） */
+    @Query("SELECT COALESCE(SUM(promptTokens), 0) as promptTokens, COALESCE(SUM(completionTokens), 0) as completionTokens, COALESCE(SUM(totalTokens), 0) as totalTokens FROM usage_records")
+    fun observeTotalUsage(): Flow<UsageSummary>
+
+    /** 删除所有用量记录 */
+    @Query("DELETE FROM usage_records")
+    suspend fun deleteAllUsage()
 }
+
+/** 用量汇总数据类（Room 查询结果映射） */
+data class UsageSummary(
+    val promptTokens: Int,
+    val completionTokens: Int,
+    val totalTokens: Int
+)

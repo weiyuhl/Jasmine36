@@ -49,4 +49,42 @@ class EntityTest {
         assertEquals("user", user.role)
         assertEquals("assistant", assistant.role)
     }
+
+    @Test
+    fun `UsageEntity default id is 0`() {
+        val usage = UsageEntity(
+            conversationId = "conv1",
+            providerId = "deepseek",
+            model = "deepseek-chat",
+            promptTokens = 100,
+            completionTokens = 50,
+            totalTokens = 150,
+            createdAt = 1000L
+        )
+        assertEquals(0L, usage.id)
+    }
+
+    @Test
+    fun `UsageEntity data class equality`() {
+        val a = UsageEntity(1, "c1", "deepseek", "model", 10, 20, 30, 1000L)
+        val b = UsageEntity(1, "c1", "deepseek", "model", 10, 20, 30, 1000L)
+        assertEquals(a, b)
+    }
+
+    @Test
+    fun `UsageEntity stores token counts`() {
+        val usage = UsageEntity(
+            conversationId = "c",
+            providerId = "siliconflow",
+            model = "deepseek-v3",
+            promptTokens = 500,
+            completionTokens = 200,
+            totalTokens = 700,
+            createdAt = 1L
+        )
+        assertEquals(500, usage.promptTokens)
+        assertEquals(200, usage.completionTokens)
+        assertEquals(700, usage.totalTokens)
+        assertEquals("siliconflow", usage.providerId)
+    }
 }

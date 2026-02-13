@@ -7,18 +7,32 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.button.MaterialButton
+import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var tvActiveProvider: TextView
     private lateinit var switchStream: SwitchCompat
+    private lateinit var tvPromptTokens: TextView
+    private lateinit var tvCompletionTokens: TextView
+    private lateinit var tvTotalTokens: TextView
+    private lateinit var conversationRepo: ConversationRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        conversationRepo = ConversationRepository(this)
+
         tvActiveProvider = findViewById(R.id.tvActiveProvider)
         switchStream = findViewById(R.id.switchStream)
+        tvPromptTokens = findViewById(R.id.tvPromptTokens)
+        tvCompletionTokens = findViewById(R.id.tvCompletionTokens)
+        tvTotalTokens = findViewById(R.id.tvTotalTokens)
 
         findViewById<MaterialButton>(R.id.btnBack).setOnClickListener { finish() }
 
@@ -36,6 +50,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshProviderStatus()
+        refreshUsageStats()
     }
 
     private fun refreshProviderStatus() {
@@ -45,6 +60,25 @@ class SettingsActivity : AppCompatActivity() {
             tvActiveProvider.text = provider?.name ?: config.providerId
         } else {
             tvActiveProvider.text = "未配置"
+        }
+    }
+
+    private fun refreshUsageStats() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val stats = conversationRepo.getTotalUsage()
+            withContext(Dispatchers.Main) {
+                tvPromptTokens.text = formatNumber(stats.promptTokens)
+                tvCompletionTokens.text = formatNumber(stats.completionTokens)
+                tvTotalTokens.text = formatNumber(stats.totalTokens)
+            }
+        }
+    }
+
+    private fun formatNumber(n: Int): String {
+        return when {
+            n >= 1_000_000 -> String.format("%.1fM tokens", n / 1_000_000.0)
+            n >= 1_000 -> String.format("%.1fK tokens", n / 1_000.0)
+            else -> "$n tokens"
         }
     }
 }

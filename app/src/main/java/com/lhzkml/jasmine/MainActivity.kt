@@ -19,9 +19,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
+import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
 import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private var currentConversationId: String? = null
     private val messageHistory = mutableListOf<ChatMessage>()
     private val drawerAdapter = DrawerConversationAdapter()
+    private val contextManager = ContextManager()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -245,35 +248,40 @@ class MainActivity : AppCompatActivity() {
                 messageHistory.add(userMsg)
                 conversationRepo.addMessage(currentConversationId!!, userMsg)
 
+                // 上下文窗口裁剪，避免超出模型 token 限制
+                val trimmedMessages = contextManager.trimMessages(messageHistory.toList())
+
                 val useStream = ProviderManager.isStreamEnabled(this@MainActivity)
                 val result: String
+                var usage: Usage? = null
 
                 if (useStream) {
                     // 流式输出：逐块显示
-                    val fullResponse = StringBuilder()
                     withContext(Dispatchers.Main) {
                         tvOutput.append("AI: ")
                     }
 
-                    client.chatStream(messageHistory.toList(), config.model).collect { chunk ->
-                        fullResponse.append(chunk)
+                    val streamResult = client.chatStreamWithUsage(trimmedMessages, config.model) { chunk ->
                         withContext(Dispatchers.Main) {
                             tvOutput.append(chunk)
                             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                         }
                     }
 
+                    result = streamResult.content
+                    usage = streamResult.usage
+
                     withContext(Dispatchers.Main) {
-                        tvOutput.append("\n\n")
+                        tvOutput.append(formatUsageLine(usage))
                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                     }
-
-                    result = fullResponse.toString()
                 } else {
                     // 非流式：一次性返回
-                    result = client.chat(messageHistory.toList(), config.model)
+                    val chatResult = client.chatWithUsage(trimmedMessages, config.model)
+                    result = chatResult.content
+                    usage = chatResult.usage
                     withContext(Dispatchers.Main) {
-                        tvOutput.append("AI: $result\n\n")
+                        tvOutput.append("AI: $result${formatUsageLine(usage)}")
                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                     }
                 }
@@ -281,6 +289,16 @@ class MainActivity : AppCompatActivity() {
                 val assistantMsg = ChatMessage.assistant(result)
                 messageHistory.add(assistantMsg)
                 conversationRepo.addMessage(currentConversationId!!, assistantMsg)
+
+                // 记录 token 用量
+                if (usage != null) {
+                    conversationRepo.recordUsage(
+                        conversationId = currentConversationId!!,
+                        providerId = config.providerId,
+                        model = config.model,
+                        usage = usage
+                    )
+                }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     tvOutput.append("\nError: ${e.message}\n\n")
@@ -290,6 +308,11 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) { btnSend.isEnabled = true }
             }
         }
+    }
+
+    private fun formatUsageLine(usage: Usage?): String {
+        if (usage == null) return "\n\n"
+        return "\n[提示: ${usage.promptTokens} tokens | 回复: ${usage.completionTokens} tokens | 总计: ${usage.totalTokens} tokens]\n\n"
     }
 
     /** 侧边栏对话列表适配器 */

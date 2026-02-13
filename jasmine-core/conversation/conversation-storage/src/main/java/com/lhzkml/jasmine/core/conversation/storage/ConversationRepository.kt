@@ -1,9 +1,12 @@
 package com.lhzkml.jasmine.core.conversation.storage
 
 import android.content.Context
+import com.lhzkml.jasmine.core.conversation.storage.dao.UsageSummary
 import com.lhzkml.jasmine.core.conversation.storage.entity.ConversationEntity
 import com.lhzkml.jasmine.core.conversation.storage.entity.MessageEntity
+import com.lhzkml.jasmine.core.conversation.storage.entity.UsageEntity
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.Usage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -146,4 +149,71 @@ class ConversationRepository(context: Context) {
         role = role,
         content = content
     )
+
+    // ========== 用量统计 ==========
+
+    /**
+     * 记录一次 API 调用的 token 用量
+     */
+    suspend fun recordUsage(
+        conversationId: String,
+        providerId: String,
+        model: String,
+        usage: Usage
+    ) {
+        dao.insertUsage(
+            UsageEntity(
+                conversationId = conversationId,
+                providerId = providerId,
+                model = model,
+                promptTokens = usage.promptTokens,
+                completionTokens = usage.completionTokens,
+                totalTokens = usage.totalTokens,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    /**
+     * 获取某个对话的累计用量
+     */
+    suspend fun getConversationUsage(conversationId: String): UsageStats {
+        return dao.getConversationUsage(conversationId).toStats()
+    }
+
+    /**
+     * 获取全局累计用量
+     */
+    suspend fun getTotalUsage(): UsageStats {
+        return dao.getTotalUsage().toStats()
+    }
+
+    /**
+     * 实时观察全局累计用量
+     */
+    fun observeTotalUsage(): Flow<UsageStats> {
+        return dao.observeTotalUsage().map { it.toStats() }
+    }
+
+    /**
+     * 清除所有用量记录
+     */
+    suspend fun clearUsage() {
+        dao.deleteAllUsage()
+    }
+
+    private fun UsageSummary.toStats() = UsageStats(
+        promptTokens = promptTokens,
+        completionTokens = completionTokens,
+        totalTokens = totalTokens
+    )
 }
+
+/**
+ * 用量统计信息（对外暴露的数据类）
+ */
+data class UsageStats(
+    val promptTokens: Int,
+    val completionTokens: Int,
+    val totalTokens: Int
+)

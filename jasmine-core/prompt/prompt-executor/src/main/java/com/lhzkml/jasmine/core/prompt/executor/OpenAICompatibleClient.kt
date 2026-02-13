@@ -2,12 +2,15 @@ package com.lhzkml.jasmine.core.prompt.executor
 
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
+import com.lhzkml.jasmine.core.prompt.llm.StreamResult
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatRequest
 import com.lhzkml.jasmine.core.prompt.model.ChatResponse
+import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ChatStreamResponse
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import com.lhzkml.jasmine.core.prompt.model.ModelListResponse
+import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
@@ -43,6 +46,10 @@ abstract class OpenAICompatibleClient(
     }
 
     override suspend fun chat(messages: List<ChatMessage>, model: String): String {
+        return chatWithUsage(messages, model).content
+    }
+
+    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String): ChatResult {
         try {
             val request = ChatRequest(model = model, messages = messages)
             val response: ChatResponse = httpClient.post("${baseUrl}/v1/chat/completions") {
@@ -51,8 +58,10 @@ abstract class OpenAICompatibleClient(
                 setBody(request)
             }.body()
 
-            return response.choices.firstOrNull()?.message?.content
+            val content = response.choices.firstOrNull()?.message?.content
                 ?: throw ChatClientException(provider.name, "响应中没有有效内容")
+
+            return ChatResult(content = content, usage = response.usage)
         } catch (e: ChatClientException) {
             throw e
         } catch (e: Exception) {
@@ -61,6 +70,16 @@ abstract class OpenAICompatibleClient(
     }
 
     override fun chatStream(messages: List<ChatMessage>, model: String): Flow<String> = flow {
+        chatStreamWithUsage(messages, model) { chunk ->
+            emit(chunk)
+        }
+    }
+
+    override suspend fun chatStreamWithUsage(
+        messages: List<ChatMessage>,
+        model: String,
+        onChunk: suspend (String) -> Unit
+    ): StreamResult {
         try {
             val request = ChatRequest(model = model, messages = messages, stream = true)
             val statement = httpClient.preparePost("${baseUrl}/v1/chat/completions") {
@@ -68,6 +87,9 @@ abstract class OpenAICompatibleClient(
                 header("Authorization", "Bearer $apiKey")
                 setBody(request)
             }
+
+            val fullContent = StringBuilder()
+            var lastUsage: Usage? = null
 
             statement.execute { response ->
                 if (!response.status.isSuccess()) {
@@ -92,9 +114,14 @@ abstract class OpenAICompatibleClient(
                         if (data.isNotEmpty()) {
                             try {
                                 val chunk = json.decodeFromString<ChatStreamResponse>(data)
+                                // 捕获 usage（通常在最后一个 chunk）
+                                if (chunk.usage != null) {
+                                    lastUsage = chunk.usage
+                                }
                                 val content = chunk.choices.firstOrNull()?.delta?.content
                                 if (!content.isNullOrEmpty()) {
-                                    emit(content)
+                                    fullContent.append(content)
+                                    onChunk(content)
                                 }
                             } catch (_: Exception) {
                                 // 跳过无法解析的行
@@ -103,6 +130,8 @@ abstract class OpenAICompatibleClient(
                     }
                 }
             }
+
+            return StreamResult(content = fullContent.toString(), usage = lastUsage)
         } catch (e: ChatClientException) {
             throw e
         } catch (e: Exception) {

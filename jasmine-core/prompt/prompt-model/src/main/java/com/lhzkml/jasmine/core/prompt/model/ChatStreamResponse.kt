@@ -10,7 +10,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ChatStreamResponse(
     val id: String = "",
-    val choices: List<StreamChoice> = emptyList()
+    val choices: List<StreamChoice> = emptyList(),
+    val usage: Usage? = null
 )
 
 /** 流式响应中的单个选项 */

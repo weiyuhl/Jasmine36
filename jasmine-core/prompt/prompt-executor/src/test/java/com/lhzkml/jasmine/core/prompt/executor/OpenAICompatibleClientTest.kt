@@ -229,4 +229,112 @@ class OpenAICompatibleClientTest {
         assertTrue(models.isEmpty())
         client.close()
     }
+
+    // ========== chatWithUsage() 测试 ==========
+
+    @Test
+    fun `chatWithUsage returns content and usage`() = runTest {
+        val mockHttp = createMockClient {
+            respond(
+                content = """
+                {
+                    "id": "1",
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": "Hi!"}}],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                }
+                """.trimIndent(),
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val client = createDeepSeekClient(mockHttp)
+        val result = client.chatWithUsage(listOf(ChatMessage.user("hi")), "model")
+        assertEquals("Hi!", result.content)
+        assertNotNull(result.usage)
+        assertEquals(10, result.usage!!.promptTokens)
+        assertEquals(5, result.usage!!.completionTokens)
+        assertEquals(15, result.usage!!.totalTokens)
+        client.close()
+    }
+
+    @Test
+    fun `chatWithUsage handles null usage`() = runTest {
+        val mockHttp = createMockClient {
+            respond(
+                content = """
+                {
+                    "id": "1",
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}}]
+                }
+                """.trimIndent(),
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val client = createDeepSeekClient(mockHttp)
+        val result = client.chatWithUsage(listOf(ChatMessage.user("hi")), "model")
+        assertEquals("ok", result.content)
+        assertNull(result.usage)
+        client.close()
+    }
+
+    // ========== chatStreamWithUsage() 测试 ==========
+
+    @Test
+    fun `chatStreamWithUsage returns content and usage`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"}}]}")
+            appendLine()
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" World\"}}]}")
+            appendLine()
+            appendLine("data: {\"id\":\"1\",\"choices\":[],\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":4,\"total_tokens\":12}}")
+            appendLine()
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
+        val mockHttp = createMockClient {
+            respond(
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
+            )
+        }
+
+        val client = createDeepSeekClient(mockHttp)
+        val chunks = mutableListOf<String>()
+        val result = client.chatStreamWithUsage(listOf(ChatMessage.user("hi")), "model") { chunk ->
+            chunks.add(chunk)
+        }
+
+        assertEquals(listOf("Hello", " World"), chunks)
+        assertEquals("Hello World", result.content)
+        assertNotNull(result.usage)
+        assertEquals(8, result.usage!!.promptTokens)
+        assertEquals(4, result.usage!!.completionTokens)
+        assertEquals(12, result.usage!!.totalTokens)
+        client.close()
+    }
+
+    @Test
+    fun `chatStreamWithUsage handles no usage in stream`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hi\"}}]}")
+            appendLine()
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
+        val mockHttp = createMockClient {
+            respond(
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
+            )
+        }
+
+        val client = createDeepSeekClient(mockHttp)
+        val result = client.chatStreamWithUsage(listOf(ChatMessage.user("hi")), "model") {}
+        assertEquals("Hi", result.content)
+        assertNull(result.usage)
+        client.close()
+    }
 }
