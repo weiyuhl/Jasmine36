@@ -1,14 +1,11 @@
 package com.lhzkml.jasmine
 
-import android.animation.ValueAnimator
 import android.content.Intent
 import android.os.Bundle
-import android.view.GestureDetector
+import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.animation.DecelerateInterpolator
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -17,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -39,11 +37,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CONVERSATION_ID = "conversation_id"
-        /** 侧边栏宽度 dp */
-        private const val DRAWER_WIDTH_DP = 280
     }
 
-    private lateinit var slidingContainer: LinearLayout
+    private lateinit var drawerLayout: DrawerLayout
     private lateinit var mainContent: LinearLayout
     private lateinit var etInput: EditText
     private lateinit var btnSend: MaterialButton
@@ -60,21 +56,13 @@ class MainActivity : AppCompatActivity() {
     private val messageHistory = mutableListOf<ChatMessage>()
     private val drawerAdapter = DrawerConversationAdapter()
 
-    /** 侧边栏是否打开 */
-    private var isDrawerOpen = false
-    /** 侧边栏宽度（像素） */
-    private var drawerWidthPx = 0
-
-    private lateinit var gestureDetector: GestureDetector
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         conversationRepo = ConversationRepository(this)
-        drawerWidthPx = (DRAWER_WIDTH_DP * resources.displayMetrics.density).toInt()
 
-        slidingContainer = findViewById(R.id.slidingContainer)
+        drawerLayout = findViewById(R.id.drawerLayout)
         mainContent = findViewById(R.id.mainContent)
         etInput = findViewById(R.id.etInput)
         btnSend = findViewById(R.id.btnSend)
@@ -83,23 +71,39 @@ class MainActivity : AppCompatActivity() {
         tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
         rvDrawerConversations = findViewById(R.id.rvDrawerConversations)
 
-        // 主内容宽度 = 屏幕宽度（固定像素，避免 match_parent 在水平 LinearLayout 里的问题）
-        val screenWidth = resources.displayMetrics.widthPixels
-        mainContent.layoutParams = LinearLayout.LayoutParams(screenWidth, ViewGroup.LayoutParams.MATCH_PARENT)
+        // DrawerLayout push 效果：侧边栏滑出时，主内容跟着平移
+        val drawerPanel = findViewById<LinearLayout>(R.id.drawerPanel)
+        drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerSlide(drawerView: View, slideOffset: Float) {
+                // slideOffset: 0（关闭）→ 1（完全打开）
+                // 主内容向左平移 = 侧边栏宽度 × slideOffset
+                val offset = drawerPanel.width * slideOffset
+                mainContent.translationX = -offset
+            }
 
-        // 打开/关闭侧边栏
-        findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener { toggleDrawer() }
+            override fun onDrawerClosed(drawerView: View) {
+                mainContent.translationX = 0f
+            }
+        })
+
+        // 不显示阴影遮罩
+        drawerLayout.setScrimColor(0x00000000)
+
+        // 打开侧边栏
+        findViewById<ImageButton>(R.id.btnDrawer).setOnClickListener {
+            drawerLayout.openDrawer(Gravity.END)
+        }
 
         // 设置
         findViewById<TextView>(R.id.btnSettings).setOnClickListener {
-            closeDrawer()
+            drawerLayout.closeDrawer(Gravity.END)
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         // 新对话
         findViewById<TextView>(R.id.btnNewChat).setOnClickListener {
             startNewConversation()
-            closeDrawer()
+            drawerLayout.closeDrawer(Gravity.END)
         }
 
         // 历史对话列表
@@ -108,7 +112,7 @@ class MainActivity : AppCompatActivity() {
 
         drawerAdapter.onItemClick = { info ->
             loadConversation(info.id)
-            closeDrawer()
+            drawerLayout.closeDrawer(Gravity.END)
         }
         drawerAdapter.onDeleteClick = { info ->
             AlertDialog.Builder(this)
@@ -139,43 +143,7 @@ class MainActivity : AppCompatActivity() {
             if (msg.isNotEmpty()) sendMessage(msg)
         }
 
-        // 初始化手势检测
-        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onFling(
-                e1: MotionEvent?, e2: MotionEvent,
-                velocityX: Float, velocityY: Float
-            ): Boolean {
-                if (e1 == null) return false
-                val dx = e2.x - e1.x
-                val dy = e2.y - e1.y
-                if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 80) {
-                    if (dx < 0 && !isDrawerOpen) {
-                        openDrawer()
-                        return true
-                    } else if (dx > 0 && isDrawerOpen) {
-                        closeDrawer()
-                        return true
-                    }
-                }
-                return false
-            }
-        })
-
         intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
-    }
-
-    /** Activity 级别拦截触摸事件，确保手势不被 ScrollView 吃掉 */
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        gestureDetector.onTouchEvent(ev)
-        // 侧边栏打开时，点击主内容区域（左侧露出部分）关闭
-        if (ev.action == MotionEvent.ACTION_UP && isDrawerOpen) {
-            val mainVisibleWidth = resources.displayMetrics.widthPixels - drawerWidthPx
-            if (ev.x < mainVisibleWidth) {
-                closeDrawer()
-                return true
-            }
-        }
-        return super.dispatchTouchEvent(ev)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -188,40 +156,12 @@ class MainActivity : AppCompatActivity() {
         chatClient?.close()
     }
 
-    /** 返回键关闭侧边栏 */
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (isDrawerOpen) {
-            closeDrawer()
+        if (drawerLayout.isDrawerOpen(Gravity.END)) {
+            drawerLayout.closeDrawer(Gravity.END)
         } else {
             super.onBackPressed()
-        }
-    }
-
-    // ========== 侧边栏动画 ==========
-
-    private fun toggleDrawer() {
-        if (isDrawerOpen) closeDrawer() else openDrawer()
-    }
-
-    private fun openDrawer() {
-        if (isDrawerOpen) return
-        animateSlide(0f, -drawerWidthPx.toFloat())
-        isDrawerOpen = true
-    }
-
-    private fun closeDrawer() {
-        if (!isDrawerOpen) return
-        animateSlide(-drawerWidthPx.toFloat(), 0f)
-        isDrawerOpen = false
-    }
-
-    private fun animateSlide(from: Float, to: Float) {
-        ValueAnimator.ofFloat(from, to).apply {
-            duration = 250
-            interpolator = DecelerateInterpolator()
-            addUpdateListener { slidingContainer.translationX = it.animatedValue as Float }
-            start()
         }
     }
 
