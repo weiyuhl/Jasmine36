@@ -14,6 +14,7 @@ import com.lhzkml.jasmine.core.prompt.model.ClaudeRequest
 import com.lhzkml.jasmine.core.prompt.model.ClaudeResponse
 import com.lhzkml.jasmine.core.prompt.model.ClaudeStreamEvent
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
+import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -83,11 +84,11 @@ open class ClaudeClient(
         return systemPrompt to claudeMessages
     }
 
-    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?): String {
-        return chatWithUsage(messages, model, maxTokens).content
+    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): String {
+        return chatWithUsage(messages, model, maxTokens, samplingParams).content
     }
 
-    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?): ChatResult {
+    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): ChatResult {
         return executeWithRetry(retryConfig) {
             try {
                 val (systemPrompt, claudeMessages) = convertMessages(messages)
@@ -95,7 +96,10 @@ open class ClaudeClient(
                     model = model,
                     messages = claudeMessages,
                     maxTokens = maxTokens ?: 4096,
-                    system = systemPrompt
+                    system = systemPrompt,
+                    temperature = samplingParams?.temperature,
+                    topP = samplingParams?.topP,
+                    topK = samplingParams?.topK
                 )
 
                 val response: HttpResponse = httpClient.post("${baseUrl}/v1/messages") {
@@ -122,7 +126,7 @@ open class ClaudeClient(
                     )
                 }
 
-                ChatResult(content = content, usage = usage)
+                ChatResult(content = content, usage = usage, finishReason = claudeResponse.stopReason)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {
@@ -139,8 +143,8 @@ open class ClaudeClient(
         }
     }
 
-    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens) { chunk ->
+    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): Flow<String> = flow {
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams) { chunk ->
             emit(chunk)
         }
     }
@@ -149,6 +153,7 @@ open class ClaudeClient(
         messages: List<ChatMessage>,
         model: String,
         maxTokens: Int?,
+        samplingParams: SamplingParams?,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         return executeWithRetry(retryConfig) {
@@ -159,7 +164,10 @@ open class ClaudeClient(
                     messages = claudeMessages,
                     maxTokens = maxTokens ?: 4096,
                     system = systemPrompt,
-                    stream = true
+                    stream = true,
+                    temperature = samplingParams?.temperature,
+                    topP = samplingParams?.topP,
+                    topK = samplingParams?.topK
                 )
 
                 val statement = httpClient.preparePost("${baseUrl}/v1/messages") {
@@ -172,6 +180,7 @@ open class ClaudeClient(
                 val fullContent = StringBuilder()
                 var inputTokens = 0
                 var outputTokens = 0
+                var stopReason: String? = null
 
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
@@ -211,6 +220,9 @@ open class ClaudeClient(
                                         event.usage?.let {
                                             outputTokens = it.outputTokens
                                         }
+                                        event.delta?.stopReason?.let {
+                                            stopReason = it
+                                        }
                                     }
                                 }
                             } catch (_: Exception) {
@@ -226,7 +238,7 @@ open class ClaudeClient(
                     totalTokens = inputTokens + outputTokens
                 )
 
-                StreamResult(content = fullContent.toString(), usage = usage)
+                StreamResult(content = fullContent.toString(), usage = usage, finishReason = stopReason)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {

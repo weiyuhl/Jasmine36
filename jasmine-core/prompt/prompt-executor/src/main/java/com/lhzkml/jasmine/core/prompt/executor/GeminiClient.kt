@@ -15,6 +15,7 @@ import com.lhzkml.jasmine.core.prompt.model.GeminiPart
 import com.lhzkml.jasmine.core.prompt.model.GeminiRequest
 import com.lhzkml.jasmine.core.prompt.model.GeminiResponse
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
+import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -101,11 +102,11 @@ open class GeminiClient(
         return systemInstruction to contents
     }
 
-    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?): String {
-        return chatWithUsage(messages, model, maxTokens).content
+    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): String {
+        return chatWithUsage(messages, model, maxTokens, samplingParams).content
     }
 
-    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?): ChatResult {
+    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): ChatResult {
         return executeWithRetry(retryConfig) {
             try {
                 val (systemInstruction, contents) = convertMessages(messages)
@@ -113,6 +114,9 @@ open class GeminiClient(
                     contents = contents,
                     systemInstruction = systemInstruction,
                     generationConfig = GeminiGenerationConfig(
+                        temperature = samplingParams?.temperature,
+                        topP = samplingParams?.topP,
+                        topK = samplingParams?.topK,
                         maxOutputTokens = maxTokens
                     )
                 )
@@ -131,7 +135,8 @@ open class GeminiClient(
                 }
 
                 val geminiResponse: GeminiResponse = response.body()
-                val content = geminiResponse.candidates?.firstOrNull()
+                val firstCandidate = geminiResponse.candidates?.firstOrNull()
+                val content = firstCandidate
                     ?.content?.parts?.firstOrNull()?.text
                     ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
 
@@ -143,7 +148,7 @@ open class GeminiClient(
                     )
                 }
 
-                ChatResult(content = content, usage = usage)
+                ChatResult(content = content, usage = usage, finishReason = firstCandidate.finishReason)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {
@@ -160,8 +165,8 @@ open class GeminiClient(
         }
     }
 
-    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens) { chunk ->
+    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): Flow<String> = flow {
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams) { chunk ->
             emit(chunk)
         }
     }
@@ -170,6 +175,7 @@ open class GeminiClient(
         messages: List<ChatMessage>,
         model: String,
         maxTokens: Int?,
+        samplingParams: SamplingParams?,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         return executeWithRetry(retryConfig) {
@@ -179,6 +185,9 @@ open class GeminiClient(
                     contents = contents,
                     systemInstruction = systemInstruction,
                     generationConfig = GeminiGenerationConfig(
+                        temperature = samplingParams?.temperature,
+                        topP = samplingParams?.topP,
+                        topK = samplingParams?.topK,
                         maxOutputTokens = maxTokens
                     )
                 )
@@ -194,6 +203,7 @@ open class GeminiClient(
 
                 val fullContent = StringBuilder()
                 var lastUsage: Usage? = null
+                var lastFinishReason: String? = null
 
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
@@ -224,8 +234,12 @@ open class GeminiClient(
                                         totalTokens = it.totalTokenCount
                                     )
                                 }
+                                val firstCandidate = chunk.candidates?.firstOrNull()
+                                if (firstCandidate?.finishReason != null) {
+                                    lastFinishReason = firstCandidate.finishReason
+                                }
                                 // 提取文本
-                                val text = chunk.candidates?.firstOrNull()
+                                val text = firstCandidate
                                     ?.content?.parts?.firstOrNull()?.text
                                 if (!text.isNullOrEmpty()) {
                                     fullContent.append(text)
@@ -238,7 +252,7 @@ open class GeminiClient(
                     }
                 }
 
-                StreamResult(content = fullContent.toString(), usage = lastUsage)
+                StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {

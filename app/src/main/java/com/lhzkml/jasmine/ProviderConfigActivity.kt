@@ -321,6 +321,7 @@ class ProviderConfigActivity : AppCompatActivity() {
             parts.add("温度 $t$maxT")
         }
         info.topK?.let { parts.add("topK $it") }
+
         return parts.joinToString("  ·  ")
     }
 

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -26,6 +27,15 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvCompletionTokens: TextView
     private lateinit var tvTotalTokens: TextView
     private lateinit var conversationRepo: ConversationRepository
+
+    // 采样参数
+    private lateinit var seekTemperature: SeekBar
+    private lateinit var tvTemperatureValue: TextView
+    private lateinit var seekTopP: SeekBar
+    private lateinit var tvTopPValue: TextView
+    private lateinit var seekTopK: SeekBar
+    private lateinit var tvTopKValue: TextView
+    private lateinit var layoutTopK: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +72,16 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<LinearLayout>(R.id.layoutMaxTokens).setOnClickListener {
             showMaxTokensDialog()
         }
+
+        // 采样参数
+        seekTemperature = findViewById(R.id.seekTemperature)
+        tvTemperatureValue = findViewById(R.id.tvTemperatureValue)
+        seekTopP = findViewById(R.id.seekTopP)
+        tvTopPValue = findViewById(R.id.tvTopPValue)
+        seekTopK = findViewById(R.id.seekTopK)
+        tvTopKValue = findViewById(R.id.tvTopKValue)
+        layoutTopK = findViewById(R.id.layoutTopK)
+        setupSamplingParams()
     }
 
     override fun onResume() {
@@ -70,6 +90,14 @@ class SettingsActivity : AppCompatActivity() {
         refreshSystemPrompt()
         refreshMaxTokens()
         refreshUsageStats()
+        refreshTopKVisibility()
+    }
+
+    private fun refreshTopKVisibility() {
+        val config = ProviderManager.getActiveConfig(this)
+        // top_k 仅 Claude 和 Gemini 支持
+        val supportsTopK = config?.apiType == ApiType.CLAUDE || config?.apiType == ApiType.GEMINI
+        layoutTopK.visibility = if (supportsTopK) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun refreshProviderStatus() {
@@ -90,6 +118,82 @@ class SettingsActivity : AppCompatActivity() {
     private fun refreshMaxTokens() {
         val maxTokens = ProviderManager.getMaxTokens(this)
         tvMaxTokens.text = if (maxTokens > 0) "$maxTokens" else "不限制"
+    }
+
+    private fun setupSamplingParams() {
+        // Temperature: seekBar 0~200 → 0.0~2.0, 0 位置表示"默认"
+        val savedTemp = ProviderManager.getTemperature(this)
+        if (savedTemp >= 0f) {
+            seekTemperature.progress = (savedTemp * 100).toInt()
+            tvTemperatureValue.text = String.format("%.2f", savedTemp)
+        } else {
+            seekTemperature.progress = 0
+            tvTemperatureValue.text = "默认"
+        }
+        seekTemperature.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                if (progress == 0) {
+                    tvTemperatureValue.text = "默认"
+                    ProviderManager.setTemperature(this@SettingsActivity, -1f)
+                } else {
+                    val value = progress / 100f
+                    tvTemperatureValue.text = String.format("%.2f", value)
+                    ProviderManager.setTemperature(this@SettingsActivity, value)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        // Top P: seekBar 0~100 → 0.0~1.0, 0 位置表示"默认"
+        val savedTopP = ProviderManager.getTopP(this)
+        if (savedTopP >= 0f) {
+            seekTopP.progress = (savedTopP * 100).toInt()
+            tvTopPValue.text = String.format("%.2f", savedTopP)
+        } else {
+            seekTopP.progress = 0
+            tvTopPValue.text = "默认"
+        }
+        seekTopP.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                if (progress == 0) {
+                    tvTopPValue.text = "默认"
+                    ProviderManager.setTopP(this@SettingsActivity, -1f)
+                } else {
+                    val value = progress / 100f
+                    tvTopPValue.text = String.format("%.2f", value)
+                    ProviderManager.setTopP(this@SettingsActivity, value)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        // Top K: seekBar 0~100, 0 位置表示"默认"
+        val savedTopK = ProviderManager.getTopK(this)
+        if (savedTopK >= 0) {
+            seekTopK.progress = savedTopK
+            tvTopKValue.text = savedTopK.toString()
+        } else {
+            seekTopK.progress = 0
+            tvTopKValue.text = "默认"
+        }
+        seekTopK.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                if (progress == 0) {
+                    tvTopKValue.text = "默认"
+                    ProviderManager.setTopK(this@SettingsActivity, -1)
+                } else {
+                    tvTopKValue.text = progress.toString()
+                    ProviderManager.setTopK(this@SettingsActivity, progress)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
     }
 
     private fun showMaxTokensDialog() {

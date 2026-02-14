@@ -37,11 +37,7 @@ object ModelRegistry {
             provider = provider,
             id = modelId,
             contextLength = DEFAULT_CONTEXT_LENGTH,
-            maxOutputTokens = DEFAULT_MAX_OUTPUT,
-            capabilities = listOf(
-                LLMCapability.Temperature,
-                LLMCapability.Streaming
-            )
+            maxOutputTokens = DEFAULT_MAX_OUTPUT
         )
     }
 
@@ -53,22 +49,12 @@ object ModelRegistry {
         for (info in modelList) {
             if (!info.hasMetadata) continue
 
-            val capabilities = mutableListOf<LLMCapability>()
-            if (info.temperature != null || info.maxTemperature != null) {
-                capabilities.add(LLMCapability.Temperature)
-            }
-            capabilities.add(LLMCapability.Streaming)
-            if (info.supportsThinking == true) {
-                capabilities.add(LLMCapability.Reasoning)
-            }
-
             val model = LLModel(
                 provider = provider,
                 id = info.id,
                 displayName = info.displayName ?: info.id,
                 contextLength = info.contextLength ?: DEFAULT_CONTEXT_LENGTH,
-                maxOutputTokens = info.maxOutputTokens,
-                capabilities = capabilities
+                maxOutputTokens = info.maxOutputTokens
             )
             models[info.id] = model
         }

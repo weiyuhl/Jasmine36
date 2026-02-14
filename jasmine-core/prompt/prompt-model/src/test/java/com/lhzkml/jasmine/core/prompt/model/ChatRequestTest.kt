@@ -41,9 +41,9 @@ class ChatRequestTest {
     }
 
     @Test
-    fun `default temperature is 0_7`() {
+    fun `default temperature is null`() {
         val request = ChatRequest(model = "test", messages = emptyList())
-        assertEquals(0.7, request.temperature, 0.001)
+        assertNull(request.temperature)
     }
 
     @Test

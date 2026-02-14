@@ -265,6 +265,32 @@ object ProviderManager {
         prefs(ctx).edit().putInt("max_tokens", maxTokens).apply()
     }
 
+    // ========== 采样参数 ==========
+
+    /** 获取 temperature，-1 表示使用默认值 */
+    fun getTemperature(ctx: Context): Float =
+        prefs(ctx).getFloat("sampling_temperature", -1f)
+
+    fun setTemperature(ctx: Context, value: Float) {
+        prefs(ctx).edit().putFloat("sampling_temperature", value).apply()
+    }
+
+    /** 获取 top_p，-1 表示使用默认值 */
+    fun getTopP(ctx: Context): Float =
+        prefs(ctx).getFloat("sampling_top_p", -1f)
+
+    fun setTopP(ctx: Context, value: Float) {
+        prefs(ctx).edit().putFloat("sampling_top_p", value).apply()
+    }
+
+    /** 获取 top_k，-1 表示使用默认值（仅 Claude/Gemini 支持） */
+    fun getTopK(ctx: Context): Int =
+        prefs(ctx).getInt("sampling_top_k", -1)
+
+    fun setTopK(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt("sampling_top_k", value).apply()
+    }
+
     /** 获取当前启用的完整配置 */
     data class ActiveConfig(
         val providerId: String,

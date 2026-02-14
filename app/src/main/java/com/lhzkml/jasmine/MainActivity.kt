@@ -348,6 +348,17 @@ class MainActivity : AppCompatActivity() {
                 val useStream = ProviderManager.isStreamEnabled(this@MainActivity)
                 val maxTokensVal = ProviderManager.getMaxTokens(this@MainActivity)
                 val maxTokens = if (maxTokensVal > 0) maxTokensVal else null
+
+                // 采样参数
+                val tempVal = ProviderManager.getTemperature(this@MainActivity)
+                val topPVal = ProviderManager.getTopP(this@MainActivity)
+                val topKVal = ProviderManager.getTopK(this@MainActivity)
+                val samplingParams = com.lhzkml.jasmine.core.prompt.model.SamplingParams(
+                    temperature = if (tempVal >= 0f) tempVal.toDouble() else null,
+                    topP = if (topPVal >= 0f) topPVal.toDouble() else null,
+                    topK = if (topKVal >= 0) topKVal else null
+                )
+
                 val result: String
                 var usage: Usage? = null
 
@@ -357,7 +368,7 @@ class MainActivity : AppCompatActivity() {
                         tvOutput.append("AI: ")
                     }
 
-                    val streamResult = client.chatStreamWithUsage(trimmedMessages, config.model, maxTokens) { chunk ->
+                    val streamResult = client.chatStreamWithUsage(trimmedMessages, config.model, maxTokens, samplingParams) { chunk ->
                         withContext(Dispatchers.Main) {
                             tvOutput.append(chunk)
                             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -373,7 +384,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else {
                     // 非流式：一次性返回
-                    val chatResult = client.chatWithUsage(trimmedMessages, config.model, maxTokens)
+                    val chatResult = client.chatWithUsage(trimmedMessages, config.model, maxTokens, samplingParams)
                     result = chatResult.content
                     usage = chatResult.usage
                     withContext(Dispatchers.Main) {

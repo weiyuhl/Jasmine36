@@ -12,6 +12,7 @@ import com.lhzkml.jasmine.core.prompt.model.ChatResponse
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ChatStreamResponse
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
+import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -66,14 +67,20 @@ abstract class OpenAICompatibleClient(
         }
     }
 
-    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?): String {
-        return chatWithUsage(messages, model, maxTokens).content
+    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): String {
+        return chatWithUsage(messages, model, maxTokens, samplingParams).content
     }
 
-    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?): ChatResult {
+    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): ChatResult {
         return executeWithRetry(retryConfig) {
             try {
-                val request = ChatRequest(model = model, messages = messages, maxTokens = maxTokens)
+                val request = ChatRequest(
+                    model = model,
+                    messages = messages,
+                    temperature = samplingParams?.temperature,
+                    topP = samplingParams?.topP,
+                    maxTokens = maxTokens
+                )
                 val response: HttpResponse = httpClient.post("${baseUrl}${chatPath}") {
                     contentType(ContentType.Application.Json)
                     header("Authorization", "Bearer $apiKey")
@@ -86,10 +93,11 @@ abstract class OpenAICompatibleClient(
                 }
 
                 val chatResponse: ChatResponse = response.body()
-                val content = chatResponse.choices.firstOrNull()?.message?.content
+                val firstChoice = chatResponse.choices.firstOrNull()
+                val content = firstChoice?.message?.content
                     ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
 
-                ChatResult(content = content, usage = chatResponse.usage)
+                ChatResult(content = content, usage = chatResponse.usage, finishReason = firstChoice.finishReason)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {
@@ -106,8 +114,8 @@ abstract class OpenAICompatibleClient(
         }
     }
 
-    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens) { chunk ->
+    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): Flow<String> = flow {
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams) { chunk ->
             emit(chunk)
         }
     }
@@ -116,11 +124,19 @@ abstract class OpenAICompatibleClient(
         messages: List<ChatMessage>,
         model: String,
         maxTokens: Int?,
+        samplingParams: SamplingParams?,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         return executeWithRetry(retryConfig) {
             try {
-                val request = ChatRequest(model = model, messages = messages, stream = true, maxTokens = maxTokens)
+                val request = ChatRequest(
+                    model = model,
+                    messages = messages,
+                    stream = true,
+                    temperature = samplingParams?.temperature,
+                    topP = samplingParams?.topP,
+                    maxTokens = maxTokens
+                )
                 val statement = httpClient.preparePost("${baseUrl}${chatPath}") {
                     contentType(ContentType.Application.Json)
                     header("Authorization", "Bearer $apiKey")
@@ -129,6 +145,7 @@ abstract class OpenAICompatibleClient(
 
                 val fullContent = StringBuilder()
                 var lastUsage: Usage? = null
+                var lastFinishReason: String? = null
 
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
@@ -155,7 +172,11 @@ abstract class OpenAICompatibleClient(
                                     if (chunk.usage != null) {
                                         lastUsage = chunk.usage
                                     }
-                                    val content = chunk.choices.firstOrNull()?.delta?.content
+                                    val firstChoice = chunk.choices.firstOrNull()
+                                    if (firstChoice?.finishReason != null) {
+                                        lastFinishReason = firstChoice.finishReason
+                                    }
+                                    val content = firstChoice?.delta?.content
                                     if (!content.isNullOrEmpty()) {
                                         fullContent.append(content)
                                         onChunk(content)
@@ -168,7 +189,7 @@ abstract class OpenAICompatibleClient(
                     }
                 }
 
-                StreamResult(content = fullContent.toString(), usage = lastUsage)
+                StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {

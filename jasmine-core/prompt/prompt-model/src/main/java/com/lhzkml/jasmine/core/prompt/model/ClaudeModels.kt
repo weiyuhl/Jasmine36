@@ -13,7 +13,11 @@ data class ClaudeRequest(
     @SerialName("max_tokens")
     val maxTokens: Int = 4096,
     val system: String? = null,
-    val temperature: Double = 0.7,
+    val temperature: Double? = null,
+    @SerialName("top_p")
+    val topP: Double? = null,
+    @SerialName("top_k")
+    val topK: Int? = null,
     val stream: Boolean = false
 )
 

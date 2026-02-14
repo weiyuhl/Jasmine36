@@ -12,10 +12,12 @@ import com.lhzkml.jasmine.core.prompt.model.ChatMessage
  *
  * @param maxTokens 模型的最大上下文长度（token 数）
  * @param reservedTokens 为模型回复预留的 token 数
+ * @param tokenizer Token 计数器实现
  */
 class ContextManager(
     val maxTokens: Int = DEFAULT_MAX_TOKENS,
-    val reservedTokens: Int = DEFAULT_RESERVED_TOKENS
+    val reservedTokens: Int = DEFAULT_RESERVED_TOKENS,
+    private val tokenizer: Tokenizer = TokenEstimator
 ) {
 
     companion object {
@@ -24,22 +26,21 @@ class ContextManager(
 
         /**
          * 从模型元数据自动创建 ContextManager
-         * 使用模型的 contextLength 和 recommendedReservedTokens
          */
-        fun fromModel(model: LLModel): ContextManager {
+        fun fromModel(model: LLModel, tokenizer: Tokenizer = TokenEstimator): ContextManager {
             return ContextManager(
                 maxTokens = model.contextLength,
-                reservedTokens = model.recommendedReservedTokens
+                reservedTokens = model.recommendedReservedTokens,
+                tokenizer = tokenizer
             )
         }
 
         /**
          * 根据模型 ID 和供应商自动创建 ContextManager
-         * 先从 ModelRegistry 查找元数据，找不到则使用默认值
          */
-        fun forModel(modelId: String, provider: LLMProvider): ContextManager {
+        fun forModel(modelId: String, provider: LLMProvider, tokenizer: Tokenizer = TokenEstimator): ContextManager {
             val model = ModelRegistry.getOrDefault(modelId, provider)
-            return fromModel(model)
+            return fromModel(model, tokenizer)
         }
     }
 
@@ -49,45 +50,35 @@ class ContextManager(
 
     /**
      * 裁剪消息列表，使其不超过 token 预算
-     *
-     * @param messages 完整的消息列表
-     * @return 裁剪后的消息列表，保证：
-     *   - 所有 system 消息保留
-     *   - 尽可能多地保留最近的消息
-     *   - 总 token 数不超过 availableTokens
      */
     fun trimMessages(messages: List<ChatMessage>): List<ChatMessage> {
         if (messages.isEmpty()) return messages
 
         val budget = availableTokens
 
-        // 分离 system 消息和非 system 消息
         val systemMessages = messages.filter { it.role == "system" }
         val nonSystemMessages = messages.filter { it.role != "system" }
 
-        // 计算 system 消息占用的 token
         var systemTokens = 0
         for (msg in systemMessages) {
-            systemTokens += TokenEstimator.estimateMessage(msg.role, msg.content)
+            systemTokens += tokenizer.countMessageTokens(msg.role, msg.content)
         }
 
-        // system 消息本身就超预算，只保留 system
         if (systemTokens >= budget) {
             return systemMessages
         }
 
-        // 从最新消息往前，尽可能多地保留
         val remainingBudget = budget - systemTokens
         var usedTokens = 0
         val keptNonSystem = mutableListOf<ChatMessage>()
 
         for (msg in nonSystemMessages.reversed()) {
-            val msgTokens = TokenEstimator.estimateMessage(msg.role, msg.content)
+            val msgTokens = tokenizer.countMessageTokens(msg.role, msg.content)
             if (usedTokens + msgTokens > remainingBudget) {
                 break
             }
             usedTokens += msgTokens
-            keptNonSystem.add(0, msg) // 插入到头部，保持原始顺序
+            keptNonSystem.add(0, msg)
         }
 
         return systemMessages + keptNonSystem
@@ -97,7 +88,7 @@ class ContextManager(
      * 估算消息列表的总 token 数
      */
     fun estimateTokens(messages: List<ChatMessage>): Int {
-        return messages.sumOf { TokenEstimator.estimateMessage(it.role, it.content) }
+        return messages.sumOf { tokenizer.countMessageTokens(it.role, it.content) }
     }
 
     /**

@@ -27,6 +27,8 @@ data class GeminiPart(
 @Serializable
 data class GeminiGenerationConfig(
     val temperature: Double? = null,
+    val topP: Double? = null,
+    val topK: Int? = null,
     val maxOutputTokens: Int? = null
 )
 

@@ -1,23 +1,20 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
 /**
- * Token 估算器
+ * 默认 Token 估算器
  * 不引入 tiktoken 等外部依赖，使用字符级近似估算
  *
  * 估算规则：
- * - CJK 字符（中日韩）：每个字符约 1.5 token
+ * - CJK 字符（中日韩）：每个字符约 2 token（偏保守）
  * - ASCII 字符：每 4 个字符约 1 token
  * - 每条消息有固定开销（role 标记等）约 4 token
  */
-object TokenEstimator {
-
-    /** 每条消息的固定 token 开销（role、分隔符等） */
-    const val MESSAGE_OVERHEAD = 4
+object TokenEstimator : Tokenizer {
 
     /**
      * 估算单条文本的 token 数
      */
-    fun estimate(text: String): Int {
+    override fun countTokens(text: String): Int {
         var tokens = 0
         var asciiCount = 0
 
@@ -26,8 +23,8 @@ object TokenEstimator {
                 // 先结算累积的 ASCII
                 tokens += (asciiCount + 3) / 4
                 asciiCount = 0
-                // CJK 字符按 1.5 token 算，用 3/2 近似
-                tokens += 2 // 偏保守，避免超限
+                // CJK 字符按 2 token 算，偏保守避免超限
+                tokens += 2
             } else {
                 asciiCount++
             }
@@ -40,10 +37,16 @@ object TokenEstimator {
 
     /**
      * 估算单条消息的 token 数（含开销）
+     * 保留旧的静态方法签名以兼容
      */
-    fun estimateMessage(role: String, content: String): Int {
-        return MESSAGE_OVERHEAD + estimate(role) + estimate(content)
-    }
+    fun estimateMessage(role: String, content: String): Int =
+        countMessageTokens(role, content)
+
+    /**
+     * 估算单条文本的 token 数
+     * 保留旧的静态方法签名以兼容
+     */
+    fun estimate(text: String): Int = countTokens(text)
 
     private fun isCJK(char: Char): Boolean {
         val code = char.code

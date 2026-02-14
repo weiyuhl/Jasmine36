@@ -14,6 +14,7 @@ import com.lhzkml.jasmine.core.prompt.model.GeminiPart
 import com.lhzkml.jasmine.core.prompt.model.GeminiRequest
 import com.lhzkml.jasmine.core.prompt.model.GeminiResponse
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
+import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -208,11 +209,11 @@ class VertexAIClient(
         return systemInstruction to contents
     }
 
-    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?): String {
-        return chatWithUsage(messages, model, maxTokens).content
+    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): String {
+        return chatWithUsage(messages, model, maxTokens, samplingParams).content
     }
 
-    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?): ChatResult {
+    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): ChatResult {
         return com.lhzkml.jasmine.core.prompt.llm.executeWithRetry(retryConfig) {
             try {
                 val token = getAccessToken()
@@ -220,7 +221,12 @@ class VertexAIClient(
                 val request = GeminiRequest(
                     contents = contents,
                     systemInstruction = systemInstruction,
-                    generationConfig = GeminiGenerationConfig(maxOutputTokens = maxTokens)
+                    generationConfig = GeminiGenerationConfig(
+                        temperature = samplingParams?.temperature,
+                        topP = samplingParams?.topP,
+                        topK = samplingParams?.topK,
+                        maxOutputTokens = maxTokens
+                    )
                 )
 
                 val response: HttpResponse = client.post(buildUrl(model, false)) {
@@ -235,14 +241,15 @@ class VertexAIClient(
                 }
 
                 val geminiResponse: GeminiResponse = response.body()
-                val content = geminiResponse.candidates?.firstOrNull()
+                val firstCandidate = geminiResponse.candidates?.firstOrNull()
+                val content = firstCandidate
                     ?.content?.parts?.firstOrNull()?.text
                     ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
 
                 val usage = geminiResponse.usageMetadata?.let {
                     Usage(promptTokens = it.promptTokenCount, completionTokens = it.candidatesTokenCount, totalTokens = it.totalTokenCount)
                 }
-                ChatResult(content = content, usage = usage)
+                ChatResult(content = content, usage = usage, finishReason = firstCandidate.finishReason)
             } catch (e: ChatClientException) { throw e }
             catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
             catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
@@ -252,14 +259,15 @@ class VertexAIClient(
         }
     }
 
-    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens) { chunk -> emit(chunk) }
+    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): Flow<String> = flow {
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams) { chunk -> emit(chunk) }
     }
 
     override suspend fun chatStreamWithUsage(
         messages: List<ChatMessage>,
         model: String,
         maxTokens: Int?,
+        samplingParams: SamplingParams?,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         return com.lhzkml.jasmine.core.prompt.llm.executeWithRetry(retryConfig) {
@@ -269,7 +277,12 @@ class VertexAIClient(
                 val request = GeminiRequest(
                     contents = contents,
                     systemInstruction = systemInstruction,
-                    generationConfig = GeminiGenerationConfig(maxOutputTokens = maxTokens)
+                    generationConfig = GeminiGenerationConfig(
+                        temperature = samplingParams?.temperature,
+                        topP = samplingParams?.topP,
+                        topK = samplingParams?.topK,
+                        maxOutputTokens = maxTokens
+                    )
                 )
 
                 val statement = client.preparePost(buildUrl(model, true)) {
@@ -281,6 +294,7 @@ class VertexAIClient(
 
                 val fullContent = StringBuilder()
                 var lastUsage: Usage? = null
+                var lastFinishReason: String? = null
 
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
@@ -299,7 +313,11 @@ class VertexAIClient(
                                 chunk.usageMetadata?.let {
                                     lastUsage = Usage(promptTokens = it.promptTokenCount, completionTokens = it.candidatesTokenCount, totalTokens = it.totalTokenCount)
                                 }
-                                val text = chunk.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                                val firstCandidate = chunk.candidates?.firstOrNull()
+                                if (firstCandidate?.finishReason != null) {
+                                    lastFinishReason = firstCandidate.finishReason
+                                }
+                                val text = firstCandidate?.content?.parts?.firstOrNull()?.text
                                 if (!text.isNullOrEmpty()) {
                                     fullContent.append(text)
                                     onChunk(text)
@@ -309,7 +327,7 @@ class VertexAIClient(
                     }
                 }
 
-                StreamResult(content = fullContent.toString(), usage = lastUsage)
+                StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason)
             } catch (e: ChatClientException) { throw e }
             catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
             catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
