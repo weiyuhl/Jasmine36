@@ -9,4 +9,7 @@ sealed class LLMProvider(val name: String) {
 
     /** 硅基流动 */
     data object SiliconFlow : LLMProvider("SiliconFlow")
+
+    /** 自定义供应商（用于动态注册的供应商） */
+    class Custom(name: String) : LLMProvider(name)
 }

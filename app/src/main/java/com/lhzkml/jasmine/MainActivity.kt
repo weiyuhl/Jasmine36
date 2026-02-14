@@ -23,6 +23,7 @@ import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
+import com.lhzkml.jasmine.core.prompt.executor.GenericOpenAIClient
 import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.Usage
@@ -67,6 +68,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         conversationRepo = ConversationRepository(this)
+
+        // 动态注册自定义供应商示例（可选）
+        // ProviderManager.registerProvider(
+        //     Provider("openai", "OpenAI", "https://api.openai.com", "gpt-4")
+        // )
 
         drawerLayout = findViewById(R.id.drawerLayout)
         mainContent = findViewById(R.id.mainContent)
@@ -221,10 +227,20 @@ class MainActivity : AppCompatActivity() {
             chatClient?.let { return it }
         }
         chatClient?.close()
+        
+        // 优先使用专用客户端，否则使用通用客户端
         val client = when (config.providerId) {
             "deepseek" -> DeepSeekClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
             "siliconflow" -> SiliconFlowClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
-            else -> SiliconFlowClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
+            else -> {
+                // 对于动态注册的供应商，使用通用客户端
+                val provider = ProviderManager.getProvider(config.providerId)
+                GenericOpenAIClient(
+                    providerName = provider?.name ?: config.providerId,
+                    apiKey = config.apiKey,
+                    baseUrl = config.baseUrl
+                )
+            }
         }
         chatClient = client
         currentProviderId = config.providerId

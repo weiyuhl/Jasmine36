@@ -19,10 +19,43 @@ data class Provider(
 
 object ProviderManager {
 
-    val providers = listOf(
+    private val _providers = mutableListOf(
         Provider("deepseek", "DeepSeek", "https://api.deepseek.com", "deepseek-chat"),
         Provider("siliconflow", "硅基流动", "https://api.siliconflow.cn", "deepseek-ai/DeepSeek-V3"),
     )
+
+    /** 获取所有已注册的供应商（只读） */
+    val providers: List<Provider>
+        get() = _providers.toList()
+
+    /**
+     * 注册新供应商
+     * @param provider 供应商配置
+     * @return 是否注册成功（如果 ID 已存在则返回 false）
+     */
+    fun registerProvider(provider: Provider): Boolean {
+        if (_providers.any { it.id == provider.id }) {
+            return false
+        }
+        _providers.add(provider)
+        return true
+    }
+
+    /**
+     * 取消注册供应商
+     * @param id 供应商 ID
+     * @return 是否成功移除
+     */
+    fun unregisterProvider(id: String): Boolean {
+        return _providers.removeIf { it.id == id }
+    }
+
+    /**
+     * 获取指定供应商
+     */
+    fun getProvider(id: String): Provider? {
+        return _providers.find { it.id == id }
+    }
 
     private fun prefs(ctx: Context): SharedPreferences =
         ctx.getSharedPreferences("jasmine_providers", Context.MODE_PRIVATE)
