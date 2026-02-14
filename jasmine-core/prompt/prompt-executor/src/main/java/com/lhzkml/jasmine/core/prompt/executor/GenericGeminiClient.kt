@@ -5,17 +5,18 @@ import com.lhzkml.jasmine.core.prompt.llm.RetryConfig
 import io.ktor.client.*
 
 /**
- * 通用 OpenAI 兼容客户端
- * 用于支持任意 OpenAI 兼容的供应商
+ * 通用 Gemini 兼容客户端
+ * 用于支持任意使用 Gemini generateContent API 格式的供应商
  */
-class GenericOpenAIClient(
+class GenericGeminiClient(
     providerName: String,
     apiKey: String,
     baseUrl: String,
-    chatPath: String = "/v1/chat/completions",
+    generatePath: String = DEFAULT_GENERATE_PATH,
+    streamPath: String = DEFAULT_STREAM_PATH,
     retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null
-) : OpenAICompatibleClient(apiKey, baseUrl, retryConfig, httpClient, chatPath) {
+) : GeminiClient(apiKey, baseUrl, retryConfig, httpClient, generatePath, streamPath) {
 
     override val provider = LLMProvider.Custom(providerName)
 }

@@ -5,17 +5,19 @@ import com.lhzkml.jasmine.core.prompt.llm.RetryConfig
 import io.ktor.client.*
 
 /**
- * 通用 OpenAI 兼容客户端
- * 用于支持任意 OpenAI 兼容的供应商
+ * OpenAI 官方客户端
  */
-class GenericOpenAIClient(
-    providerName: String,
+class OpenAIClient(
     apiKey: String,
-    baseUrl: String,
+    baseUrl: String = DEFAULT_BASE_URL,
     chatPath: String = "/v1/chat/completions",
     retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null
 ) : OpenAICompatibleClient(apiKey, baseUrl, retryConfig, httpClient, chatPath) {
 
-    override val provider = LLMProvider.Custom(providerName)
+    companion object {
+        const val DEFAULT_BASE_URL = "https://api.openai.com"
+    }
+
+    override val provider = LLMProvider.OpenAI
 }

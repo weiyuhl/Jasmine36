@@ -10,9 +10,10 @@ import io.ktor.client.*
 class DeepSeekClient(
     apiKey: String,
     baseUrl: String = DEFAULT_BASE_URL,
+    chatPath: String = "/v1/chat/completions",
     retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null
-) : OpenAICompatibleClient(apiKey, baseUrl, retryConfig, httpClient) {
+) : OpenAICompatibleClient(apiKey, baseUrl, retryConfig, httpClient, chatPath) {
 
     companion object {
         const val DEFAULT_BASE_URL = "https://api.deepseek.com"

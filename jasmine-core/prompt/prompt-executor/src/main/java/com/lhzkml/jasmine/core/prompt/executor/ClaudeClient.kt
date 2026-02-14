@@ -3,16 +3,17 @@ package com.lhzkml.jasmine.core.prompt.executor
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
+import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
 import com.lhzkml.jasmine.core.prompt.llm.RetryConfig
 import com.lhzkml.jasmine.core.prompt.llm.StreamResult
 import com.lhzkml.jasmine.core.prompt.llm.executeWithRetry
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
-import com.lhzkml.jasmine.core.prompt.model.ChatRequest
-import com.lhzkml.jasmine.core.prompt.model.ChatResponse
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
-import com.lhzkml.jasmine.core.prompt.model.ChatStreamResponse
+import com.lhzkml.jasmine.core.prompt.model.ClaudeMessage
+import com.lhzkml.jasmine.core.prompt.model.ClaudeRequest
+import com.lhzkml.jasmine.core.prompt.model.ClaudeResponse
+import com.lhzkml.jasmine.core.prompt.model.ClaudeStreamEvent
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
-import com.lhzkml.jasmine.core.prompt.model.ModelListResponse
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -32,17 +33,22 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
 /**
- * OpenAI 兼容 API 的基础客户端
- * DeepSeek、硅基流动等供应商都使用兼容 OpenAI 的接口格式
+ * Anthropic Claude 客户端
+ * 使用 Claude 原生 Messages API
  */
-abstract class OpenAICompatibleClient(
+open class ClaudeClient(
     protected val apiKey: String,
-    protected val baseUrl: String,
+    protected val baseUrl: String = DEFAULT_BASE_URL,
     protected val retryConfig: RetryConfig = RetryConfig.DEFAULT,
-    httpClient: HttpClient? = null,
-    /** Chat completions API 路径，默认 /v1/chat/completions */
-    protected val chatPath: String = "/v1/chat/completions"
+    httpClient: HttpClient? = null
 ) : ChatClient {
+
+    companion object {
+        const val DEFAULT_BASE_URL = "https://api.anthropic.com"
+        const val ANTHROPIC_VERSION = "2023-06-01"
+    }
+
+    override val provider: LLMProvider = LLMProvider.Claude
 
     internal val json = Json {
         ignoreUnknownKeys = true
@@ -51,13 +57,30 @@ abstract class OpenAICompatibleClient(
 
     internal val httpClient: HttpClient = httpClient ?: HttpClient(OkHttp) {
         install(ContentNegotiation) {
-            json(this@OpenAICompatibleClient.json)
+            json(this@ClaudeClient.json)
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = this@OpenAICompatibleClient.retryConfig.requestTimeoutMs
+            requestTimeoutMillis = retryConfig.requestTimeoutMs
             connectTimeoutMillis = 30000
             socketTimeoutMillis = 60000
         }
+    }
+
+    /**
+     * 将通用 ChatMessage 转换为 Claude 格式
+     * Claude 的 system 消息不在 messages 中，而是作为顶层字段
+     */
+    private fun convertMessages(messages: List<ChatMessage>): Pair<String?, List<ClaudeMessage>> {
+        var systemPrompt: String? = null
+        val claudeMessages = mutableListOf<ClaudeMessage>()
+
+        for (msg in messages) {
+            when (msg.role) {
+                "system" -> systemPrompt = msg.content
+                "user", "assistant" -> claudeMessages.add(ClaudeMessage(role = msg.role, content = msg.content))
+            }
+        }
+        return systemPrompt to claudeMessages
     }
 
     override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?): String {
@@ -67,10 +90,18 @@ abstract class OpenAICompatibleClient(
     override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?): ChatResult {
         return executeWithRetry(retryConfig) {
             try {
-                val request = ChatRequest(model = model, messages = messages, maxTokens = maxTokens)
-                val response: HttpResponse = httpClient.post("${baseUrl}${chatPath}") {
+                val (systemPrompt, claudeMessages) = convertMessages(messages)
+                val request = ClaudeRequest(
+                    model = model,
+                    messages = claudeMessages,
+                    maxTokens = maxTokens ?: 4096,
+                    system = systemPrompt
+                )
+
+                val response: HttpResponse = httpClient.post("${baseUrl}/v1/messages") {
                     contentType(ContentType.Application.Json)
-                    header("Authorization", "Bearer $apiKey")
+                    header("x-api-key", apiKey)
+                    header("anthropic-version", ANTHROPIC_VERSION)
                     setBody(request)
                 }
 
@@ -79,11 +110,19 @@ abstract class OpenAICompatibleClient(
                     throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                 }
 
-                val chatResponse: ChatResponse = response.body()
-                val content = chatResponse.choices.firstOrNull()?.message?.content
+                val claudeResponse: ClaudeResponse = response.body()
+                val content = claudeResponse.content.firstOrNull { it.type == "text" }?.text
                     ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
 
-                ChatResult(content = content, usage = chatResponse.usage)
+                val usage = claudeResponse.usage?.let {
+                    Usage(
+                        promptTokens = it.inputTokens,
+                        completionTokens = it.outputTokens,
+                        totalTokens = it.inputTokens + it.outputTokens
+                    )
+                }
+
+                ChatResult(content = content, usage = usage)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {
@@ -114,15 +153,25 @@ abstract class OpenAICompatibleClient(
     ): StreamResult {
         return executeWithRetry(retryConfig) {
             try {
-                val request = ChatRequest(model = model, messages = messages, stream = true, maxTokens = maxTokens)
-                val statement = httpClient.preparePost("${baseUrl}${chatPath}") {
+                val (systemPrompt, claudeMessages) = convertMessages(messages)
+                val request = ClaudeRequest(
+                    model = model,
+                    messages = claudeMessages,
+                    maxTokens = maxTokens ?: 4096,
+                    system = systemPrompt,
+                    stream = true
+                )
+
+                val statement = httpClient.preparePost("${baseUrl}/v1/messages") {
                     contentType(ContentType.Application.Json)
-                    header("Authorization", "Bearer $apiKey")
+                    header("x-api-key", apiKey)
+                    header("anthropic-version", ANTHROPIC_VERSION)
                     setBody(request)
                 }
 
                 val fullContent = StringBuilder()
-                var lastUsage: Usage? = null
+                var inputTokens = 0
+                var outputTokens = 0
 
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
@@ -141,28 +190,43 @@ abstract class OpenAICompatibleClient(
 
                         if (line.startsWith("data: ")) {
                             val data = line.removePrefix("data: ").trim()
-                            if (data == "[DONE]") return@execute
-                            if (data.isNotEmpty()) {
-                                try {
-                                    val chunk = json.decodeFromString<ChatStreamResponse>(data)
-                                    // 捕获 usage（通常在最后一个 chunk）
-                                    if (chunk.usage != null) {
-                                        lastUsage = chunk.usage
+                            if (data.isEmpty()) continue
+
+                            try {
+                                val event = json.decodeFromString<ClaudeStreamEvent>(data)
+                                when (event.type) {
+                                    "message_start" -> {
+                                        event.message?.usage?.let {
+                                            inputTokens = it.inputTokens
+                                        }
                                     }
-                                    val content = chunk.choices.firstOrNull()?.delta?.content
-                                    if (!content.isNullOrEmpty()) {
-                                        fullContent.append(content)
-                                        onChunk(content)
+                                    "content_block_delta" -> {
+                                        val text = event.delta?.text
+                                        if (!text.isNullOrEmpty()) {
+                                            fullContent.append(text)
+                                            onChunk(text)
+                                        }
                                     }
-                                } catch (_: Exception) {
-                                    // 跳过无法解析的行
+                                    "message_delta" -> {
+                                        event.usage?.let {
+                                            outputTokens = it.outputTokens
+                                        }
+                                    }
                                 }
+                            } catch (_: Exception) {
+                                // 跳过无法解析的行
                             }
                         }
                     }
                 }
 
-                StreamResult(content = fullContent.toString(), usage = lastUsage)
+                val usage = Usage(
+                    promptTokens = inputTokens,
+                    completionTokens = outputTokens,
+                    totalTokens = inputTokens + outputTokens
+                )
+
+                StreamResult(content = fullContent.toString(), usage = usage)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {
@@ -183,7 +247,9 @@ abstract class OpenAICompatibleClient(
         return executeWithRetry(retryConfig) {
             try {
                 val response: HttpResponse = httpClient.get("${baseUrl}/v1/models") {
-                    header("Authorization", "Bearer $apiKey")
+                    header("x-api-key", apiKey)
+                    header("anthropic-version", ANTHROPIC_VERSION)
+                    parameter("limit", 1000)
                 }
 
                 if (!response.status.isSuccess()) {
@@ -191,8 +257,8 @@ abstract class OpenAICompatibleClient(
                     throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                 }
 
-                val modelListResponse: ModelListResponse = response.body()
-                modelListResponse.data
+                val claudeResponse: com.lhzkml.jasmine.core.prompt.model.ClaudeModelListResponse = response.body()
+                claudeResponse.data.map { ModelInfo(id = it.id) }
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: Exception) {

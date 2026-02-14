@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="API 渠道类型"
+        android:textSize="14sp"
+        android:textColor="@color/text_secondary"
+        android:layout_marginBottom="4dp" />
+
+    <Spinner
+        android:id="@+id/spinnerApiType"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_input"
+        android:paddingHorizontal="12dp"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="供应商 ID"
+        android:textSize="14sp"
+        android:textColor="@color/text_secondary"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/etProviderId"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="例如: openai"
+        android:inputType="text"
+        android:background="@drawable/bg_input"
+        android:paddingHorizontal="12dp"
+        android:textSize="15sp"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="供应商名称"
+        android:textSize="14sp"
+        android:textColor="@color/text_secondary"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/etProviderName"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="例如: OpenAI"
+        android:inputType="text"
+        android:background="@drawable/bg_input"
+        android:paddingHorizontal="12dp"
+        android:textSize="15sp"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="API 地址"
+        android:textSize="14sp"
+        android:textColor="@color/text_secondary"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/etProviderBaseUrl"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="例如: https://api.openai.com"
+        android:inputType="textUri"
+        android:background="@drawable/bg_input"
+        android:paddingHorizontal="12dp"
+        android:textSize="15sp"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="默认模型"
+        android:textSize="14sp"
+        android:textColor="@color/text_secondary"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/etProviderModel"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="例如: gpt-4"
+        android:inputType="text"
+        android:background="@drawable/bg_input"
+        android:paddingHorizontal="12dp"
+        android:textSize="15sp" />
+
+</LinearLayout>

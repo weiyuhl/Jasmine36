@@ -22,9 +22,15 @@ import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
+import com.lhzkml.jasmine.core.prompt.executor.ClaudeClient
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
+import com.lhzkml.jasmine.core.prompt.executor.GeminiClient
+import com.lhzkml.jasmine.core.prompt.executor.GenericClaudeClient
+import com.lhzkml.jasmine.core.prompt.executor.GenericGeminiClient
 import com.lhzkml.jasmine.core.prompt.executor.GenericOpenAIClient
+import com.lhzkml.jasmine.core.prompt.executor.OpenAIClient
 import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
+import com.lhzkml.jasmine.core.prompt.executor.VertexAIClient
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
@@ -66,6 +72,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // 初始化 ProviderManager，加载自定义供应商
+        ProviderManager.initialize(this)
 
         conversationRepo = ConversationRepository(this)
 
@@ -228,18 +237,58 @@ class MainActivity : AppCompatActivity() {
         }
         chatClient?.close()
         
-        // 优先使用专用客户端，否则使用通用客户端
-        val client = when (config.providerId) {
-            "deepseek" -> DeepSeekClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
-            "siliconflow" -> SiliconFlowClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
-            else -> {
-                // 对于动态注册的供应商，使用通用客户端
-                val provider = ProviderManager.getProvider(config.providerId)
-                GenericOpenAIClient(
+        val provider = ProviderManager.getProvider(config.providerId)
+        
+        val client = when (config.apiType) {
+            ApiType.OPENAI -> {
+                val chatPath = config.chatPath ?: "/v1/chat/completions"
+                when (config.providerId) {
+                    "openai" -> OpenAIClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
+                    "deepseek" -> DeepSeekClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
+                    "siliconflow" -> SiliconFlowClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
+                    else -> GenericOpenAIClient(
+                        providerName = provider?.name ?: config.providerId,
+                        apiKey = config.apiKey,
+                        baseUrl = config.baseUrl,
+                        chatPath = chatPath
+                    )
+                }
+            }
+            ApiType.CLAUDE -> when (config.providerId) {
+                "claude" -> ClaudeClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
+                else -> GenericClaudeClient(
                     providerName = provider?.name ?: config.providerId,
                     apiKey = config.apiKey,
                     baseUrl = config.baseUrl
                 )
+            }
+            ApiType.GEMINI -> {
+                // Vertex AI 模式
+                if (config.vertexEnabled && config.vertexServiceAccountJson.isNotEmpty()) {
+                    VertexAIClient(
+                        serviceAccountJson = config.vertexServiceAccountJson,
+                        projectId = config.vertexProjectId,
+                        location = config.vertexLocation
+                    )
+                } else {
+                    val genPath = config.chatPath ?: GeminiClient.DEFAULT_GENERATE_PATH
+                    val streamPath = genPath.replace(":generateContent", ":streamGenerateContent")
+                    when (config.providerId) {
+                        "gemini" -> GeminiClient(
+                            apiKey = config.apiKey,
+                            baseUrl = config.baseUrl,
+                            generatePath = genPath,
+                            streamPath = streamPath
+                        )
+                        else -> GenericGeminiClient(
+                            providerName = provider?.name ?: config.providerId,
+                            apiKey = config.apiKey,
+                            baseUrl = config.baseUrl,
+                            generatePath = genPath,
+                            streamPath = streamPath
+                        )
+                    }
+                }
             }
         }
         chatClient = client

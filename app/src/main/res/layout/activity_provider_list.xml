@@ -48,7 +48,8 @@
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:scrollbars="none">
 
         <LinearLayout
@@ -58,4 +59,20 @@
             android:orientation="vertical"
             android:padding="16dp" />
     </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="@color/white">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAddCustomProvider"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="+ 添加自定义供应商"
+            android:textSize="15sp"
+            app:cornerRadius="8dp" />
+    </LinearLayout>
 </LinearLayout>

@@ -5,17 +5,16 @@ import com.lhzkml.jasmine.core.prompt.llm.RetryConfig
 import io.ktor.client.*
 
 /**
- * 通用 OpenAI 兼容客户端
- * 用于支持任意 OpenAI 兼容的供应商
+ * 通用 Claude 兼容客户端
+ * 用于支持任意使用 Claude Messages API 格式的供应商
  */
-class GenericOpenAIClient(
+class GenericClaudeClient(
     providerName: String,
     apiKey: String,
     baseUrl: String,
-    chatPath: String = "/v1/chat/completions",
     retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null
-) : OpenAICompatibleClient(apiKey, baseUrl, retryConfig, httpClient, chatPath) {
+) : ClaudeClient(apiKey, baseUrl, retryConfig, httpClient) {
 
     override val provider = LLMProvider.Custom(providerName)
 }

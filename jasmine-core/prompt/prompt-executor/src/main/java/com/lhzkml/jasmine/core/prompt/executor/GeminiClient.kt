@@ -3,16 +3,18 @@ package com.lhzkml.jasmine.core.prompt.executor
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
+import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
 import com.lhzkml.jasmine.core.prompt.llm.RetryConfig
 import com.lhzkml.jasmine.core.prompt.llm.StreamResult
 import com.lhzkml.jasmine.core.prompt.llm.executeWithRetry
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
-import com.lhzkml.jasmine.core.prompt.model.ChatRequest
-import com.lhzkml.jasmine.core.prompt.model.ChatResponse
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
-import com.lhzkml.jasmine.core.prompt.model.ChatStreamResponse
+import com.lhzkml.jasmine.core.prompt.model.GeminiContent
+import com.lhzkml.jasmine.core.prompt.model.GeminiGenerationConfig
+import com.lhzkml.jasmine.core.prompt.model.GeminiPart
+import com.lhzkml.jasmine.core.prompt.model.GeminiRequest
+import com.lhzkml.jasmine.core.prompt.model.GeminiResponse
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
-import com.lhzkml.jasmine.core.prompt.model.ModelListResponse
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -32,32 +34,71 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
 /**
- * OpenAI 兼容 API 的基础客户端
- * DeepSeek、硅基流动等供应商都使用兼容 OpenAI 的接口格式
+ * Google Gemini 客户端
+ * 使用 Gemini 原生 generateContent API
  */
-abstract class OpenAICompatibleClient(
+open class GeminiClient(
     protected val apiKey: String,
-    protected val baseUrl: String,
+    protected val baseUrl: String = DEFAULT_BASE_URL,
     protected val retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null,
-    /** Chat completions API 路径，默认 /v1/chat/completions */
-    protected val chatPath: String = "/v1/chat/completions"
+    /**
+     * generateContent 路径模板，{model} 会被替换为实际模型名
+     * AI Studio: /v1beta/models/{model}:generateContent
+     * Vertex AI Express: /v1/publishers/google/models/{model}:generateContent
+     */
+    protected val generatePath: String = DEFAULT_GENERATE_PATH,
+    protected val streamPath: String = DEFAULT_STREAM_PATH
 ) : ChatClient {
+
+    companion object {
+        const val DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
+        const val DEFAULT_GENERATE_PATH = "/v1beta/models/{model}:generateContent"
+        const val DEFAULT_STREAM_PATH = "/v1beta/models/{model}:streamGenerateContent"
+    }
+
+    override val provider: LLMProvider = LLMProvider.Gemini
 
     internal val json = Json {
         ignoreUnknownKeys = true
-        encodeDefaults = true
+        encodeDefaults = false
     }
 
     internal val httpClient: HttpClient = httpClient ?: HttpClient(OkHttp) {
         install(ContentNegotiation) {
-            json(this@OpenAICompatibleClient.json)
+            json(this@GeminiClient.json)
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = this@OpenAICompatibleClient.retryConfig.requestTimeoutMs
+            requestTimeoutMillis = retryConfig.requestTimeoutMs
             connectTimeoutMillis = 30000
             socketTimeoutMillis = 60000
         }
+    }
+
+    /**
+     * 将通用 ChatMessage 转换为 Gemini 格式
+     * Gemini 使用 "user"/"model" 角色，system 消息作为 systemInstruction
+     */
+    private fun convertMessages(messages: List<ChatMessage>): Pair<GeminiContent?, List<GeminiContent>> {
+        var systemInstruction: GeminiContent? = null
+        val contents = mutableListOf<GeminiContent>()
+
+        for (msg in messages) {
+            when (msg.role) {
+                "system" -> {
+                    systemInstruction = GeminiContent(
+                        parts = listOf(GeminiPart(text = msg.content))
+                    )
+                }
+                "user" -> contents.add(
+                    GeminiContent(role = "user", parts = listOf(GeminiPart(text = msg.content)))
+                )
+                "assistant" -> contents.add(
+                    GeminiContent(role = "model", parts = listOf(GeminiPart(text = msg.content)))
+                )
+            }
+        }
+        return systemInstruction to contents
     }
 
     override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?): String {
@@ -67,10 +108,20 @@ abstract class OpenAICompatibleClient(
     override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?): ChatResult {
         return executeWithRetry(retryConfig) {
             try {
-                val request = ChatRequest(model = model, messages = messages, maxTokens = maxTokens)
-                val response: HttpResponse = httpClient.post("${baseUrl}${chatPath}") {
+                val (systemInstruction, contents) = convertMessages(messages)
+                val request = GeminiRequest(
+                    contents = contents,
+                    systemInstruction = systemInstruction,
+                    generationConfig = GeminiGenerationConfig(
+                        maxOutputTokens = maxTokens
+                    )
+                )
+
+                val response: HttpResponse = httpClient.post(
+                    "${baseUrl}${generatePath.replace("{model}", model)}"
+                ) {
                     contentType(ContentType.Application.Json)
-                    header("Authorization", "Bearer $apiKey")
+                    parameter("key", apiKey)
                     setBody(request)
                 }
 
@@ -79,11 +130,20 @@ abstract class OpenAICompatibleClient(
                     throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                 }
 
-                val chatResponse: ChatResponse = response.body()
-                val content = chatResponse.choices.firstOrNull()?.message?.content
+                val geminiResponse: GeminiResponse = response.body()
+                val content = geminiResponse.candidates?.firstOrNull()
+                    ?.content?.parts?.firstOrNull()?.text
                     ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
 
-                ChatResult(content = content, usage = chatResponse.usage)
+                val usage = geminiResponse.usageMetadata?.let {
+                    Usage(
+                        promptTokens = it.promptTokenCount,
+                        completionTokens = it.candidatesTokenCount,
+                        totalTokens = it.totalTokenCount
+                    )
+                }
+
+                ChatResult(content = content, usage = usage)
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {
@@ -114,10 +174,21 @@ abstract class OpenAICompatibleClient(
     ): StreamResult {
         return executeWithRetry(retryConfig) {
             try {
-                val request = ChatRequest(model = model, messages = messages, stream = true, maxTokens = maxTokens)
-                val statement = httpClient.preparePost("${baseUrl}${chatPath}") {
+                val (systemInstruction, contents) = convertMessages(messages)
+                val request = GeminiRequest(
+                    contents = contents,
+                    systemInstruction = systemInstruction,
+                    generationConfig = GeminiGenerationConfig(
+                        maxOutputTokens = maxTokens
+                    )
+                )
+
+                val statement = httpClient.preparePost(
+                    "${baseUrl}${streamPath.replace("{model}", model)}"
+                ) {
                     contentType(ContentType.Application.Json)
-                    header("Authorization", "Bearer $apiKey")
+                    parameter("key", apiKey)
+                    parameter("alt", "sse")
                     setBody(request)
                 }
 
@@ -141,22 +212,27 @@ abstract class OpenAICompatibleClient(
 
                         if (line.startsWith("data: ")) {
                             val data = line.removePrefix("data: ").trim()
-                            if (data == "[DONE]") return@execute
-                            if (data.isNotEmpty()) {
-                                try {
-                                    val chunk = json.decodeFromString<ChatStreamResponse>(data)
-                                    // 捕获 usage（通常在最后一个 chunk）
-                                    if (chunk.usage != null) {
-                                        lastUsage = chunk.usage
-                                    }
-                                    val content = chunk.choices.firstOrNull()?.delta?.content
-                                    if (!content.isNullOrEmpty()) {
-                                        fullContent.append(content)
-                                        onChunk(content)
-                                    }
-                                } catch (_: Exception) {
-                                    // 跳过无法解析的行
+                            if (data.isEmpty()) continue
+
+                            try {
+                                val chunk = json.decodeFromString<GeminiResponse>(data)
+                                // 提取 usage
+                                chunk.usageMetadata?.let {
+                                    lastUsage = Usage(
+                                        promptTokens = it.promptTokenCount,
+                                        completionTokens = it.candidatesTokenCount,
+                                        totalTokens = it.totalTokenCount
+                                    )
                                 }
+                                // 提取文本
+                                val text = chunk.candidates?.firstOrNull()
+                                    ?.content?.parts?.firstOrNull()?.text
+                                if (!text.isNullOrEmpty()) {
+                                    fullContent.append(text)
+                                    onChunk(text)
+                                }
+                            } catch (_: Exception) {
+                                // 跳过无法解析的行
                             }
                         }
                     }
@@ -182,8 +258,9 @@ abstract class OpenAICompatibleClient(
     override suspend fun listModels(): List<ModelInfo> {
         return executeWithRetry(retryConfig) {
             try {
-                val response: HttpResponse = httpClient.get("${baseUrl}/v1/models") {
-                    header("Authorization", "Bearer $apiKey")
+                val response: HttpResponse = httpClient.get("${baseUrl}/v1beta/models") {
+                    parameter("key", apiKey)
+                    parameter("pageSize", 1000)
                 }
 
                 if (!response.status.isSuccess()) {
@@ -191,8 +268,14 @@ abstract class OpenAICompatibleClient(
                     throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                 }
 
-                val modelListResponse: ModelListResponse = response.body()
-                modelListResponse.data
+                val geminiResponse: com.lhzkml.jasmine.core.prompt.model.GeminiModelListResponse = response.body()
+                geminiResponse.models
+                    .filter { it.supportedGenerationMethods.contains("generateContent") }
+                    .map { model ->
+                        // name 格式为 "models/gemini-2.5-flash"，提取模型 ID
+                        val id = model.name.removePrefix("models/")
+                        ModelInfo(id = id)
+                    }
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: Exception) {

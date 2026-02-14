@@ -64,7 +64,7 @@
                 android:background="@drawable/bg_card"
                 android:padding="20dp">
 
-                <!-- API 地址（仅自定义供应商显示） -->
+                <!-- API 地址 -->
                 <LinearLayout
                     android:id="@+id/layoutBaseUrl"
                     android:layout_width="match_parent"
@@ -93,6 +93,46 @@
                         android:paddingHorizontal="16dp"
                         android:fontFamily="monospace"
                         android:importantForAutofill="no" />
+                </LinearLayout>
+
+                <!-- API 路径 -->
+                <LinearLayout
+                    android:id="@+id/layoutChatPath"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="API 路径"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/etChatPath"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="8dp"
+                        android:textColorHint="@color/text_secondary"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:inputType="text"
+                        android:background="@drawable/bg_input"
+                        android:paddingHorizontal="16dp"
+                        android:fontFamily="monospace"
+                        android:importantForAutofill="no" />
+
+                    <TextView
+                        android:id="@+id/tvChatPathHint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
                 </LinearLayout>
 
                 <!-- API Key -->
@@ -144,7 +184,7 @@
                         android:layout_marginTop="8dp"
                         android:gravity="center_vertical">
 
-                        <TextView
+                        <EditText
                             android:id="@+id/tvSelectedModel"
                             android:layout_width="0dp"
                             android:layout_height="44dp"
@@ -155,10 +195,11 @@
                             android:textSize="13sp"
                             android:textColor="@color/text_primary"
                             android:fontFamily="monospace"
-                            android:hint="点击右侧按钮获取"
+                            android:hint="手动输入或点击右侧获取"
                             android:textColorHint="@color/text_secondary"
                             android:singleLine="true"
-                            android:ellipsize="middle" />
+                            android:inputType="text"
+                            android:importantForAutofill="no" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnFetchModels"
@@ -186,6 +227,144 @@
                         android:textSize="12sp"
                         android:textColor="@color/text_secondary"
                         android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Vertex AI 设置（仅 Gemini 类型显示） -->
+                <LinearLayout
+                    android:id="@+id/layoutVertexAI"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone">
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/divider"
+                        android:layout_marginBottom="16dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="使用 Vertex AI"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/switchVertexAI"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="启用后将使用 Vertex AI 端点和服务账号认证"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <!-- Vertex AI 详细配置 -->
+                    <LinearLayout
+                        android:id="@+id/layoutVertexFields"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="项目 ID"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/etVertexProjectId"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="8dp"
+                            android:hint="my-gcp-project"
+                            android:textColorHint="@color/text_secondary"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp"
+                            android:inputType="text"
+                            android:background="@drawable/bg_input"
+                            android:paddingHorizontal="16dp"
+                            android:fontFamily="monospace"
+                            android:importantForAutofill="no" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="区域 (Location)"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/etVertexLocation"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="8dp"
+                            android:hint="global 或 us-central1"
+                            android:textColorHint="@color/text_secondary"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp"
+                            android:inputType="text"
+                            android:background="@drawable/bg_input"
+                            android:paddingHorizontal="16dp"
+                            android:fontFamily="monospace"
+                            android:importantForAutofill="no" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="服务账号 JSON"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/etVertexServiceAccountJson"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:hint="粘贴服务账号 JSON 内容..."
+                            android:textColorHint="@color/text_secondary"
+                            android:textColor="@color/text_primary"
+                            android:textSize="12sp"
+                            android:inputType="textMultiLine"
+                            android:background="@drawable/bg_input"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="12dp"
+                            android:fontFamily="monospace"
+                            android:minLines="4"
+                            android:maxLines="8"
+                            android:gravity="top"
+                            android:importantForAutofill="no" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="从 GCP 控制台 → IAM → 服务账号 → 密钥 中下载 JSON"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
