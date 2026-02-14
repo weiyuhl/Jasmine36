@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
+import com.lhzkml.jasmine.core.prompt.model.BalanceInfo
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
@@ -71,4 +72,11 @@ interface ChatClient : AutoCloseable {
      * @return 模型信息列表
      */
     suspend fun listModels(): List<ModelInfo>
+
+    /**
+     * 查询账户余额
+     * 并非所有供应商都支持此功能，不支持时返回 null
+     * @return 余额信息，不支持时返回 null
+     */
+    suspend fun getBalance(): BalanceInfo? = null
 }

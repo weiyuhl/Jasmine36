@@ -44,6 +44,11 @@ class ProviderConfigActivity : AppCompatActivity() {
     private lateinit var etVertexLocation: EditText
     private lateinit var etVertexServiceAccountJson: EditText
 
+    // 余额查询
+    private lateinit var layoutBalance: LinearLayout
+    private lateinit var btnQueryBalance: MaterialButton
+    private lateinit var tvBalanceInfo: TextView
+
     private var selectedModel: String = ""
     private var cachedModels: List<ModelInfo> = emptyList()
 
@@ -120,6 +125,19 @@ class ProviderConfigActivity : AppCompatActivity() {
 
         btnFetchModels.setOnClickListener { fetchModels() }
         findViewById<MaterialButton>(R.id.btnSave).setOnClickListener { save() }
+
+        // 余额查询
+        layoutBalance = findViewById(R.id.layoutBalance)
+        btnQueryBalance = findViewById(R.id.btnQueryBalance)
+        tvBalanceInfo = findViewById(R.id.tvBalanceInfo)
+
+        // 仅 DeepSeek 和硅基流动支持余额查询
+        if (provider.id == "deepseek" || provider.id == "siliconflow") {
+            layoutBalance.visibility = View.VISIBLE
+            btnQueryBalance.setOnClickListener { queryBalance() }
+        } else {
+            layoutBalance.visibility = View.GONE
+        }
     }
 
     private fun setupVertexAI() {
@@ -239,6 +257,67 @@ class ProviderConfigActivity : AppCompatActivity() {
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun queryBalance() {
+        val apiKey = etApiKey.text.toString().trim()
+        if (apiKey.isEmpty()) {
+            Toast.makeText(this, "请先输入 API Key", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val baseUrl = etBaseUrl.text.toString().trim()
+        if (baseUrl.isEmpty()) {
+            Toast.makeText(this, "请先输入 API 地址", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        btnQueryBalance.isEnabled = false
+        btnQueryBalance.text = "查询中..."
+        tvBalanceInfo.visibility = View.VISIBLE
+        tvBalanceInfo.text = "正在查询余额..."
+
+        val client: ChatClient = when (provider.id) {
+            "deepseek" -> DeepSeekClient(apiKey = apiKey, baseUrl = baseUrl)
+            "siliconflow" -> SiliconFlowClient(apiKey = apiKey, baseUrl = baseUrl)
+            else -> {
+                btnQueryBalance.isEnabled = true
+                btnQueryBalance.text = "查询"
+                tvBalanceInfo.text = "该供应商不支持余额查询"
+                return
+            }
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val balance = client.getBalance()
+                client.close()
+                withContext(Dispatchers.Main) {
+                    btnQueryBalance.isEnabled = true
+                    btnQueryBalance.text = "查询"
+                    if (balance != null) {
+                        val sb = StringBuilder()
+                        for (detail in balance.balances) {
+                            sb.append("${detail.currency}: ${detail.totalBalance}")
+                            if (detail.grantedBalance != null && detail.toppedUpBalance != null) {
+                                sb.append("（赠送 ${detail.grantedBalance} + 充值 ${detail.toppedUpBalance}）")
+                            }
+                            sb.append("\n")
+                        }
+                        tvBalanceInfo.text = sb.toString().trimEnd()
+                    } else {
+                        tvBalanceInfo.text = "该供应商不支持余额查询"
+                    }
+                }
+            } catch (e: Exception) {
+                client.close()
+                withContext(Dispatchers.Main) {
+                    btnQueryBalance.isEnabled = true
+                    btnQueryBalance.text = "查询"
+                    tvBalanceInfo.text = "查询失败: ${e.message}"
+                }
+            }
+        }
     }
 
     private fun save() {
