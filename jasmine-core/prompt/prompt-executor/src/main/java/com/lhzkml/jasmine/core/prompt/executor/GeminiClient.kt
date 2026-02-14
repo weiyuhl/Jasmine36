@@ -274,7 +274,18 @@ open class GeminiClient(
                     .map { model ->
                         // name 格式为 "models/gemini-2.5-flash"，提取模型 ID
                         val id = model.name.removePrefix("models/")
-                        ModelInfo(id = id)
+                        ModelInfo(
+                            id = id,
+                            displayName = model.displayName.ifEmpty { null },
+                            contextLength = model.inputTokenLimit,
+                            maxOutputTokens = model.outputTokenLimit,
+                            supportsThinking = model.thinking,
+                            temperature = model.temperature,
+                            maxTemperature = model.maxTemperature,
+                            topP = model.topP,
+                            topK = model.topK,
+                            description = model.description.ifEmpty { null }
+                        )
                     }
             } catch (e: ChatClientException) {
                 throw e

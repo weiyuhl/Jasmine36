@@ -19,6 +19,8 @@ import com.lhzkml.jasmine.core.prompt.executor.GenericOpenAIClient
 import com.lhzkml.jasmine.core.prompt.executor.OpenAIClient
 import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
+import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
+import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -226,6 +228,11 @@ class ProviderConfigActivity : AppCompatActivity() {
             try {
                 val models = client.listModels()
                 client.close()
+
+                // 动态注册模型元数据到 ModelRegistry
+                val llmProvider = client.provider
+                ModelRegistry.registerFromApi(llmProvider, models)
+
                 withContext(Dispatchers.Main) {
                     cachedModels = models
                     btnFetchModels.isEnabled = true
@@ -246,17 +253,64 @@ class ProviderConfigActivity : AppCompatActivity() {
     }
 
     private fun showModelPicker() {
-        val modelIds = cachedModels.map { it.id }.toTypedArray()
+        val modelLabels = cachedModels.map { model ->
+            val sb = StringBuilder(model.id)
+            if (model.hasMetadata) {
+                val parts = mutableListOf<String>()
+                model.contextLength?.let { parts.add("输入: ${formatTokenCount(it)}") }
+                model.maxOutputTokens?.let { parts.add("输出: ${formatTokenCount(it)}") }
+                if (model.supportsThinking == true) parts.add("思考")
+                if (parts.isNotEmpty()) {
+                    sb.append("\n  ").append(parts.joinToString(" | "))
+                }
+            } else if (model.displayName != null && model.displayName != model.id) {
+                sb.append(" (${model.displayName})")
+            }
+            sb.toString()
+        }.toTypedArray()
+
+        val modelIds = cachedModels.map { it.id }
         val currentIndex = modelIds.indexOf(selectedModel).coerceAtLeast(0)
         AlertDialog.Builder(this)
             .setTitle("选择模型")
-            .setSingleChoiceItems(modelIds, currentIndex) { dialog, which ->
+            .setSingleChoiceItems(modelLabels, currentIndex) { dialog, which ->
                 selectedModel = modelIds[which]
                 etSelectedModel.setText(selectedModel)
+                // 显示选中模型的详细信息
+                val info = cachedModels[which]
+                if (info.hasMetadata) {
+                    val details = buildModelDetails(info)
+                    tvModelStatus.text = details
+                    tvModelStatus.visibility = View.VISIBLE
+                }
                 dialog.dismiss()
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun buildModelDetails(info: ModelInfo): String {
+        val parts = mutableListOf<String>()
+        info.displayName?.let { parts.add("名称: $it") }
+        info.contextLength?.let { parts.add("最大输入: ${formatTokenCount(it)} tokens") }
+        info.maxOutputTokens?.let { parts.add("最大输出: ${formatTokenCount(it)} tokens") }
+        if (info.supportsThinking == true) parts.add("支持思考推理")
+        info.temperature?.let { t ->
+            val maxT = info.maxTemperature?.let { " (最大 $it)" } ?: ""
+            parts.add("默认温度: $t$maxT")
+        }
+        info.topP?.let { parts.add("topP: $it") }
+        info.topK?.let { parts.add("topK: $it") }
+        info.description?.let { if (it.length <= 80) parts.add(it) }
+        return parts.joinToString("\n")
+    }
+
+    private fun formatTokenCount(tokens: Int): String {
+        return when {
+            tokens >= 1_000_000 -> "${tokens / 1_000_000}M"
+            tokens >= 1_000 -> "${tokens / 1_000}K"
+            else -> tokens.toString()
+        }
     }
 
     private fun queryBalance() {

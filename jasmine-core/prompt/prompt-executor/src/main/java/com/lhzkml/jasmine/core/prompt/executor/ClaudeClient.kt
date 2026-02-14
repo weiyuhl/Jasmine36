@@ -258,7 +258,10 @@ open class ClaudeClient(
                 }
 
                 val claudeResponse: com.lhzkml.jasmine.core.prompt.model.ClaudeModelListResponse = response.body()
-                claudeResponse.data.map { ModelInfo(id = it.id) }
+                claudeResponse.data.map { ModelInfo(
+                    id = it.id,
+                    displayName = it.displayName.ifEmpty { null }
+                ) }
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: Exception) {

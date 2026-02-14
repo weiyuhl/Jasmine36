@@ -68,5 +68,19 @@ data class GeminiModelInfo(
     val name: String = "",
     val displayName: String = "",
     val description: String = "",
-    val supportedGenerationMethods: List<String> = emptyList()
+    val supportedGenerationMethods: List<String> = emptyList(),
+    /** 最大输入 token 数 */
+    val inputTokenLimit: Int? = null,
+    /** 最大输出 token 数 */
+    val outputTokenLimit: Int? = null,
+    /** 是否支持思考/推理 */
+    val thinking: Boolean? = null,
+    /** 默认 temperature */
+    val temperature: Double? = null,
+    /** 最大 temperature */
+    val maxTemperature: Double? = null,
+    /** 默认 topP */
+    val topP: Double? = null,
+    /** 默认 topK */
+    val topK: Int? = null
 )
