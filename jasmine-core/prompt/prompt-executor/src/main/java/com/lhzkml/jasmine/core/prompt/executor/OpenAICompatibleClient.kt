@@ -12,7 +12,6 @@ import com.lhzkml.jasmine.core.prompt.model.ChatResponse
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ChatStreamResponse
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
-import com.lhzkml.jasmine.core.prompt.model.ModelListResponse
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -27,6 +26,13 @@ import io.ktor.utils.io.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -191,14 +197,76 @@ abstract class OpenAICompatibleClient(
                     throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                 }
 
-                val modelListResponse: ModelListResponse = response.body()
-                modelListResponse.data
+                val body = response.bodyAsText()
+                val root = json.parseToJsonElement(body).jsonObject
+                val dataArray = root["data"]?.jsonArray ?: return@executeWithRetry emptyList()
+
+                dataArray.map { element ->
+                    val obj = element.jsonObject
+                    parseModelInfoFromJson(obj)
+                }
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: Exception) {
                 throw ChatClientException(provider.name, "获取模型列表失败: ${e.message}", ErrorType.UNKNOWN, cause = e)
             }
         }
+    }
+
+    /**
+     * 从 JSON 对象解析模型信息，自动提取各供应商可能返回的元数据字段
+     * 支持的字段名（兼容不同供应商的命名风格）：
+     * - context_length / context_window / max_context_length → contextLength
+     * - max_tokens / max_output_tokens / max_completion_tokens → maxOutputTokens
+     * - display_name / name → displayName
+     * - description → description
+     * - temperature / default_temperature → temperature
+     * - max_temperature / top_temperature → maxTemperature
+     * - top_p → topP
+     * - top_k → topK
+     */
+    protected fun parseModelInfoFromJson(obj: JsonObject): ModelInfo {
+        val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: ""
+        val objectType = obj["object"]?.jsonPrimitive?.contentOrNull ?: "model"
+        val ownedBy = obj["owned_by"]?.jsonPrimitive?.contentOrNull ?: ""
+
+        // 上下文长度
+        val contextLength = (obj["context_length"] ?: obj["context_window"]
+            ?: obj["max_context_length"])?.jsonPrimitive?.intOrNull
+
+        // 最大输出 token
+        val maxOutputTokens = (obj["max_tokens"] ?: obj["max_output_tokens"]
+            ?: obj["max_completion_tokens"])?.jsonPrimitive?.intOrNull
+
+        // 显示名称
+        val displayName = (obj["display_name"] ?: obj["name"])?.jsonPrimitive?.contentOrNull
+
+        // 描述
+        val description = obj["description"]?.jsonPrimitive?.contentOrNull
+
+        // temperature
+        val temperature = (obj["temperature"] ?: obj["default_temperature"])
+            ?.jsonPrimitive?.doubleOrNull
+        val maxTemperature = (obj["max_temperature"] ?: obj["top_temperature"])
+            ?.jsonPrimitive?.doubleOrNull
+
+        // topP / topK
+        val topP = obj["top_p"]?.jsonPrimitive?.doubleOrNull
+        val topK = obj["top_k"]?.jsonPrimitive?.intOrNull
+
+        return ModelInfo(
+            id = id,
+            objectType = objectType,
+            ownedBy = ownedBy,
+            displayName = displayName,
+            contextLength = contextLength,
+            maxOutputTokens = maxOutputTokens,
+            description = description,
+            temperature = temperature,
+            maxTemperature = maxTemperature,
+            topP = topP,
+            topK = topK
+        )
     }
 
     override fun close() {

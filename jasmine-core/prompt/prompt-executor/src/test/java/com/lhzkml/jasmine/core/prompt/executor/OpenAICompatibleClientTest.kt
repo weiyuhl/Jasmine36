@@ -232,6 +232,55 @@ class OpenAICompatibleClientTest {
         client.close()
     }
 
+    @Test
+    fun `listModels extracts metadata fields`() = runTest {
+        val mockHttp = createMockClient {
+            respond(
+                content = """
+                {
+                    "object": "list",
+                    "data": [
+                        {
+                            "id": "deepseek-ai/DeepSeek-V3",
+                            "object": "model",
+                            "owned_by": "deepseek",
+                            "context_length": 65536,
+                            "max_tokens": 8192,
+                            "description": "DeepSeek V3 model"
+                        },
+                        {
+                            "id": "Qwen/Qwen2.5-72B",
+                            "object": "model",
+                            "owned_by": "qwen",
+                            "context_length": 32768
+                        }
+                    ]
+                }
+                """.trimIndent(),
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val client = createDeepSeekClient(mockHttp)
+        val models = client.listModels()
+        assertEquals(2, models.size)
+
+        val v3 = models[0]
+        assertEquals("deepseek-ai/DeepSeek-V3", v3.id)
+        assertEquals(65536, v3.contextLength)
+        assertEquals(8192, v3.maxOutputTokens)
+        assertEquals("DeepSeek V3 model", v3.description)
+        assertTrue(v3.hasMetadata)
+
+        val qwen = models[1]
+        assertEquals("Qwen/Qwen2.5-72B", qwen.id)
+        assertEquals(32768, qwen.contextLength)
+        assertNull(qwen.maxOutputTokens)
+        assertTrue(qwen.hasMetadata)
+
+        client.close()
+    }
+
     // ========== chatWithUsage() 测试 ==========
 
     @Test
