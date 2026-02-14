@@ -19,7 +19,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
+import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
+import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
 import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
@@ -317,9 +319,23 @@ class MainActivity : AppCompatActivity() {
                         usage = usage
                     )
                 }
+            } catch (e: ChatClientException) {
+                withContext(Dispatchers.Main) {
+                    val errorMsg = when (e.errorType) {
+                        ErrorType.NETWORK -> "网络错误: ${e.message}\n请检查网络连接后重试"
+                        ErrorType.AUTHENTICATION -> "认证失败: ${e.message}\n请检查 API Key 是否正确"
+                        ErrorType.RATE_LIMIT -> "请求过于频繁: ${e.message}\n请稍后再试"
+                        ErrorType.MODEL_UNAVAILABLE -> "模型不可用: ${e.message}\n请检查模型名称或稍后重试"
+                        ErrorType.INVALID_REQUEST -> "请求参数错误: ${e.message}"
+                        ErrorType.SERVER_ERROR -> "服务器错误: ${e.message}\n请稍后重试"
+                        else -> "错误: ${e.message}"
+                    }
+                    tvOutput.append("\n$errorMsg\n\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("\nError: ${e.message}\n\n")
+                    tvOutput.append("\n未知错误: ${e.message}\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             } finally {

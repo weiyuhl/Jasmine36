@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.prompt.executor
 
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
+import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
@@ -181,7 +182,8 @@ class OpenAICompatibleClientTest {
             client.chatStream(listOf(ChatMessage.user("hi")), "model").toList()
             fail("Should have thrown")
         } catch (e: ChatClientException) {
-            assertTrue(e.message!!.contains("401"))
+            assertEquals(ErrorType.AUTHENTICATION, e.errorType)
+            assertEquals(401, e.statusCode)
         }
         client.close()
     }

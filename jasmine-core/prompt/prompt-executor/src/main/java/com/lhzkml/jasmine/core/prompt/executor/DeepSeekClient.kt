@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.prompt.executor
 
 import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
+import com.lhzkml.jasmine.core.prompt.llm.RetryConfig
 import io.ktor.client.*
 
 /**
@@ -9,8 +10,9 @@ import io.ktor.client.*
 class DeepSeekClient(
     apiKey: String,
     baseUrl: String = DEFAULT_BASE_URL,
+    retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null
-) : OpenAICompatibleClient(apiKey, baseUrl, httpClient) {
+) : OpenAICompatibleClient(apiKey, baseUrl, retryConfig, httpClient) {
 
     companion object {
         const val DEFAULT_BASE_URL = "https://api.deepseek.com"
