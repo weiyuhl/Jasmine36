@@ -22,6 +22,7 @@ import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
+import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
 import com.lhzkml.jasmine.core.prompt.executor.ClaudeClient
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
 import com.lhzkml.jasmine.core.prompt.executor.GeminiClient
@@ -67,7 +68,7 @@ class MainActivity : AppCompatActivity() {
     private var currentConversationId: String? = null
     private val messageHistory = mutableListOf<ChatMessage>()
     private val drawerAdapter = DrawerConversationAdapter()
-    private val contextManager = ContextManager()
+    private var contextManager = ContextManager()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -293,6 +294,16 @@ class MainActivity : AppCompatActivity() {
         }
         chatClient = client
         currentProviderId = config.providerId
+
+        // 根据模型元数据自动配置上下文窗口
+        val llmProvider = client.provider
+        val modelMeta = ModelRegistry.find(config.model)
+        contextManager = if (modelMeta != null) {
+            ContextManager.fromModel(modelMeta)
+        } else {
+            ContextManager.forModel(config.model, llmProvider)
+        }
+
         return client
     }
 

@@ -21,6 +21,26 @@ class ContextManager(
     companion object {
         const val DEFAULT_MAX_TOKENS = 8192
         const val DEFAULT_RESERVED_TOKENS = 1024
+
+        /**
+         * 从模型元数据自动创建 ContextManager
+         * 使用模型的 contextLength 和 recommendedReservedTokens
+         */
+        fun fromModel(model: LLModel): ContextManager {
+            return ContextManager(
+                maxTokens = model.contextLength,
+                reservedTokens = model.recommendedReservedTokens
+            )
+        }
+
+        /**
+         * 根据模型 ID 和供应商自动创建 ContextManager
+         * 先从 ModelRegistry 查找元数据，找不到则使用默认值
+         */
+        fun forModel(modelId: String, provider: LLMProvider): ContextManager {
+            val model = ModelRegistry.getOrDefault(modelId, provider)
+            return fromModel(model)
+        }
     }
 
     /** 可用于消息的 token 预算 */
