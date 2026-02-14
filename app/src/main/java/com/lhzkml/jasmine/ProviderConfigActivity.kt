@@ -1,7 +1,10 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import android.widget.BaseAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -253,56 +256,72 @@ class ProviderConfigActivity : AppCompatActivity() {
     }
 
     private fun showModelPicker() {
-        val modelLabels = cachedModels.map { model ->
-            val sb = StringBuilder(model.id)
-            if (model.hasMetadata) {
-                val parts = mutableListOf<String>()
-                model.contextLength?.let { parts.add("输入: ${formatTokenCount(it)}") }
-                model.maxOutputTokens?.let { parts.add("输出: ${formatTokenCount(it)}") }
-                if (model.supportsThinking == true) parts.add("思考")
-                if (parts.isNotEmpty()) {
-                    sb.append("\n  ").append(parts.joinToString(" | "))
-                }
-            } else if (model.displayName != null && model.displayName != model.id) {
-                sb.append(" (${model.displayName})")
-            }
-            sb.toString()
-        }.toTypedArray()
+        val adapter = object : BaseAdapter() {
+            override fun getCount() = cachedModels.size
+            override fun getItem(position: Int) = cachedModels[position]
+            override fun getItemId(position: Int) = position.toLong()
 
-        val modelIds = cachedModels.map { it.id }
-        val currentIndex = modelIds.indexOf(selectedModel).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle("选择模型")
-            .setSingleChoiceItems(modelLabels, currentIndex) { dialog, which ->
-                selectedModel = modelIds[which]
-                etSelectedModel.setText(selectedModel)
-                // 显示选中模型的详细信息
-                val info = cachedModels[which]
-                if (info.hasMetadata) {
-                    val details = buildModelDetails(info)
-                    tvModelStatus.text = details
-                    tvModelStatus.visibility = View.VISIBLE
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+                val view = convertView ?: LayoutInflater.from(this@ProviderConfigActivity)
+                    .inflate(R.layout.item_model_picker, parent, false)
+                val model = cachedModels[position]
+                val tvId = view.findViewById<TextView>(R.id.tvModelId)
+                val tvMeta = view.findViewById<TextView>(R.id.tvModelMeta)
+
+                // 模型名：有 displayName 就显示 displayName + id，否则只显示 id
+                if (model.displayName != null && model.displayName != model.id) {
+                    tvId.text = "${model.displayName}  (${model.id})"
+                } else {
+                    tvId.text = model.id
                 }
+
+                // 当前选中的高亮
+                if (model.id == selectedModel) {
+                    tvId.setTextColor(resources.getColor(R.color.accent, null))
+                } else {
+                    tvId.setTextColor(resources.getColor(R.color.text_primary, null))
+                }
+
+                // 元数据
+                val meta = buildModelMetaLine(model)
+                if (meta.isNotEmpty()) {
+                    tvMeta.text = meta
+                    tvMeta.visibility = View.VISIBLE
+                } else {
+                    tvMeta.visibility = View.GONE
+                }
+
+                return view
+            }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("选择模型 (${cachedModels.size})")
+            .setAdapter(adapter) { dialog, which ->
+                selectedModel = cachedModels[which].id
+                etSelectedModel.setText(selectedModel)
+                tvModelStatus.text = "已选择: $selectedModel"
+                tvModelStatus.visibility = View.VISIBLE
                 dialog.dismiss()
             }
             .setNegativeButton("取消", null)
             .show()
     }
 
-    private fun buildModelDetails(info: ModelInfo): String {
+    /**
+     * 构建模型元数据摘要行
+     */
+    private fun buildModelMetaLine(info: ModelInfo): String {
         val parts = mutableListOf<String>()
-        info.displayName?.let { parts.add("名称: $it") }
-        info.contextLength?.let { parts.add("最大输入: ${formatTokenCount(it)} tokens") }
-        info.maxOutputTokens?.let { parts.add("最大输出: ${formatTokenCount(it)} tokens") }
-        if (info.supportsThinking == true) parts.add("支持思考推理")
+        info.contextLength?.let { parts.add("输入 ${formatTokenCount(it)}") }
+        info.maxOutputTokens?.let { parts.add("输出 ${formatTokenCount(it)}") }
+        if (info.supportsThinking == true) parts.add("✦思考")
         info.temperature?.let { t ->
-            val maxT = info.maxTemperature?.let { " (最大 $it)" } ?: ""
-            parts.add("默认温度: $t$maxT")
+            val maxT = info.maxTemperature?.let { "~$it" } ?: ""
+            parts.add("温度 $t$maxT")
         }
-        info.topP?.let { parts.add("topP: $it") }
-        info.topK?.let { parts.add("topK: $it") }
-        info.description?.let { if (it.length <= 80) parts.add(it) }
-        return parts.joinToString("\n")
+        info.topK?.let { parts.add("topK $it") }
+        return parts.joinToString("  ·  ")
     }
 
     private fun formatTokenCount(tokens: Int): String {
