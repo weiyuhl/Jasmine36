@@ -1,4 +1,4 @@
-package com.lhzkml.jasmine.core.prompt.executor
+﻿package com.lhzkml.jasmine.core.prompt.executor
 
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
@@ -12,7 +12,14 @@ import com.lhzkml.jasmine.core.prompt.model.ChatResponse
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ChatStreamResponse
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
+import com.lhzkml.jasmine.core.prompt.model.OpenAIFunctionCallDef
+import com.lhzkml.jasmine.core.prompt.model.OpenAIFunctionDef
+import com.lhzkml.jasmine.core.prompt.model.OpenAIRequestMessage
+import com.lhzkml.jasmine.core.prompt.model.OpenAIToolCallDef
+import com.lhzkml.jasmine.core.prompt.model.OpenAIToolDef
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
+import com.lhzkml.jasmine.core.prompt.model.ToolCall
+import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -38,16 +45,11 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
-/**
- * OpenAI 兼容 API 的基础客户端
- * DeepSeek、硅基流动等供应商都使用兼容 OpenAI 的接口格式
- */
 abstract class OpenAICompatibleClient(
     protected val apiKey: String,
     protected val baseUrl: String,
     protected val retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null,
-    /** Chat completions API 路径，默认 /v1/chat/completions */
     protected val chatPath: String = "/v1/chat/completions"
 ) : ChatClient {
 
@@ -67,142 +69,156 @@ abstract class OpenAICompatibleClient(
         }
     }
 
-    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): String {
-        return chatWithUsage(messages, model, maxTokens, samplingParams).content
+    private fun convertMessages(messages: List<ChatMessage>): List<OpenAIRequestMessage> {
+        return messages.map { msg ->
+            val tc = msg.toolCalls
+            when {
+                msg.role == "assistant" && !tc.isNullOrEmpty() -> OpenAIRequestMessage(
+                    role = "assistant",
+                    content = msg.content.ifEmpty { null },
+                    toolCalls = tc.map {
+                        OpenAIToolCallDef(id = it.id, function = OpenAIFunctionCallDef(name = it.name, arguments = it.arguments))
+                    }
+                )
+                msg.role == "tool" -> OpenAIRequestMessage(role = "tool", content = msg.content, toolCallId = msg.toolCallId)
+                else -> OpenAIRequestMessage(role = msg.role, content = msg.content)
+            }
+        }
     }
 
-    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): ChatResult {
+    private fun convertTools(tools: List<ToolDescriptor>): List<OpenAIToolDef>? {
+        if (tools.isEmpty()) return null
+        return tools.map {
+            OpenAIToolDef(function = OpenAIFunctionDef(name = it.name, description = it.description, parameters = it.toJsonSchema()))
+        }
+    }
+
+    override suspend fun chat(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): String {
+        return chatWithUsage(messages, model, maxTokens, samplingParams, tools).content
+    }
+
+    override suspend fun chatWithUsage(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): ChatResult {
         return executeWithRetry(retryConfig) {
             try {
                 val request = ChatRequest(
                     model = model,
-                    messages = messages,
+                    messages = convertMessages(messages),
                     temperature = samplingParams?.temperature,
                     topP = samplingParams?.topP,
-                    maxTokens = maxTokens
+                    maxTokens = maxTokens,
+                    tools = convertTools(tools)
                 )
                 val response: HttpResponse = httpClient.post("${baseUrl}${chatPath}") {
                     contentType(ContentType.Application.Json)
                     header("Authorization", "Bearer $apiKey")
                     setBody(request)
                 }
-
                 if (!response.status.isSuccess()) {
                     val body = try { response.bodyAsText() } catch (_: Exception) { null }
                     throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                 }
-
                 val chatResponse: ChatResponse = response.body()
                 val firstChoice = chatResponse.choices.firstOrNull()
-                val content = firstChoice?.message?.content
                     ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
-
-                ChatResult(content = content, usage = chatResponse.usage, finishReason = firstChoice.finishReason)
-            } catch (e: ChatClientException) {
-                throw e
-            } catch (e: UnknownHostException) {
-                throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e)
-            } catch (e: ConnectException) {
-                throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e)
-            } catch (e: SocketTimeoutException) {
-                throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e)
-            } catch (e: HttpRequestTimeoutException) {
-                throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e)
-            } catch (e: Exception) {
-                throw ChatClientException(provider.name, "请求失败: ${e.message}", ErrorType.UNKNOWN, cause = e)
-            }
+                val toolCalls = firstChoice.message.toolCalls?.map {
+                    ToolCall(id = it.id, name = it.function.name, arguments = it.function.arguments)
+                } ?: emptyList()
+                ChatResult(
+                    content = firstChoice.message.content ?: "",
+                    usage = chatResponse.usage,
+                    finishReason = firstChoice.finishReason,
+                    toolCalls = toolCalls
+                )
+            } catch (e: ChatClientException) { throw e }
+            catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
+            catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
+            catch (e: SocketTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
+            catch (e: HttpRequestTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
+            catch (e: Exception) { throw ChatClientException(provider.name, "请求失败: ${e.message}", ErrorType.UNKNOWN, cause = e) }
         }
     }
 
-    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens, samplingParams) { chunk ->
-            emit(chunk)
-        }
+    override fun chatStream(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): Flow<String> = flow {
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { emit(it) }
     }
 
     override suspend fun chatStreamWithUsage(
-        messages: List<ChatMessage>,
-        model: String,
-        maxTokens: Int?,
-        samplingParams: SamplingParams?,
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         return executeWithRetry(retryConfig) {
             try {
                 val request = ChatRequest(
                     model = model,
-                    messages = messages,
+                    messages = convertMessages(messages),
                     stream = true,
                     temperature = samplingParams?.temperature,
                     topP = samplingParams?.topP,
-                    maxTokens = maxTokens
+                    maxTokens = maxTokens,
+                    tools = convertTools(tools)
                 )
                 val statement = httpClient.preparePost("${baseUrl}${chatPath}") {
                     contentType(ContentType.Application.Json)
                     header("Authorization", "Bearer $apiKey")
                     setBody(request)
                 }
-
                 val fullContent = StringBuilder()
                 var lastUsage: Usage? = null
                 var lastFinishReason: String? = null
-
+                val toolCallAccumulator = mutableMapOf<Int, Triple<String, String, StringBuilder>>()
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
                         val body = try { response.bodyAsText() } catch (_: Exception) { null }
                         throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                     }
-
                     val channel: ByteReadChannel = response.bodyAsChannel()
-
                     while (!channel.isClosedForRead) {
-                        val line = try {
-                            channel.readUTF8Line()
-                        } catch (_: Exception) {
-                            break
-                        } ?: break
-
+                        val line = try { channel.readUTF8Line() } catch (_: Exception) { break } ?: break
                         if (line.startsWith("data: ")) {
                             val data = line.removePrefix("data: ").trim()
                             if (data == "[DONE]") return@execute
                             if (data.isNotEmpty()) {
                                 try {
                                     val chunk = json.decodeFromString<ChatStreamResponse>(data)
-                                    // 捕获 usage（通常在最后一个 chunk）
-                                    if (chunk.usage != null) {
-                                        lastUsage = chunk.usage
-                                    }
+                                    if (chunk.usage != null) lastUsage = chunk.usage
                                     val firstChoice = chunk.choices.firstOrNull()
-                                    if (firstChoice?.finishReason != null) {
-                                        lastFinishReason = firstChoice.finishReason
-                                    }
+                                    if (firstChoice?.finishReason != null) lastFinishReason = firstChoice.finishReason
                                     val content = firstChoice?.delta?.content
                                     if (!content.isNullOrEmpty()) {
                                         fullContent.append(content)
                                         onChunk(content)
                                     }
-                                } catch (_: Exception) {
-                                    // 跳过无法解析的行
-                                }
+                                    firstChoice?.delta?.toolCalls?.forEach { stc ->
+                                        val tcId = stc.id
+                                        if (tcId != null) {
+                                            toolCallAccumulator[stc.index] = Triple(tcId, stc.function?.name ?: "", StringBuilder(stc.function?.arguments ?: ""))
+                                        } else {
+                                            toolCallAccumulator[stc.index]?.let { (_, _, args) -> args.append(stc.function?.arguments ?: "") }
+                                        }
+                                    }
+                                } catch (_: Exception) { }
                             }
                         }
                     }
                 }
-
-                StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason)
-            } catch (e: ChatClientException) {
-                throw e
-            } catch (e: UnknownHostException) {
-                throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e)
-            } catch (e: ConnectException) {
-                throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e)
-            } catch (e: SocketTimeoutException) {
-                throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e)
-            } catch (e: HttpRequestTimeoutException) {
-                throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e)
-            } catch (e: Exception) {
-                throw ChatClientException(provider.name, "流式请求失败: ${e.message}", ErrorType.UNKNOWN, cause = e)
-            }
+                val toolCalls = toolCallAccumulator.entries.sortedBy { it.key }.map { (_, t) -> ToolCall(id = t.first, name = t.second, arguments = t.third.toString()) }
+                StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason, toolCalls = toolCalls)
+            } catch (e: ChatClientException) { throw e }
+            catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
+            catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
+            catch (e: SocketTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
+            catch (e: HttpRequestTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
+            catch (e: Exception) { throw ChatClientException(provider.name, "流式请求失败: ${e.message}", ErrorType.UNKNOWN, cause = e) }
         }
     }
 
@@ -212,85 +228,33 @@ abstract class OpenAICompatibleClient(
                 val response: HttpResponse = httpClient.get("${baseUrl}/v1/models") {
                     header("Authorization", "Bearer $apiKey")
                 }
-
                 if (!response.status.isSuccess()) {
                     val body = try { response.bodyAsText() } catch (_: Exception) { null }
                     throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                 }
-
                 val body = response.bodyAsText()
                 val root = json.parseToJsonElement(body).jsonObject
                 val dataArray = root["data"]?.jsonArray ?: return@executeWithRetry emptyList()
-
-                dataArray.map { element ->
-                    val obj = element.jsonObject
-                    parseModelInfoFromJson(obj)
-                }
-            } catch (e: ChatClientException) {
-                throw e
-            } catch (e: Exception) {
-                throw ChatClientException(provider.name, "获取模型列表失败: ${e.message}", ErrorType.UNKNOWN, cause = e)
-            }
+                dataArray.map { parseModelInfoFromJson(it.jsonObject) }
+            } catch (e: ChatClientException) { throw e }
+            catch (e: Exception) { throw ChatClientException(provider.name, "获取模型列表失败: ${e.message}", ErrorType.UNKNOWN, cause = e) }
         }
     }
 
-    /**
-     * 从 JSON 对象解析模型信息，自动提取各供应商可能返回的元数据字段
-     * 支持的字段名（兼容不同供应商的命名风格）：
-     * - context_length / context_window / max_context_length → contextLength
-     * - max_tokens / max_output_tokens / max_completion_tokens → maxOutputTokens
-     * - display_name / name → displayName
-     * - description → description
-     * - temperature / default_temperature → temperature
-     * - max_temperature / top_temperature → maxTemperature
-     * - top_p → topP
-     * - top_k → topK
-     */
     protected fun parseModelInfoFromJson(obj: JsonObject): ModelInfo {
         val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: ""
         val objectType = obj["object"]?.jsonPrimitive?.contentOrNull ?: "model"
         val ownedBy = obj["owned_by"]?.jsonPrimitive?.contentOrNull ?: ""
-
-        // 上下文长度
-        val contextLength = (obj["context_length"] ?: obj["context_window"]
-            ?: obj["max_context_length"])?.jsonPrimitive?.intOrNull
-
-        // 最大输出 token
-        val maxOutputTokens = (obj["max_tokens"] ?: obj["max_output_tokens"]
-            ?: obj["max_completion_tokens"])?.jsonPrimitive?.intOrNull
-
-        // 显示名称
+        val contextLength = (obj["context_length"] ?: obj["context_window"] ?: obj["max_context_length"])?.jsonPrimitive?.intOrNull
+        val maxOutputTokens = (obj["max_tokens"] ?: obj["max_output_tokens"] ?: obj["max_completion_tokens"])?.jsonPrimitive?.intOrNull
         val displayName = (obj["display_name"] ?: obj["name"])?.jsonPrimitive?.contentOrNull
-
-        // 描述
         val description = obj["description"]?.jsonPrimitive?.contentOrNull
-
-        // temperature
-        val temperature = (obj["temperature"] ?: obj["default_temperature"])
-            ?.jsonPrimitive?.doubleOrNull
-        val maxTemperature = (obj["max_temperature"] ?: obj["top_temperature"])
-            ?.jsonPrimitive?.doubleOrNull
-
-        // topP / topK
+        val temperature = (obj["temperature"] ?: obj["default_temperature"])?.jsonPrimitive?.doubleOrNull
+        val maxTemperature = (obj["max_temperature"] ?: obj["top_temperature"])?.jsonPrimitive?.doubleOrNull
         val topP = obj["top_p"]?.jsonPrimitive?.doubleOrNull
         val topK = obj["top_k"]?.jsonPrimitive?.intOrNull
-
-        return ModelInfo(
-            id = id,
-            objectType = objectType,
-            ownedBy = ownedBy,
-            displayName = displayName,
-            contextLength = contextLength,
-            maxOutputTokens = maxOutputTokens,
-            description = description,
-            temperature = temperature,
-            maxTemperature = maxTemperature,
-            topP = topP,
-            topK = topK
-        )
+        return ModelInfo(id = id, objectType = objectType, ownedBy = ownedBy, displayName = displayName, contextLength = contextLength, maxOutputTokens = maxOutputTokens, description = description, temperature = temperature, maxTemperature = maxTemperature, topP = topP, topK = topK)
     }
 
-    override fun close() {
-        httpClient.close()
-    }
+    override fun close() { httpClient.close() }
 }

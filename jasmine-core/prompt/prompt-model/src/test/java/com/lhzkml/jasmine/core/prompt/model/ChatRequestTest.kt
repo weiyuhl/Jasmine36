@@ -10,6 +10,8 @@ class ChatRequestTest {
 
     private val json = Json { encodeDefaults = true }
 
+    private fun msg(role: String, content: String) = OpenAIRequestMessage(role = role, content = content)
+
     @Test
     fun `default stream is false`() {
         val request = ChatRequest(model = "gpt-4", messages = emptyList())
@@ -20,7 +22,7 @@ class ChatRequestTest {
     fun `stream true serializes correctly`() {
         val request = ChatRequest(
             model = "deepseek-chat",
-            messages = listOf(ChatMessage.user("hi")),
+            messages = listOf(msg("user", "hi")),
             stream = true
         )
         val jsonStr = json.encodeToString(ChatRequest.serializer(), request)
@@ -49,9 +51,9 @@ class ChatRequestTest {
     @Test
     fun `messages are serialized in order`() {
         val messages = listOf(
-            ChatMessage.system("sys"),
-            ChatMessage.user("usr"),
-            ChatMessage.assistant("ast")
+            msg("system", "sys"),
+            msg("user", "usr"),
+            msg("assistant", "ast")
         )
         val request = ChatRequest(model = "m", messages = messages)
         val decoded = json.decodeFromString(

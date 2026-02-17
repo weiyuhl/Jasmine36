@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
+import com.lhzkml.jasmine.core.prompt.llm.ChatClientRouter
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
@@ -37,6 +38,8 @@ import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.conversation.storage.TimedMessage
+import com.lhzkml.jasmine.core.agent.tools.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -61,7 +64,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvDrawerEmpty: TextView
     private lateinit var rvDrawerConversations: RecyclerView
 
-    private var chatClient: ChatClient? = null
+    private val clientRouter = ChatClientRouter()
     private var currentProviderId: String? = null
 
     private lateinit var conversationRepo: ConversationRepository
@@ -69,6 +72,65 @@ class MainActivity : AppCompatActivity() {
     private val messageHistory = mutableListOf<ChatMessage>()
     private val drawerAdapter = DrawerConversationAdapter()
     private var contextManager = ContextManager()
+    private var webSearchTool: WebSearchTool? = null
+
+    /**
+     * 根据设置构建工具注册表
+     */
+    private fun buildToolRegistry(): ToolRegistry {
+        val enabledTools = ProviderManager.getEnabledTools(this)
+        fun isEnabled(name: String) = enabledTools.isEmpty() || name in enabledTools
+
+        return ToolRegistry.build {
+            // 计算器
+            if (isEnabled("calculator")) {
+                CalculatorTool.allTools().forEach { register(it) }
+            }
+
+            // 获取当前时间
+            if (isEnabled("get_current_time")) {
+                register(GetCurrentTimeTool)
+            }
+
+            // 文件工具（Android 上使用外部存储作为沙箱）
+            val basePath = getExternalFilesDir(null)?.absolutePath
+            if (isEnabled("read_file")) register(ReadFileTool(basePath))
+            if (isEnabled("write_file")) register(WriteFileTool(basePath))
+            if (isEnabled("edit_file")) register(EditFileTool(basePath))
+            if (isEnabled("list_directory")) register(ListDirectoryTool(basePath))
+            if (isEnabled("search_by_regex")) register(RegexSearchTool(basePath))
+
+            // Shell 命令（带确认对话框）
+            if (isEnabled("execute_shell_command")) {
+                register(ExecuteShellCommandTool(
+                    confirmationHandler = { command, _ ->
+                        val deferred = CompletableDeferred<Boolean>()
+                        withContext(Dispatchers.Main) {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("执行命令确认")
+                                .setMessage("AI 请求执行以下命令：\n\n$command\n\n是否允许？")
+                                .setPositiveButton("允许") { _, _ -> deferred.complete(true) }
+                                .setNegativeButton("拒绝") { _, _ -> deferred.complete(false) }
+                                .setCancelable(false)
+                                .show()
+                        }
+                        deferred.await()
+                    },
+                    basePath = basePath
+                ))
+            }
+
+            // 网络搜索
+            val brightDataKey = ProviderManager.getBrightDataKey(this@MainActivity)
+            if (brightDataKey.isNotEmpty() && (isEnabled("web_search") || isEnabled("web_scrape"))) {
+                webSearchTool?.close()
+                val wst = WebSearchTool(brightDataKey)
+                webSearchTool = wst
+                if (isEnabled("web_search")) register(wst.search)
+                if (isEnabled("web_scrape")) register(wst.scrape)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -174,7 +236,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        chatClient?.close()
+        clientRouter.close()
+        webSearchTool?.close()
     }
 
     @Suppress("DEPRECATION")
@@ -233,14 +296,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getOrCreateClient(config: ProviderManager.ActiveConfig): ChatClient {
-        if (currentProviderId == config.providerId) {
-            chatClient?.let { return it }
+        // 如果 router 中已有该供应商的客户端，直接复用
+        val existing = clientRouter.getClient(config.providerId)
+        if (existing != null && currentProviderId == config.providerId) {
+            return existing
         }
-        chatClient?.close()
+
+        // 配置变更，移除旧客户端
+        if (currentProviderId != null && currentProviderId != config.providerId) {
+            clientRouter.unregister(currentProviderId!!)
+        }
         
         val provider = ProviderManager.getProvider(config.providerId)
         
-        val client = when (config.apiType) {
+        val client: ChatClient = when (config.apiType) {
             ApiType.OPENAI -> {
                 val chatPath = config.chatPath ?: "/v1/chat/completions"
                 when (config.providerId) {
@@ -292,7 +361,8 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        chatClient = client
+
+        clientRouter.register(config.providerId, client)
         currentProviderId = config.providerId
 
         // 根据模型元数据自动配置上下文窗口
@@ -362,8 +432,44 @@ class MainActivity : AppCompatActivity() {
                 val result: String
                 var usage: Usage? = null
 
-                if (useStream) {
-                    // 流式输出：逐块显示
+                val toolsEnabled = ProviderManager.isToolsEnabled(this@MainActivity)
+
+                if (toolsEnabled) {
+                    // Agent 模式：使用 ToolExecutor 自动循环
+                    val registry = buildToolRegistry()
+                    val executor = ToolExecutor(client, registry)
+
+                    if (useStream) {
+                        withContext(Dispatchers.Main) {
+                            tvOutput.append("AI: ")
+                        }
+                        val streamResult = executor.executeStream(
+                            trimmedMessages, config.model, maxTokens, samplingParams
+                        ) { chunk ->
+                            withContext(Dispatchers.Main) {
+                                tvOutput.append(chunk)
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
+                        }
+                        result = streamResult.content
+                        usage = streamResult.usage
+                        withContext(Dispatchers.Main) {
+                            tvOutput.append(formatUsageLine(usage))
+                            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        }
+                    } else {
+                        val chatResult = executor.execute(
+                            trimmedMessages, config.model, maxTokens, samplingParams
+                        )
+                        result = chatResult.content
+                        usage = chatResult.usage
+                        withContext(Dispatchers.Main) {
+                            tvOutput.append("AI: $result${formatUsageLine(usage)}")
+                            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        }
+                    }
+                } else if (useStream) {
+                    // 普通流式输出
                     withContext(Dispatchers.Main) {
                         tvOutput.append("AI: ")
                     }
@@ -383,7 +489,7 @@ class MainActivity : AppCompatActivity() {
                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                     }
                 } else {
-                    // 非流式：一次性返回
+                    // 普通非流式
                     val chatResult = client.chatWithUsage(trimmedMessages, config.model, maxTokens, samplingParams)
                     result = chatResult.content
                     usage = chatResult.usage

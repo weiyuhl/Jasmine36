@@ -23,9 +23,31 @@ data class StreamChoice(
     val finishReason: String? = null
 )
 
-/** 流式增量内容 */
+/** 流式增量内容（支持 tool_calls） */
 @Serializable
 data class Delta(
     val role: String? = null,
-    val content: String? = null
+    val content: String? = null,
+    @SerialName("tool_calls")
+    val toolCalls: List<StreamToolCall>? = null
+)
+
+/**
+ * 流式 tool_call 增量
+ * 流式模式下 tool_calls 是分块传输的：
+ * - 第一个 chunk 包含 id、type、function.name
+ * - 后续 chunk 只包含 function.arguments 的增量
+ */
+@Serializable
+data class StreamToolCall(
+    val index: Int = 0,
+    val id: String? = null,
+    val type: String? = null,
+    val function: StreamToolCallFunction? = null
+)
+
+@Serializable
+data class StreamToolCallFunction(
+    val name: String? = null,
+    val arguments: String? = null
 )

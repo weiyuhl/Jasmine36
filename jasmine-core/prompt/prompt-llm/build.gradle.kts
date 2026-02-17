@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -23,6 +24,7 @@ android {
 dependencies {
     api(project(":jasmine-core:prompt:prompt-model"))
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

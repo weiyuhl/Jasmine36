@@ -2,6 +2,7 @@ package com.lhzkml.jasmine.core.prompt.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Gemini generateContent API 请求体
@@ -10,7 +11,8 @@ import kotlinx.serialization.Serializable
 data class GeminiRequest(
     val contents: List<GeminiContent>,
     val systemInstruction: GeminiContent? = null,
-    val generationConfig: GeminiGenerationConfig? = null
+    val generationConfig: GeminiGenerationConfig? = null,
+    val tools: List<GeminiToolDef>? = null
 )
 
 @Serializable
@@ -19,9 +21,14 @@ data class GeminiContent(
     val parts: List<GeminiPart>
 )
 
+/**
+ * Gemini Part — 支持 text、functionCall、functionResponse
+ */
 @Serializable
 data class GeminiPart(
-    val text: String
+    val text: String? = null,
+    val functionCall: GeminiFunctionCall? = null,
+    val functionResponse: GeminiFunctionResponse? = null
 )
 
 @Serializable
@@ -30,6 +37,39 @@ data class GeminiGenerationConfig(
     val topP: Double? = null,
     val topK: Int? = null,
     val maxOutputTokens: Int? = null
+)
+
+/**
+ * Gemini 工具定义
+ */
+@Serializable
+data class GeminiToolDef(
+    val functionDeclarations: List<GeminiFunctionDeclaration>
+)
+
+@Serializable
+data class GeminiFunctionDeclaration(
+    val name: String,
+    val description: String? = null,
+    val parameters: JsonObject? = null
+)
+
+/**
+ * Gemini functionCall（模型返回的工具调用）
+ */
+@Serializable
+data class GeminiFunctionCall(
+    val name: String = "",
+    val args: JsonObject? = null
+)
+
+/**
+ * Gemini functionResponse（工具结果回传）
+ */
+@Serializable
+data class GeminiFunctionResponse(
+    val name: String = "",
+    val response: JsonObject? = null
 )
 
 /**
@@ -56,7 +96,6 @@ data class GeminiUsageMetadata(
 
 /**
  * Gemini List Models API 响应
- * GET /v1beta/models?key=API_KEY
  */
 @Serializable
 data class GeminiModelListResponse(
@@ -66,23 +105,15 @@ data class GeminiModelListResponse(
 
 @Serializable
 data class GeminiModelInfo(
-    /** 格式: "models/gemini-2.5-flash" */
     val name: String = "",
     val displayName: String = "",
     val description: String = "",
     val supportedGenerationMethods: List<String> = emptyList(),
-    /** 最大输入 token 数 */
     val inputTokenLimit: Int? = null,
-    /** 最大输出 token 数 */
     val outputTokenLimit: Int? = null,
-    /** 是否支持思考/推理 */
     val thinking: Boolean? = null,
-    /** 默认 temperature */
     val temperature: Double? = null,
-    /** 最大 temperature */
     val maxTemperature: Double? = null,
-    /** 默认 topP */
     val topP: Double? = null,
-    /** 默认 topK */
     val topK: Int? = null
 )

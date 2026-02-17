@@ -2,6 +2,7 @@ package com.lhzkml.jasmine.core.prompt.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Claude Messages API 请求体
@@ -18,13 +19,38 @@ data class ClaudeRequest(
     val topP: Double? = null,
     @SerialName("top_k")
     val topK: Int? = null,
-    val stream: Boolean = false
+    val stream: Boolean = false,
+    val tools: List<ClaudeToolDef>? = null
 )
 
+/**
+ * Claude 消息（支持多内容块）
+ */
 @Serializable
 data class ClaudeMessage(
     val role: String,
-    val content: String
+    val content: @Serializable ClaudeMessageContent
+)
+
+/**
+ * Claude 消息内容：可以是纯文本字符串或内容块列表
+ * 使用 kotlinx.serialization 的多态序列化
+ */
+@Serializable(with = ClaudeMessageContentSerializer::class)
+sealed class ClaudeMessageContent {
+    data class Text(val text: String) : ClaudeMessageContent()
+    data class Blocks(val blocks: List<ClaudeContentBlock>) : ClaudeMessageContent()
+}
+
+/**
+ * Claude 工具定义
+ */
+@Serializable
+data class ClaudeToolDef(
+    val name: String,
+    val description: String? = null,
+    @SerialName("input_schema")
+    val inputSchema: JsonObject
 )
 
 /**
@@ -45,7 +71,15 @@ data class ClaudeResponse(
 @Serializable
 data class ClaudeContentBlock(
     val type: String = "text",
-    val text: String = ""
+    val text: String? = null,
+    /** tool_use 块的字段 */
+    val id: String? = null,
+    val name: String? = null,
+    val input: JsonObject? = null,
+    /** tool_result 块的字段 */
+    @SerialName("tool_use_id")
+    val toolUseId: String? = null,
+    val content: String? = null
 )
 
 @Serializable
@@ -74,6 +108,8 @@ data class ClaudeStreamEvent(
 data class ClaudeStreamDelta(
     val type: String = "",
     val text: String? = null,
+    @SerialName("partial_json")
+    val partialJson: String? = null,
     @SerialName("stop_reason")
     val stopReason: String? = null,
     val usage: ClaudeUsage? = null
@@ -87,7 +123,6 @@ data class ClaudeStreamMessage(
 
 /**
  * Claude List Models API 响应
- * GET /v1/models
  */
 @Serializable
 data class ClaudeModelListResponse(

@@ -5,6 +5,8 @@ import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
+import com.lhzkml.jasmine.core.prompt.model.ToolCall
+import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import kotlinx.coroutines.flow.Flow
 
@@ -14,8 +16,12 @@ import kotlinx.coroutines.flow.Flow
 data class StreamResult(
     val content: String,
     val usage: Usage? = null,
-    val finishReason: String? = null
-)
+    val finishReason: String? = null,
+    val toolCalls: List<ToolCall> = emptyList()
+) {
+    /** 是否包含工具调用 */
+    val hasToolCalls: Boolean get() = toolCalls.isNotEmpty()
+}
 
 /**
  * 聊天客户端接口
@@ -33,7 +39,8 @@ interface ChatClient : AutoCloseable {
         messages: List<ChatMessage>,
         model: String,
         maxTokens: Int? = null,
-        samplingParams: SamplingParams? = null
+        samplingParams: SamplingParams? = null,
+        tools: List<ToolDescriptor> = emptyList()
     ): String
 
     /**
@@ -43,7 +50,8 @@ interface ChatClient : AutoCloseable {
         messages: List<ChatMessage>,
         model: String,
         maxTokens: Int? = null,
-        samplingParams: SamplingParams? = null
+        samplingParams: SamplingParams? = null,
+        tools: List<ToolDescriptor> = emptyList()
     ): ChatResult
 
     /**
@@ -53,7 +61,8 @@ interface ChatClient : AutoCloseable {
         messages: List<ChatMessage>,
         model: String,
         maxTokens: Int? = null,
-        samplingParams: SamplingParams? = null
+        samplingParams: SamplingParams? = null,
+        tools: List<ToolDescriptor> = emptyList()
     ): Flow<String>
 
     /**
@@ -64,6 +73,7 @@ interface ChatClient : AutoCloseable {
         model: String,
         maxTokens: Int? = null,
         samplingParams: SamplingParams? = null,
+        tools: List<ToolDescriptor> = emptyList(),
         onChunk: suspend (String) -> Unit
     ): StreamResult
 

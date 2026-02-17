@@ -9,12 +9,18 @@ import com.lhzkml.jasmine.core.prompt.llm.StreamResult
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.GeminiContent
+import com.lhzkml.jasmine.core.prompt.model.GeminiFunctionCall
+import com.lhzkml.jasmine.core.prompt.model.GeminiFunctionDeclaration
+import com.lhzkml.jasmine.core.prompt.model.GeminiFunctionResponse
 import com.lhzkml.jasmine.core.prompt.model.GeminiGenerationConfig
 import com.lhzkml.jasmine.core.prompt.model.GeminiPart
 import com.lhzkml.jasmine.core.prompt.model.GeminiRequest
 import com.lhzkml.jasmine.core.prompt.model.GeminiResponse
+import com.lhzkml.jasmine.core.prompt.model.GeminiToolDef
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
+import com.lhzkml.jasmine.core.prompt.model.ToolCall
+import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -31,7 +37,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -43,15 +51,6 @@ import java.util.Base64
 /**
  * Google Vertex AI 客户端
  * 使用服务账号 JSON 进行 OAuth2 Bearer Token 认证
- *
- * 区域端点: https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/{model}:generateContent
- * 全局端点: https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/publishers/google/models/{model}:generateContent
- *
- * 认证流程:
- * 1. 从服务账号 JSON 中提取 client_email 和 private_key
- * 2. 构造 JWT（Header + Claim Set），用 RSA-SHA256 签名
- * 3. POST 到 https://oauth2.googleapis.com/token 换取 access_token
- * 4. 请求时使用 Authorization: Bearer {access_token}
  */
 class VertexAIClient(
     private val serviceAccountJson: String,
@@ -64,7 +63,6 @@ class VertexAIClient(
     companion object {
         private const val TOKEN_URL = "https://oauth2.googleapis.com/token"
         private const val SCOPE = "https://www.googleapis.com/auth/cloud-platform"
-        /** access_token 有效期（秒），Google 默认 3600 */
         private const val TOKEN_LIFETIME_SECS = 3600L
     }
 
@@ -86,19 +84,14 @@ class VertexAIClient(
         }
     }
 
-    /** 缓存的 access_token 和过期时间 */
     @Volatile private var cachedToken: String? = null
     @Volatile private var tokenExpiresAt: Long = 0L
 
-    /** 从服务账号 JSON 解析出的字段 */
     private val serviceAccount: ServiceAccountInfo by lazy {
         parseServiceAccountJson(serviceAccountJson)
     }
 
-    private data class ServiceAccountInfo(
-        val clientEmail: String,
-        val privateKeyPem: String
-    )
+    private data class ServiceAccountInfo(val clientEmail: String, val privateKeyPem: String)
 
     private fun parseServiceAccountJson(jsonStr: String): ServiceAccountInfo {
         val obj = json.decodeFromString<JsonObject>(jsonStr)
@@ -109,15 +102,11 @@ class VertexAIClient(
         return ServiceAccountInfo(clientEmail, privateKey)
     }
 
-    /**
-     * 获取有效的 access_token，如果缓存过期则重新获取
-     */
     private suspend fun getAccessToken(): String {
         val now = System.currentTimeMillis() / 1000
         cachedToken?.let { token ->
-            if (now < tokenExpiresAt - 60) return token // 提前 60 秒刷新
+            if (now < tokenExpiresAt - 60) return token
         }
-
         val signedJwt = createSignedJwt(now)
         val tokenResponse = client.submitForm(
             url = TOKEN_URL,
@@ -126,73 +115,44 @@ class VertexAIClient(
                 append("assertion", signedJwt)
             }
         )
-
         if (!tokenResponse.status.isSuccess()) {
             val body = try { tokenResponse.bodyAsText() } catch (_: Exception) { null }
-            throw ChatClientException(
-                provider.name,
-                "获取 access_token 失败: ${tokenResponse.status.value} $body",
-                ErrorType.AUTHENTICATION
-            )
+            throw ChatClientException(provider.name, "获取 access_token 失败: ${tokenResponse.status.value} $body", ErrorType.AUTHENTICATION)
         }
-
         val responseObj = json.decodeFromString<JsonObject>(tokenResponse.body<String>())
         val accessToken = responseObj["access_token"]?.jsonPrimitive?.content
             ?: throw ChatClientException(provider.name, "token 响应缺少 access_token", ErrorType.AUTHENTICATION)
-
         cachedToken = accessToken
         tokenExpiresAt = now + TOKEN_LIFETIME_SECS
         return accessToken
     }
 
-    /**
-     * 构造并签名 JWT
-     * Header: {"alg":"RS256","typ":"JWT"}
-     * Claim Set: {"iss":clientEmail, "scope":SCOPE, "aud":TOKEN_URL, "iat":now, "exp":now+3600}
-     */
     private fun createSignedJwt(nowSecs: Long): String {
         val header = """{"alg":"RS256","typ":"JWT"}"""
         val claimSet = """{"iss":"${serviceAccount.clientEmail}","scope":"$SCOPE","aud":"$TOKEN_URL","iat":$nowSecs,"exp":${nowSecs + TOKEN_LIFETIME_SECS}}"""
-
         val encoder = Base64.getUrlEncoder().withoutPadding()
         val headerB64 = encoder.encodeToString(header.toByteArray())
         val claimB64 = encoder.encodeToString(claimSet.toByteArray())
         val signingInput = "$headerB64.$claimB64"
-
-        // 解析 PEM 私钥
         val privateKeyPem = serviceAccount.privateKeyPem
             .replace("-----BEGIN PRIVATE KEY-----", "")
             .replace("-----END PRIVATE KEY-----", "")
-            .replace("\\n", "")
-            .replace("\n", "")
-            .replace("\r", "")
-            .replace(" ", "")
-
+            .replace("\\n", "").replace("\n", "").replace("\r", "").replace(" ", "")
         val keyBytes = Base64.getDecoder().decode(privateKeyPem)
         val keySpec = PKCS8EncodedKeySpec(keyBytes)
         val keyFactory = KeyFactory.getInstance("RSA")
         val privateKey = keyFactory.generatePrivate(keySpec)
-
         val signature = Signature.getInstance("SHA256withRSA")
         signature.initSign(privateKey)
         signature.update(signingInput.toByteArray())
-        val signatureBytes = signature.sign()
-        val signatureB64 = encoder.encodeToString(signatureBytes)
-
+        val signatureB64 = encoder.encodeToString(signature.sign())
         return "$signingInput.$signatureB64"
     }
 
-    /** 构建 Vertex AI 端点 URL
-     * - location = "global" → https://aiplatform.googleapis.com/v1/projects/{PROJECT}/locations/global/...
-     * - location = "us-central1" 等 → https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT}/locations/{LOCATION}/...
-     */
     private fun buildUrl(model: String, stream: Boolean): String {
         val action = if (stream) "streamGenerateContent" else "generateContent"
-        val host = if (location == "global") {
-            "https://aiplatform.googleapis.com"
-        } else {
-            "https://${location}-aiplatform.googleapis.com"
-        }
+        val host = if (location == "global") "https://aiplatform.googleapis.com"
+        else "https://${location}-aiplatform.googleapis.com"
         return "${host}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:${action}"
     }
 
@@ -200,56 +160,85 @@ class VertexAIClient(
         var systemInstruction: GeminiContent? = null
         val contents = mutableListOf<GeminiContent>()
         for (msg in messages) {
-            when (msg.role) {
-                "system" -> systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = msg.content)))
-                "user" -> contents.add(GeminiContent(role = "user", parts = listOf(GeminiPart(text = msg.content))))
-                "assistant" -> contents.add(GeminiContent(role = "model", parts = listOf(GeminiPart(text = msg.content))))
+            val msgToolCalls = msg.toolCalls
+            when {
+                msg.role == "system" -> systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = msg.content)))
+                msg.role == "assistant" && !msgToolCalls.isNullOrEmpty() -> {
+                    val parts = mutableListOf<GeminiPart>()
+                    if (msg.content.isNotEmpty()) parts.add(GeminiPart(text = msg.content))
+                    msgToolCalls.forEach { tc ->
+                        val argsJson = try {
+                            json.parseToJsonElement(tc.arguments) as? JsonObject ?: buildJsonObject {}
+                        } catch (_: Exception) { buildJsonObject {} }
+                        parts.add(GeminiPart(functionCall = GeminiFunctionCall(name = tc.name, args = argsJson)))
+                    }
+                    contents.add(GeminiContent(role = "model", parts = parts))
+                }
+                msg.role == "tool" -> {
+                    val responseJson = try {
+                        json.parseToJsonElement(msg.content) as? JsonObject
+                            ?: buildJsonObject { put("result", msg.content) }
+                    } catch (_: Exception) { buildJsonObject { put("result", msg.content) } }
+                    contents.add(GeminiContent(role = "user", parts = listOf(
+                        GeminiPart(functionResponse = GeminiFunctionResponse(name = msg.toolName ?: "", response = responseJson))
+                    )))
+                }
+                msg.role == "user" -> contents.add(GeminiContent(role = "user", parts = listOf(GeminiPart(text = msg.content))))
+                msg.role == "assistant" -> contents.add(GeminiContent(role = "model", parts = listOf(GeminiPart(text = msg.content))))
             }
         }
         return systemInstruction to contents
     }
 
-    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): String {
-        return chatWithUsage(messages, model, maxTokens, samplingParams).content
+    private fun convertTools(tools: List<ToolDescriptor>): List<GeminiToolDef>? {
+        if (tools.isEmpty()) return null
+        return listOf(GeminiToolDef(functionDeclarations = tools.map { tool ->
+            GeminiFunctionDeclaration(name = tool.name, description = tool.description, parameters = tool.toJsonSchema())
+        }))
     }
 
-    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): ChatResult {
+    override suspend fun chat(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): String = chatWithUsage(messages, model, maxTokens, samplingParams, tools).content
+
+    override suspend fun chatWithUsage(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): ChatResult {
         return com.lhzkml.jasmine.core.prompt.llm.executeWithRetry(retryConfig) {
             try {
                 val token = getAccessToken()
                 val (systemInstruction, contents) = convertMessages(messages)
                 val request = GeminiRequest(
-                    contents = contents,
-                    systemInstruction = systemInstruction,
+                    contents = contents, systemInstruction = systemInstruction,
                     generationConfig = GeminiGenerationConfig(
-                        temperature = samplingParams?.temperature,
-                        topP = samplingParams?.topP,
-                        topK = samplingParams?.topK,
-                        maxOutputTokens = maxTokens
-                    )
+                        temperature = samplingParams?.temperature, topP = samplingParams?.topP,
+                        topK = samplingParams?.topK, maxOutputTokens = maxTokens
+                    ),
+                    tools = convertTools(tools)
                 )
-
                 val response: HttpResponse = client.post(buildUrl(model, false)) {
                     contentType(ContentType.Application.Json)
                     header("Authorization", "Bearer $token")
                     setBody(request)
                 }
-
                 if (!response.status.isSuccess()) {
                     val body = try { response.bodyAsText() } catch (_: Exception) { null }
                     throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                 }
-
                 val geminiResponse: GeminiResponse = response.body()
                 val firstCandidate = geminiResponse.candidates?.firstOrNull()
-                val content = firstCandidate
-                    ?.content?.parts?.firstOrNull()?.text
-                    ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
-
+                val toolCalls = firstCandidate?.content?.parts?.mapNotNull { part ->
+                    part.functionCall?.let { fc ->
+                        ToolCall(id = "vertex_${fc.name}_${System.nanoTime()}", name = fc.name, arguments = fc.args?.toString() ?: "{}")
+                    }
+                } ?: emptyList()
+                val content = firstCandidate?.content?.parts?.mapNotNull { it.text }?.joinToString("") ?: ""
                 val usage = geminiResponse.usageMetadata?.let {
                     Usage(promptTokens = it.promptTokenCount, completionTokens = it.candidatesTokenCount, totalTokens = it.totalTokenCount)
                 }
-                ChatResult(content = content, usage = usage, finishReason = firstCandidate.finishReason)
+                ChatResult(content = content, usage = usage, finishReason = firstCandidate?.finishReason, toolCalls = toolCalls)
             } catch (e: ChatClientException) { throw e }
             catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
             catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
@@ -259,15 +248,16 @@ class VertexAIClient(
         }
     }
 
-    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens, samplingParams) { chunk -> emit(chunk) }
+    override fun chatStream(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): Flow<String> = flow {
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk -> emit(chunk) }
     }
 
     override suspend fun chatStreamWithUsage(
-        messages: List<ChatMessage>,
-        model: String,
-        maxTokens: Int?,
-        samplingParams: SamplingParams?,
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         return com.lhzkml.jasmine.core.prompt.llm.executeWithRetry(retryConfig) {
@@ -275,33 +265,29 @@ class VertexAIClient(
                 val token = getAccessToken()
                 val (systemInstruction, contents) = convertMessages(messages)
                 val request = GeminiRequest(
-                    contents = contents,
-                    systemInstruction = systemInstruction,
+                    contents = contents, systemInstruction = systemInstruction,
                     generationConfig = GeminiGenerationConfig(
-                        temperature = samplingParams?.temperature,
-                        topP = samplingParams?.topP,
-                        topK = samplingParams?.topK,
-                        maxOutputTokens = maxTokens
-                    )
+                        temperature = samplingParams?.temperature, topP = samplingParams?.topP,
+                        topK = samplingParams?.topK, maxOutputTokens = maxTokens
+                    ),
+                    tools = convertTools(tools)
                 )
-
                 val statement = client.preparePost(buildUrl(model, true)) {
                     contentType(ContentType.Application.Json)
                     header("Authorization", "Bearer $token")
                     parameter("alt", "sse")
                     setBody(request)
                 }
-
                 val fullContent = StringBuilder()
                 var lastUsage: Usage? = null
                 var lastFinishReason: String? = null
+                val toolCalls = mutableListOf<ToolCall>()
 
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
                         val body = try { response.bodyAsText() } catch (_: Exception) { null }
                         throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                     }
-
                     val channel: ByteReadChannel = response.bodyAsChannel()
                     while (!channel.isClosedForRead) {
                         val line = try { channel.readUTF8Line() } catch (_: Exception) { break } ?: break
@@ -314,20 +300,19 @@ class VertexAIClient(
                                     lastUsage = Usage(promptTokens = it.promptTokenCount, completionTokens = it.candidatesTokenCount, totalTokens = it.totalTokenCount)
                                 }
                                 val firstCandidate = chunk.candidates?.firstOrNull()
-                                if (firstCandidate?.finishReason != null) {
-                                    lastFinishReason = firstCandidate.finishReason
-                                }
-                                val text = firstCandidate?.content?.parts?.firstOrNull()?.text
-                                if (!text.isNullOrEmpty()) {
-                                    fullContent.append(text)
-                                    onChunk(text)
+                                if (firstCandidate?.finishReason != null) lastFinishReason = firstCandidate.finishReason
+                                firstCandidate?.content?.parts?.forEach { part ->
+                                    val text = part.text
+                                    if (!text.isNullOrEmpty()) { fullContent.append(text); onChunk(text) }
+                                    part.functionCall?.let { fc ->
+                                        toolCalls.add(ToolCall(id = "vertex_${fc.name}_${System.nanoTime()}", name = fc.name, arguments = fc.args?.toString() ?: "{}"))
+                                    }
                                 }
                             } catch (_: Exception) { /* skip */ }
                         }
                     }
                 }
-
-                StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason)
+                StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason, toolCalls = toolCalls)
             } catch (e: ChatClientException) { throw e }
             catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
             catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }

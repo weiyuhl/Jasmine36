@@ -291,6 +291,34 @@ object ProviderManager {
         prefs(ctx).edit().putInt("sampling_top_k", value).apply()
     }
 
+    // ========== 工具设置 ==========
+
+    /** 是否启用工具调用（Agent 模式） */
+    fun isToolsEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("tools_enabled", false)
+
+    fun setToolsEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("tools_enabled", enabled).apply()
+    }
+
+    /** 获取已启用的工具集合，空集合表示全部启用 */
+    fun getEnabledTools(ctx: Context): Set<String> {
+        val raw = prefs(ctx).getString("enabled_tools", null) ?: return emptySet()
+        return raw.split(",").filter { it.isNotBlank() }.toSet()
+    }
+
+    fun setEnabledTools(ctx: Context, tools: Set<String>) {
+        prefs(ctx).edit().putString("enabled_tools", tools.joinToString(",")).apply()
+    }
+
+    /** BrightData API Key（用于网络搜索工具） */
+    fun getBrightDataKey(ctx: Context): String =
+        prefs(ctx).getString("brightdata_api_key", null) ?: ""
+
+    fun setBrightDataKey(ctx: Context, key: String) {
+        prefs(ctx).edit().putString("brightdata_api_key", key).apply()
+    }
+
     /** 获取当前启用的完整配置 */
     data class ActiveConfig(
         val providerId: String,

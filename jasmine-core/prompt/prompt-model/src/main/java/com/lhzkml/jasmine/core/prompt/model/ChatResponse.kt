@@ -17,9 +17,20 @@ data class ChatResponse(
 @Serializable
 data class Choice(
     val index: Int = 0,
-    val message: ChatMessage,
+    val message: ResponseMessage,
     @SerialName("finish_reason")
     val finishReason: String? = null
+)
+
+/**
+ * 响应消息（支持 tool_calls）
+ */
+@Serializable
+data class ResponseMessage(
+    val role: String? = null,
+    val content: String? = null,
+    @SerialName("tool_calls")
+    val toolCalls: List<OpenAIToolCallDef>? = null
 )
 
 /** Token 用量统计 */

@@ -10,12 +10,18 @@ import com.lhzkml.jasmine.core.prompt.llm.executeWithRetry
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.GeminiContent
+import com.lhzkml.jasmine.core.prompt.model.GeminiFunctionCall
+import com.lhzkml.jasmine.core.prompt.model.GeminiFunctionDeclaration
+import com.lhzkml.jasmine.core.prompt.model.GeminiFunctionResponse
 import com.lhzkml.jasmine.core.prompt.model.GeminiGenerationConfig
 import com.lhzkml.jasmine.core.prompt.model.GeminiPart
 import com.lhzkml.jasmine.core.prompt.model.GeminiRequest
 import com.lhzkml.jasmine.core.prompt.model.GeminiResponse
+import com.lhzkml.jasmine.core.prompt.model.GeminiToolDef
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
+import com.lhzkml.jasmine.core.prompt.model.ToolCall
+import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -30,24 +36,22 @@ import io.ktor.utils.io.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
 /**
  * Google Gemini 客户端
- * 使用 Gemini 原生 generateContent API
+ * 使用 Gemini 原生 generateContent API，支持 Tool Calling
  */
 open class GeminiClient(
     protected val apiKey: String,
     protected val baseUrl: String = DEFAULT_BASE_URL,
     protected val retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null,
-    /**
-     * generateContent 路径模板，{model} 会被替换为实际模型名
-     * AI Studio: /v1beta/models/{model}:generateContent
-     * Vertex AI Express: /v1/publishers/google/models/{model}:generateContent
-     */
     protected val generatePath: String = DEFAULT_GENERATE_PATH,
     protected val streamPath: String = DEFAULT_STREAM_PATH
 ) : ChatClient {
@@ -76,25 +80,58 @@ open class GeminiClient(
         }
     }
 
+    // ========== 消息转换 ==========
+
     /**
      * 将通用 ChatMessage 转换为 Gemini 格式
-     * Gemini 使用 "user"/"model" 角色，system 消息作为 systemInstruction
+     * 支持 functionCall（assistant 带 tool_calls）和 functionResponse（tool 结果）
      */
     private fun convertMessages(messages: List<ChatMessage>): Pair<GeminiContent?, List<GeminiContent>> {
         var systemInstruction: GeminiContent? = null
         val contents = mutableListOf<GeminiContent>()
 
         for (msg in messages) {
-            when (msg.role) {
-                "system" -> {
-                    systemInstruction = GeminiContent(
-                        parts = listOf(GeminiPart(text = msg.content))
-                    )
+            val msgToolCalls = msg.toolCalls
+            when {
+                msg.role == "system" -> {
+                    systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = msg.content)))
                 }
-                "user" -> contents.add(
+                // assistant 消息带 tool_calls → model 角色 + functionCall parts
+                msg.role == "assistant" && !msgToolCalls.isNullOrEmpty() -> {
+                    val parts = mutableListOf<GeminiPart>()
+                    if (msg.content.isNotEmpty()) {
+                        parts.add(GeminiPart(text = msg.content))
+                    }
+                    msgToolCalls.forEach { tc ->
+                        val argsJson = try {
+                            json.parseToJsonElement(tc.arguments) as? JsonObject ?: buildJsonObject {}
+                        } catch (_: Exception) {
+                            buildJsonObject {}
+                        }
+                        parts.add(GeminiPart(functionCall = GeminiFunctionCall(name = tc.name, args = argsJson)))
+                    }
+                    contents.add(GeminiContent(role = "model", parts = parts))
+                }
+                // tool 结果消息 → user 角色 + functionResponse part
+                msg.role == "tool" -> {
+                    val responseJson = try {
+                        json.parseToJsonElement(msg.content) as? JsonObject
+                            ?: buildJsonObject { put("result", msg.content) }
+                    } catch (_: Exception) {
+                        buildJsonObject { put("result", msg.content) }
+                    }
+                    contents.add(GeminiContent(
+                        role = "user",
+                        parts = listOf(GeminiPart(functionResponse = GeminiFunctionResponse(
+                            name = msg.toolName ?: "",
+                            response = responseJson
+                        )))
+                    ))
+                }
+                msg.role == "user" -> contents.add(
                     GeminiContent(role = "user", parts = listOf(GeminiPart(text = msg.content)))
                 )
-                "assistant" -> contents.add(
+                msg.role == "assistant" -> contents.add(
                     GeminiContent(role = "model", parts = listOf(GeminiPart(text = msg.content)))
                 )
             }
@@ -102,11 +139,51 @@ open class GeminiClient(
         return systemInstruction to contents
     }
 
-    override suspend fun chat(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): String {
-        return chatWithUsage(messages, model, maxTokens, samplingParams).content
+    /**
+     * 将 ToolDescriptor 转换为 Gemini tools 格式
+     */
+    private fun convertTools(tools: List<ToolDescriptor>): List<GeminiToolDef>? {
+        if (tools.isEmpty()) return null
+        return listOf(GeminiToolDef(
+            functionDeclarations = tools.map { tool ->
+                GeminiFunctionDeclaration(
+                    name = tool.name,
+                    description = tool.description,
+                    parameters = tool.toJsonSchema()
+                )
+            }
+        ))
     }
 
-    override suspend fun chatWithUsage(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): ChatResult {
+    /**
+     * 从 GeminiResponse 中提取 ToolCall 列表
+     */
+    private fun extractToolCalls(response: GeminiResponse): List<ToolCall> {
+        val parts = response.candidates?.firstOrNull()?.content?.parts ?: return emptyList()
+        return parts.mapNotNull { part ->
+            part.functionCall?.let { fc ->
+                ToolCall(
+                    id = "gemini_${fc.name}_${System.nanoTime()}",
+                    name = fc.name,
+                    arguments = fc.args?.toString() ?: "{}"
+                )
+            }
+        }
+    }
+
+    // ========== ChatClient 实现 ==========
+
+    override suspend fun chat(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): String {
+        return chatWithUsage(messages, model, maxTokens, samplingParams, tools).content
+    }
+
+    override suspend fun chatWithUsage(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): ChatResult {
         return executeWithRetry(retryConfig) {
             try {
                 val (systemInstruction, contents) = convertMessages(messages)
@@ -118,7 +195,8 @@ open class GeminiClient(
                         topP = samplingParams?.topP,
                         topK = samplingParams?.topK,
                         maxOutputTokens = maxTokens
-                    )
+                    ),
+                    tools = convertTools(tools)
                 )
 
                 val response: HttpResponse = httpClient.post(
@@ -136,9 +214,14 @@ open class GeminiClient(
 
                 val geminiResponse: GeminiResponse = response.body()
                 val firstCandidate = geminiResponse.candidates?.firstOrNull()
-                val content = firstCandidate
-                    ?.content?.parts?.firstOrNull()?.text
-                    ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
+
+                // 提取 tool calls
+                val toolCalls = extractToolCalls(geminiResponse)
+
+                // 提取文本内容
+                val content = firstCandidate?.content?.parts
+                    ?.mapNotNull { it.text }
+                    ?.joinToString("") ?: ""
 
                 val usage = geminiResponse.usageMetadata?.let {
                     Usage(
@@ -148,7 +231,12 @@ open class GeminiClient(
                     )
                 }
 
-                ChatResult(content = content, usage = usage, finishReason = firstCandidate.finishReason)
+                ChatResult(
+                    content = content,
+                    usage = usage,
+                    finishReason = firstCandidate?.finishReason,
+                    toolCalls = toolCalls
+                )
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {
@@ -165,17 +253,18 @@ open class GeminiClient(
         }
     }
 
-    override fun chatStream(messages: List<ChatMessage>, model: String, maxTokens: Int?, samplingParams: SamplingParams?): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens, samplingParams) { chunk ->
+    override fun chatStream(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+    ): Flow<String> = flow {
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
             emit(chunk)
         }
     }
 
     override suspend fun chatStreamWithUsage(
-        messages: List<ChatMessage>,
-        model: String,
-        maxTokens: Int?,
-        samplingParams: SamplingParams?,
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         return executeWithRetry(retryConfig) {
@@ -189,7 +278,8 @@ open class GeminiClient(
                         topP = samplingParams?.topP,
                         topK = samplingParams?.topK,
                         maxOutputTokens = maxTokens
-                    )
+                    ),
+                    tools = convertTools(tools)
                 )
 
                 val statement = httpClient.preparePost(
@@ -204,6 +294,7 @@ open class GeminiClient(
                 val fullContent = StringBuilder()
                 var lastUsage: Usage? = null
                 var lastFinishReason: String? = null
+                val toolCalls = mutableListOf<ToolCall>()
 
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
@@ -226,7 +317,6 @@ open class GeminiClient(
 
                             try {
                                 val chunk = json.decodeFromString<GeminiResponse>(data)
-                                // 提取 usage
                                 chunk.usageMetadata?.let {
                                     lastUsage = Usage(
                                         promptTokens = it.promptTokenCount,
@@ -239,11 +329,20 @@ open class GeminiClient(
                                     lastFinishReason = firstCandidate.finishReason
                                 }
                                 // 提取文本
-                                val text = firstCandidate
-                                    ?.content?.parts?.firstOrNull()?.text
-                                if (!text.isNullOrEmpty()) {
-                                    fullContent.append(text)
-                                    onChunk(text)
+                                firstCandidate?.content?.parts?.forEach { part ->
+                                    val text = part.text
+                                    if (!text.isNullOrEmpty()) {
+                                        fullContent.append(text)
+                                        onChunk(text)
+                                    }
+                                    // 提取 functionCall
+                                    part.functionCall?.let { fc ->
+                                        toolCalls.add(ToolCall(
+                                            id = "gemini_${fc.name}_${System.nanoTime()}",
+                                            name = fc.name,
+                                            arguments = fc.args?.toString() ?: "{}"
+                                        ))
+                                    }
                                 }
                             } catch (_: Exception) {
                                 // 跳过无法解析的行
@@ -252,7 +351,12 @@ open class GeminiClient(
                     }
                 }
 
-                StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason)
+                StreamResult(
+                    content = fullContent.toString(),
+                    usage = lastUsage,
+                    finishReason = lastFinishReason,
+                    toolCalls = toolCalls
+                )
             } catch (e: ChatClientException) {
                 throw e
             } catch (e: UnknownHostException) {
@@ -286,7 +390,6 @@ open class GeminiClient(
                 geminiResponse.models
                     .filter { it.supportedGenerationMethods.contains("generateContent") }
                     .map { model ->
-                        // name 格式为 "models/gemini-2.5-flash"，提取模型 ID
                         val id = model.name.removePrefix("models/")
                         ModelInfo(
                             id = id,
