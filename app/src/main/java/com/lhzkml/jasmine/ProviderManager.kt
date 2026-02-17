@@ -319,6 +319,69 @@ object ProviderManager {
         prefs(ctx).edit().putString("brightdata_api_key", key).apply()
     }
 
+    // ========== 智能上下文压缩设置 ==========
+
+    /** 是否启用智能上下文压缩 */
+    fun isCompressionEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("compression_enabled", false)
+
+    fun setCompressionEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("compression_enabled", enabled).apply()
+    }
+
+    /**
+     * 压缩策略类型
+     * - TOKEN_BUDGET: 基于 token 预算自动触发（推荐）
+     * - WHOLE_HISTORY: 整个历史生成 TLDR
+     * - LAST_N: 只保留最后 N 条消息生成 TLDR
+     * - CHUNKED: 按固定大小分块压缩
+     */
+    enum class CompressionStrategy {
+        TOKEN_BUDGET, WHOLE_HISTORY, LAST_N, CHUNKED
+    }
+
+    /** 获取压缩策略，默认 TOKEN_BUDGET */
+    fun getCompressionStrategy(ctx: Context): CompressionStrategy {
+        val name = prefs(ctx).getString("compression_strategy", null) ?: return CompressionStrategy.TOKEN_BUDGET
+        return try { CompressionStrategy.valueOf(name) } catch (_: Exception) { CompressionStrategy.TOKEN_BUDGET }
+    }
+
+    fun setCompressionStrategy(ctx: Context, strategy: CompressionStrategy) {
+        prefs(ctx).edit().putString("compression_strategy", strategy.name).apply()
+    }
+
+    /** TokenBudget 的最大 token 数，默认 0 表示跟随模型上下文窗口 */
+    fun getCompressionMaxTokens(ctx: Context): Int =
+        prefs(ctx).getInt("compression_max_tokens", 0)
+
+    fun setCompressionMaxTokens(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt("compression_max_tokens", value).apply()
+    }
+
+    /** TokenBudget 触发阈值（百分比 1~99），默认 75 */
+    fun getCompressionThreshold(ctx: Context): Int =
+        prefs(ctx).getInt("compression_threshold", 75)
+
+    fun setCompressionThreshold(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt("compression_threshold", value).apply()
+    }
+
+    /** FromLastNMessages 的 N 值，默认 10 */
+    fun getCompressionLastN(ctx: Context): Int =
+        prefs(ctx).getInt("compression_last_n", 10)
+
+    fun setCompressionLastN(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt("compression_last_n", value).apply()
+    }
+
+    /** Chunked 的块大小，默认 20 */
+    fun getCompressionChunkSize(ctx: Context): Int =
+        prefs(ctx).getInt("compression_chunk_size", 20)
+
+    fun setCompressionChunkSize(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt("compression_chunk_size", value).apply()
+    }
+
     /** 获取当前启用的完整配置 */
     data class ActiveConfig(
         val providerId: String,

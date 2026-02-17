@@ -22,8 +22,11 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvActiveProvider: TextView
     private lateinit var switchStream: SwitchCompat
     private lateinit var switchTools: SwitchCompat
+    private lateinit var switchCompression: SwitchCompat
     private lateinit var layoutToolConfig: LinearLayout
+    private lateinit var layoutCompressionConfig: LinearLayout
     private lateinit var tvToolCount: TextView
+    private lateinit var tvCompressionInfo: TextView
     private lateinit var tvMaxTokens: TextView
     private lateinit var tvSystemPrompt: TextView
     private lateinit var tvPromptTokens: TextView
@@ -82,6 +85,22 @@ class SettingsActivity : AppCompatActivity() {
             showToolConfigDialog()
         }
 
+        // 智能上下文压缩开关
+        switchCompression = findViewById(R.id.switchCompression)
+        layoutCompressionConfig = findViewById(R.id.layoutCompressionConfig)
+        tvCompressionInfo = findViewById(R.id.tvCompressionInfo)
+
+        switchCompression.isChecked = ProviderManager.isCompressionEnabled(this)
+        layoutCompressionConfig.visibility = if (switchCompression.isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        switchCompression.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setCompressionEnabled(this, isChecked)
+            layoutCompressionConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
+        layoutCompressionConfig.setOnClickListener {
+            showCompressionConfigDialog()
+        }
+
         // 系统提示词编辑
         findViewById<LinearLayout>(R.id.layoutSystemPrompt).setOnClickListener {
             showSystemPromptDialog()
@@ -111,6 +130,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshUsageStats()
         refreshTopKVisibility()
         refreshToolCount()
+        refreshCompressionInfo()
     }
 
     private fun refreshTopKVisibility() {
@@ -358,6 +378,140 @@ class SettingsActivity : AppCompatActivity() {
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun refreshCompressionInfo() {
+        val strategy = ProviderManager.getCompressionStrategy(this)
+        val info = when (strategy) {
+            ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
+                val maxTokens = ProviderManager.getCompressionMaxTokens(this)
+                val threshold = ProviderManager.getCompressionThreshold(this)
+                val tokenStr = if (maxTokens > 0) "${maxTokens}" else "跟随模型"
+                "Token 预算 · $tokenStr · 阈值 ${threshold}%"
+            }
+            ProviderManager.CompressionStrategy.WHOLE_HISTORY -> "整体压缩"
+            ProviderManager.CompressionStrategy.LAST_N -> {
+                val n = ProviderManager.getCompressionLastN(this)
+                "保留最后 ${n} 条"
+            }
+            ProviderManager.CompressionStrategy.CHUNKED -> {
+                val size = ProviderManager.getCompressionChunkSize(this)
+                "分块压缩 · 每块 ${size} 条"
+            }
+        }
+        tvCompressionInfo.text = info
+    }
+
+    private fun showCompressionConfigDialog() {
+        val strategies = ProviderManager.CompressionStrategy.entries.toTypedArray()
+        val names = arrayOf(
+            "Token 预算（推荐）— 超过阈值自动压缩",
+            "整体压缩 — 整个历史生成摘要",
+            "保留最后 N 条 — 只压缩最近消息",
+            "分块压缩 — 按固定大小分块"
+        )
+        val current = ProviderManager.getCompressionStrategy(this)
+        val checkedIndex = strategies.indexOf(current)
+
+        AlertDialog.Builder(this)
+            .setTitle("选择压缩策略")
+            .setSingleChoiceItems(names, checkedIndex) { dialog, which ->
+                val selected = strategies[which]
+                ProviderManager.setCompressionStrategy(this, selected)
+                dialog.dismiss()
+                // 选完策略后弹出参数配置
+                showStrategyParamsDialog(selected)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showStrategyParamsDialog(strategy: ProviderManager.CompressionStrategy) {
+        when (strategy) {
+            ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
+                val layout = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(48, 32, 48, 16)
+                }
+
+                val etMaxTokens = EditText(this).apply {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                    hint = "0 表示跟随模型上下文窗口"
+                    val current = ProviderManager.getCompressionMaxTokens(this@SettingsActivity)
+                    if (current > 0) setText(current.toString())
+                }
+                layout.addView(TextView(this).apply {
+                    text = "最大 Token 数"
+                    textSize = 14f
+                })
+                layout.addView(etMaxTokens)
+
+                val etThreshold = EditText(this).apply {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                    hint = "1~99，默认 75"
+                    setText(ProviderManager.getCompressionThreshold(this@SettingsActivity).toString())
+                }
+                layout.addView(TextView(this).apply {
+                    text = "\n触发阈值（%）"
+                    textSize = 14f
+                })
+                layout.addView(etThreshold)
+
+                AlertDialog.Builder(this)
+                    .setTitle("Token 预算参数")
+                    .setView(layout)
+                    .setPositiveButton("保存") { _, _ ->
+                        val maxTokens = etMaxTokens.text.toString().trim().toIntOrNull() ?: 0
+                        val threshold = (etThreshold.text.toString().trim().toIntOrNull() ?: 75).coerceIn(1, 99)
+                        ProviderManager.setCompressionMaxTokens(this, maxTokens)
+                        ProviderManager.setCompressionThreshold(this, threshold)
+                        refreshCompressionInfo()
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+            ProviderManager.CompressionStrategy.LAST_N -> {
+                val editText = EditText(this).apply {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                    hint = "保留的消息数，默认 10"
+                    setText(ProviderManager.getCompressionLastN(this@SettingsActivity).toString())
+                    setPadding(48, 32, 48, 32)
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("保留最后 N 条消息")
+                    .setMessage("压缩时只保留最近的 N 条消息用于生成摘要")
+                    .setView(editText)
+                    .setPositiveButton("保存") { _, _ ->
+                        val n = (editText.text.toString().trim().toIntOrNull() ?: 10).coerceAtLeast(2)
+                        ProviderManager.setCompressionLastN(this, n)
+                        refreshCompressionInfo()
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+            ProviderManager.CompressionStrategy.CHUNKED -> {
+                val editText = EditText(this).apply {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                    hint = "每块消息数，默认 20"
+                    setText(ProviderManager.getCompressionChunkSize(this@SettingsActivity).toString())
+                    setPadding(48, 32, 48, 32)
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("分块大小")
+                    .setMessage("将历史按固定大小分块，每块独立生成摘要")
+                    .setView(editText)
+                    .setPositiveButton("保存") { _, _ ->
+                        val size = (editText.text.toString().trim().toIntOrNull() ?: 20).coerceAtLeast(5)
+                        ProviderManager.setCompressionChunkSize(this, size)
+                        refreshCompressionInfo()
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+            ProviderManager.CompressionStrategy.WHOLE_HISTORY -> {
+                refreshCompressionInfo()
+            }
+        }
     }
 
     private fun formatNumber(n: Int): String {

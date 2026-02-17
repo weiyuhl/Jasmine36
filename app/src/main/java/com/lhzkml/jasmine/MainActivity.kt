@@ -23,7 +23,11 @@ import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientRouter
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
+import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
+import com.lhzkml.jasmine.core.prompt.llm.LLMSession
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
+import com.lhzkml.jasmine.core.prompt.llm.TokenEstimator
+import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
 import com.lhzkml.jasmine.core.prompt.executor.ClaudeClient
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
 import com.lhzkml.jasmine.core.prompt.executor.GeminiClient
@@ -34,6 +38,7 @@ import com.lhzkml.jasmine.core.prompt.executor.OpenAIClient
 import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
 import com.lhzkml.jasmine.core.prompt.executor.VertexAIClient
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.Prompt
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
@@ -512,6 +517,11 @@ class MainActivity : AppCompatActivity() {
                         usage = usage
                     )
                 }
+
+                // 智能上下文压缩
+                if (ProviderManager.isCompressionEnabled(this@MainActivity)) {
+                    tryCompressHistory(client, config.model)
+                }
             } catch (e: ChatClientException) {
                 withContext(Dispatchers.Main) {
                     val errorMsg = when (e.errorType) {
@@ -533,6 +543,80 @@ class MainActivity : AppCompatActivity() {
                 }
             } finally {
                 withContext(Dispatchers.Main) { btnSend.isEnabled = true }
+            }
+        }
+    }
+
+    /**
+     * 尝试执行智能上下文压缩
+     * 根据用户选择的策略，在消息历史过长时自动压缩
+     */
+    private suspend fun tryCompressHistory(client: ChatClient, model: String) {
+        val strategy = buildCompressionStrategy() ?: return
+
+        // TokenBudget 策略需要先检查是否需要压缩
+        if (strategy is HistoryCompressionStrategy.TokenBudget) {
+            if (!strategy.shouldCompress(messageHistory)) return
+        }
+
+        // 创建临时 LLMSession 执行压缩
+        val prompt = Prompt.build("compression") {
+            for (msg in messageHistory) {
+                when (msg.role) {
+                    "system" -> system(msg.content)
+                    "user" -> user(msg.content)
+                    "assistant" -> assistant(msg.content)
+                }
+            }
+        }
+
+        val session = LLMSession(client, model, prompt)
+        try {
+            session.replaceHistoryWithTLDR(strategy)
+
+            // 用压缩后的消息替换内存中的历史
+            val compressed = session.prompt.messages
+            messageHistory.clear()
+            messageHistory.addAll(compressed)
+
+            withContext(Dispatchers.Main) {
+                tvOutput.append("[上下文已压缩: ${compressed.size} 条消息]\n\n")
+                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+            }
+        } catch (e: Exception) {
+            // 压缩失败不影响正常对话
+            withContext(Dispatchers.Main) {
+                tvOutput.append("[压缩失败: ${e.message}]\n\n")
+            }
+        } finally {
+            session.close()
+        }
+    }
+
+    /**
+     * 根据设置构建压缩策略
+     */
+    private fun buildCompressionStrategy(): HistoryCompressionStrategy? {
+        return when (ProviderManager.getCompressionStrategy(this)) {
+            ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
+                val maxTokens = ProviderManager.getCompressionMaxTokens(this)
+                val effectiveMaxTokens = if (maxTokens > 0) maxTokens else contextManager.maxTokens
+                val threshold = ProviderManager.getCompressionThreshold(this) / 100.0
+                HistoryCompressionStrategy.TokenBudget(
+                    maxTokens = effectiveMaxTokens,
+                    threshold = threshold,
+                    tokenizer = TokenEstimator
+                )
+            }
+            ProviderManager.CompressionStrategy.WHOLE_HISTORY ->
+                HistoryCompressionStrategy.WholeHistory
+            ProviderManager.CompressionStrategy.LAST_N -> {
+                val n = ProviderManager.getCompressionLastN(this)
+                HistoryCompressionStrategy.FromLastNMessages(n)
+            }
+            ProviderManager.CompressionStrategy.CHUNKED -> {
+                val size = ProviderManager.getCompressionChunkSize(this)
+                HistoryCompressionStrategy.Chunked(size)
             }
         }
     }
