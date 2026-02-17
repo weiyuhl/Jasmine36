@@ -10,7 +10,6 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -70,7 +69,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mainContent: LinearLayout
     private lateinit var etInput: EditText
     private lateinit var btnSend: MaterialButton
-    private lateinit var progressSend: ProgressBar
     private lateinit var tvOutput: TextView
     private lateinit var scrollView: ScrollView
     private lateinit var tvDrawerEmpty: TextView
@@ -164,7 +162,6 @@ class MainActivity : AppCompatActivity() {
         mainContent = findViewById(R.id.mainContent)
         etInput = findViewById(R.id.etInput)
         btnSend = findViewById(R.id.btnSend)
-        progressSend = findViewById(R.id.progressSend)
         tvOutput = findViewById(R.id.tvOutput)
         scrollView = findViewById(R.id.scrollView)
         tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
@@ -405,14 +402,12 @@ class MainActivity : AppCompatActivity() {
                 btnSend.text = "↑"
                 btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.accent))
                 btnSend.isEnabled = true
-                progressSend.visibility = View.GONE
             }
             ButtonState.GENERATING, ButtonState.COMPRESSING -> {
                 isGenerating = true
                 btnSend.text = "■"
                 btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.generating_green))
                 btnSend.isEnabled = true
-                progressSend.visibility = View.VISIBLE
             }
         }
     }
