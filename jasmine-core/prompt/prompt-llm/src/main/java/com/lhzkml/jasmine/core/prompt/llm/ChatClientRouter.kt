@@ -180,11 +180,12 @@ class ChatClientRouter(
         maxTokens: Int? = null,
         samplingParams: SamplingParams? = null,
         tools: List<ToolDescriptor> = emptyList(),
-        onChunk: suspend (String) -> Unit
+        onChunk: suspend (String) -> Unit,
+        onThinking: suspend (String) -> Unit = {}
     ): StreamResult {
         val resolved = resolve(providerId)
-        return resolved.client.chatStreamWithUsage(
-            messages, resolved.modelOverride ?: model, maxTokens, samplingParams, tools, onChunk
+        return resolved.client.chatStreamWithUsageAndThinking(
+            messages, resolved.modelOverride ?: model, maxTokens, samplingParams, tools, onChunk, onThinking
         )
     }
 

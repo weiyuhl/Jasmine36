@@ -277,7 +277,7 @@ class LLMSessionTest {
         val session = LLMSession(client, "gpt-4", prompt("test") { user("Hi") })
 
         val chunks = mutableListOf<String>()
-        val result = session.requestLLMStream { chunks.add(it) }
+        val result = session.requestLLMStream(onChunk = { chunks.add(it) })
 
         assertEquals("Streamed response", result.content)
         assertEquals(1, chunks.size)

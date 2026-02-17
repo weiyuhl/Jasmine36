@@ -109,17 +109,21 @@ class ToolExecutor(
         var totalUsage = Usage(0, 0, 0)
         var iterations = 0
 
+        // 构建 onThinking 回调，实时转发给 eventListener
+        val onThinking: suspend (String) -> Unit = if (eventListener != null) {
+            { text -> eventListener.onThinking(text) }
+        } else {
+            {}
+        }
+
         while (iterations < maxIterations) {
             iterations++
 
             // 自动压缩检查
             compressionStrategy?.let { session.compressIfNeeded(it) }
 
-            val result = session.requestLLMStream(onChunk)
+            val result = session.requestLLMStream(onChunk, onThinking)
             totalUsage = totalUsage.add(result.usage)
-
-            // 通知思考内容
-            result.thinking?.let { eventListener?.onThinking(it) }
 
             if (!result.hasToolCalls) return result.copy(usage = totalUsage)
 

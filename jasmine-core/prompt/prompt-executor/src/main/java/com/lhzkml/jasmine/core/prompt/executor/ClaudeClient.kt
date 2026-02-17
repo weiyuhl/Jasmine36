@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.prompt.executor
 
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
+import com.lhzkml.jasmine.core.prompt.llm.ThinkingChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
@@ -52,7 +53,7 @@ open class ClaudeClient(
     protected val baseUrl: String = DEFAULT_BASE_URL,
     protected val retryConfig: RetryConfig = RetryConfig.DEFAULT,
     httpClient: HttpClient? = null
-) : ChatClient {
+) : ThinkingChatClient {
 
     companion object {
         const val DEFAULT_BASE_URL = "https://api.anthropic.com"
@@ -249,6 +250,13 @@ open class ClaudeClient(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
         onChunk: suspend (String) -> Unit
+    ): StreamResult = chatStreamWithThinking(messages, model, maxTokens, samplingParams, tools, onChunk, {})
+
+    override suspend fun chatStreamWithThinking(
+        messages: List<ChatMessage>, model: String, maxTokens: Int?,
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        onChunk: suspend (String) -> Unit,
+        onThinking: suspend (String) -> Unit
     ): StreamResult {
         return executeWithRetry(retryConfig) {
             try {
@@ -336,6 +344,7 @@ open class ClaudeClient(
                                                     val text = delta.thinking
                                                     if (!text.isNullOrEmpty()) {
                                                         thinkingContent.append(text)
+                                                        onThinking(text)
                                                     }
                                                 }
                                                 "input_json_delta" -> {

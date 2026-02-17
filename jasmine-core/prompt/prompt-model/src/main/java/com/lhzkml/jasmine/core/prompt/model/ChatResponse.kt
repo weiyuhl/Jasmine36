@@ -30,7 +30,10 @@ data class ResponseMessage(
     val role: String? = null,
     val content: String? = null,
     @SerialName("tool_calls")
-    val toolCalls: List<OpenAIToolCallDef>? = null
+    val toolCalls: List<OpenAIToolCallDef>? = null,
+    /** DeepSeek R1 等模型的推理过程 */
+    @SerialName("reasoning_content")
+    val reasoningContent: String? = null
 )
 
 /** Token 用量统计 */

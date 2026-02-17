@@ -21,6 +21,7 @@ import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientRouter
+import com.lhzkml.jasmine.core.prompt.llm.chatStreamWithUsageAndThinking
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
@@ -459,8 +460,7 @@ class MainActivity : AppCompatActivity() {
                         }
                         override suspend fun onThinking(content: String) {
                             withContext(Dispatchers.Main) {
-                                val preview = if (content.length > 300) content.take(300) + "…" else content
-                                tvOutput.append("💭 思考: $preview\n\n")
+                                tvOutput.append("💭 $content")
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
                         }
@@ -481,13 +481,6 @@ class MainActivity : AppCompatActivity() {
                         }
                         result = streamResult.content
                         usage = streamResult.usage
-                        // 显示思考过程（最终轮次的）
-                        streamResult.thinking?.let { thinking ->
-                            withContext(Dispatchers.Main) {
-                                val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
-                                tvOutput.append("\n💭 思考: $preview\n")
-                            }
-                        }
                         withContext(Dispatchers.Main) {
                             tvOutput.append(formatUsageLine(usage))
                             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -515,23 +508,34 @@ class MainActivity : AppCompatActivity() {
                         tvOutput.append("AI: ")
                     }
 
-                    val streamResult = client.chatStreamWithUsage(trimmedMessages, config.model, maxTokens, samplingParams) { chunk ->
-                        withContext(Dispatchers.Main) {
-                            tvOutput.append(chunk)
-                            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    var thinkingStarted = false
+                    val streamResult = client.chatStreamWithUsageAndThinking(
+                        trimmedMessages, config.model, maxTokens, samplingParams,
+                        onChunk = { chunk ->
+                            withContext(Dispatchers.Main) {
+                                // 如果之前在显示思考内容，先换行再显示正文
+                                if (thinkingStarted) {
+                                    tvOutput.append("\n\nAI: ")
+                                    thinkingStarted = false
+                                }
+                                tvOutput.append(chunk)
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
+                        },
+                        onThinking = { text ->
+                            withContext(Dispatchers.Main) {
+                                if (!thinkingStarted) {
+                                    tvOutput.append("💭 ")
+                                    thinkingStarted = true
+                                }
+                                tvOutput.append(text)
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
                         }
-                    }
+                    )
 
                     result = streamResult.content
                     usage = streamResult.usage
-
-                    // 显示思考过程
-                    streamResult.thinking?.let { thinking ->
-                        withContext(Dispatchers.Main) {
-                            val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
-                            tvOutput.append("\n💭 思考: $preview\n")
-                        }
-                    }
 
                     withContext(Dispatchers.Main) {
                         tvOutput.append(formatUsageLine(usage))
@@ -609,6 +613,12 @@ class MainActivity : AppCompatActivity() {
             if (!strategy.shouldCompress(messageHistory)) return
         }
 
+        // 显示压缩中提示
+        withContext(Dispatchers.Main) {
+            tvOutput.append("🗜️ 正在压缩上下文...\n")
+            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        }
+
         // 创建临时 LLMSession 执行压缩
         val prompt = Prompt.build("compression") {
             for (msg in messageHistory) {
@@ -630,13 +640,14 @@ class MainActivity : AppCompatActivity() {
             messageHistory.addAll(compressed)
 
             withContext(Dispatchers.Main) {
-                tvOutput.append("[🗜️ 上下文已压缩: ${compressed.size} 条消息]\n\n")
+                tvOutput.append("[✅ 上下文压缩完成: ${compressed.size} 条消息]\n\n")
                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         } catch (e: Exception) {
             // 压缩失败不影响正常对话
             withContext(Dispatchers.Main) {
                 tvOutput.append("[⚠️ 压缩失败: ${e.message}]\n\n")
+                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         } finally {
             session.close()

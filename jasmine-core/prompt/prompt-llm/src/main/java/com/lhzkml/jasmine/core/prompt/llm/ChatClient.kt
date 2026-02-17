@@ -89,3 +89,42 @@ interface ChatClient : AutoCloseable {
      */
     suspend fun getBalance(): BalanceInfo? = null
 }
+
+/**
+ * 支持思考/推理内容实时回调的聊天客户端
+ * 实现此接口的客户端可以在流式请求中实时回调思考内容
+ */
+interface ThinkingChatClient : ChatClient {
+    /**
+     * 发送聊天请求（流式），支持思考内容实时回调
+     * @param onThinking 思考/推理内容的实时回调（Claude extended thinking / DeepSeek reasoning_content）
+     */
+    suspend fun chatStreamWithThinking(
+        messages: List<ChatMessage>,
+        model: String,
+        maxTokens: Int? = null,
+        samplingParams: SamplingParams? = null,
+        tools: List<ToolDescriptor> = emptyList(),
+        onChunk: suspend (String) -> Unit,
+        onThinking: suspend (String) -> Unit
+    ): StreamResult
+}
+
+/**
+ * 扩展函数：如果客户端支持思考回调则使用，否则回退到普通流式
+ */
+suspend fun ChatClient.chatStreamWithUsageAndThinking(
+    messages: List<ChatMessage>,
+    model: String,
+    maxTokens: Int? = null,
+    samplingParams: SamplingParams? = null,
+    tools: List<ToolDescriptor> = emptyList(),
+    onChunk: suspend (String) -> Unit,
+    onThinking: suspend (String) -> Unit = {}
+): StreamResult {
+    return if (this is ThinkingChatClient) {
+        chatStreamWithThinking(messages, model, maxTokens, samplingParams, tools, onChunk, onThinking)
+    } else {
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, onChunk)
+    }
+}

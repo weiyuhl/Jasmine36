@@ -23,13 +23,16 @@ data class StreamChoice(
     val finishReason: String? = null
 )
 
-/** 流式增量内容（支持 tool_calls） */
+/** 流式增量内容（支持 tool_calls 和 reasoning_content） */
 @Serializable
 data class Delta(
     val role: String? = null,
     val content: String? = null,
     @SerialName("tool_calls")
-    val toolCalls: List<StreamToolCall>? = null
+    val toolCalls: List<StreamToolCall>? = null,
+    /** DeepSeek R1 等模型的推理过程 */
+    @SerialName("reasoning_content")
+    val reasoningContent: String? = null
 )
 
 /**

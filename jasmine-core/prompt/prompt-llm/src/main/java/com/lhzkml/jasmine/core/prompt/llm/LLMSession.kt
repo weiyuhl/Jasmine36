@@ -190,15 +190,19 @@ class LLMSession(
     /**
      * 流式请求 LLM（带工具），自动追加 response
      */
-    suspend fun requestLLMStream(onChunk: suspend (String) -> Unit): StreamResult {
+    suspend fun requestLLMStream(
+        onChunk: suspend (String) -> Unit,
+        onThinking: suspend (String) -> Unit = {}
+    ): StreamResult {
         checkActive()
-        val result = client.chatStreamWithUsage(
+        val result = client.chatStreamWithUsageAndThinking(
             messages = prompt.messages,
             model = model,
             maxTokens = prompt.maxTokens,
             samplingParams = prompt.samplingParams,
             tools = tools,
-            onChunk = onChunk
+            onChunk = onChunk,
+            onThinking = onThinking
         )
         appendPrompt {
             if (result.hasToolCalls) {
@@ -213,15 +217,19 @@ class LLMSession(
     /**
      * 流式请求 LLM（不带工具），自动追加 response
      */
-    suspend fun requestLLMStreamWithoutTools(onChunk: suspend (String) -> Unit): StreamResult {
+    suspend fun requestLLMStreamWithoutTools(
+        onChunk: suspend (String) -> Unit,
+        onThinking: suspend (String) -> Unit = {}
+    ): StreamResult {
         checkActive()
-        val result = client.chatStreamWithUsage(
+        val result = client.chatStreamWithUsageAndThinking(
             messages = prompt.messages,
             model = model,
             maxTokens = prompt.maxTokens,
             samplingParams = prompt.samplingParams,
             tools = emptyList(),
-            onChunk = onChunk
+            onChunk = onChunk,
+            onThinking = onThinking
         )
         appendPrompt { assistant(result.content) }
         return result
