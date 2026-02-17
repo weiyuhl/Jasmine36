@@ -1,5 +1,8 @@
 package com.lhzkml.jasmine
 
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
@@ -85,6 +88,7 @@ class MainActivity : AppCompatActivity() {
     private var webSearchTool: WebSearchTool? = null
     private var currentJob: Job? = null
     private var isGenerating = false
+    private var pulseAnimator: AnimatorSet? = null
 
     /**
      * 根据设置构建工具注册表
@@ -399,23 +403,47 @@ class MainActivity : AppCompatActivity() {
         when (state) {
             ButtonState.IDLE -> {
                 isGenerating = false
+                stopPulseAnimation()
                 btnSend.text = "↑"
                 btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.accent))
                 btnSend.isEnabled = true
+                btnSend.alpha = 1f
+                btnSend.scaleX = 1f
+                btnSend.scaleY = 1f
             }
-            ButtonState.GENERATING -> {
+            ButtonState.GENERATING, ButtonState.COMPRESSING -> {
                 isGenerating = true
                 btnSend.text = "■"
-                btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.stop_red))
+                btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.generating_green))
                 btnSend.isEnabled = true
-            }
-            ButtonState.COMPRESSING -> {
-                isGenerating = true
-                btnSend.text = "■"
-                btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.stop_red))
-                btnSend.isEnabled = true
+                startPulseAnimation()
             }
         }
+    }
+
+    private fun startPulseAnimation() {
+        if (pulseAnimator != null) return
+        val scaleX = ObjectAnimator.ofFloat(btnSend, "scaleX", 1f, 1.15f, 1f).apply {
+            repeatCount = ValueAnimator.INFINITE
+            duration = 1000
+        }
+        val scaleY = ObjectAnimator.ofFloat(btnSend, "scaleY", 1f, 1.15f, 1f).apply {
+            repeatCount = ValueAnimator.INFINITE
+            duration = 1000
+        }
+        val alpha = ObjectAnimator.ofFloat(btnSend, "alpha", 1f, 0.6f, 1f).apply {
+            repeatCount = ValueAnimator.INFINITE
+            duration = 1000
+        }
+        pulseAnimator = AnimatorSet().apply {
+            playTogether(scaleX, scaleY, alpha)
+            start()
+        }
+    }
+
+    private fun stopPulseAnimation() {
+        pulseAnimator?.cancel()
+        pulseAnimator = null
     }
 
     private enum class ButtonState { IDLE, GENERATING, COMPRESSING }
