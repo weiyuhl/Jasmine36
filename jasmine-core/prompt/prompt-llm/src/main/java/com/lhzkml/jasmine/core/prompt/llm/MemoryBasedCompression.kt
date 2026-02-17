@@ -24,9 +24,11 @@ class RetrieveFactsFromHistory(
 
     override suspend fun compress(
         session: LLMSession,
-        memoryMessages: List<ChatMessage>
+        memoryMessages: List<ChatMessage>,
+        listener: CompressionEventListener?
     ) {
         // 统计工具交互次数
+        listener?.onCompressionStart("RetrieveFactsFromHistory", session.prompt.messages.size)
         val iterationsCount = session.prompt.messages.count { it.role == "tool" }
 
         // 提取每个概念的事实
@@ -85,5 +87,6 @@ Continue with your analysis and implementation."""
 
         val compressed = composeMessageHistory(oldMessages, newMessages, memoryMessages)
         session.rewritePrompt { it.withMessages { compressed } }
+        listener?.onCompressionDone(compressed.size)
     }
 }

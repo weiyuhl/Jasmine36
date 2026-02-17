@@ -360,7 +360,7 @@ class HistoryCompressionStrategyTest {
     fun `splitHistoryBySystemMessages splits correctly`() {
         // 使用一个具体策略来访问 protected 方法
         val strategy = object : HistoryCompressionStrategy() {
-            override suspend fun compress(session: LLMSession, memoryMessages: List<ChatMessage>) {}
+            override suspend fun compress(session: LLMSession, memoryMessages: List<ChatMessage>, listener: CompressionEventListener?) {}
             fun testSplit(messages: List<ChatMessage>) = splitHistoryBySystemMessages(messages)
         }
 

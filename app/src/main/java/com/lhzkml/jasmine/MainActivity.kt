@@ -22,6 +22,7 @@ import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientRouter
 import com.lhzkml.jasmine.core.prompt.llm.chatStreamWithUsageAndThinking
+import com.lhzkml.jasmine.core.prompt.llm.CompressionEventListener
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
@@ -613,10 +614,32 @@ class MainActivity : AppCompatActivity() {
             if (!strategy.shouldCompress(messageHistory)) return
         }
 
-        // 显示压缩中提示
-        withContext(Dispatchers.Main) {
-            tvOutput.append("🗜️ 正在压缩上下文...\n")
-            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        // 创建压缩事件监听器，实时显示压缩过程
+        val listener = object : CompressionEventListener {
+            override suspend fun onCompressionStart(strategyName: String, originalMessageCount: Int) {
+                withContext(Dispatchers.Main) {
+                    tvOutput.append("🗜️ 开始压缩上下文 [策略: $strategyName, 原始消息: ${originalMessageCount} 条]\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+            }
+            override suspend fun onSummaryChunk(chunk: String) {
+                withContext(Dispatchers.Main) {
+                    tvOutput.append(chunk)
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+            }
+            override suspend fun onBlockCompressed(blockIndex: Int, totalBlocks: Int) {
+                withContext(Dispatchers.Main) {
+                    tvOutput.append("\n📦 块 $blockIndex/$totalBlocks 压缩完成\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+            }
+            override suspend fun onCompressionDone(compressedMessageCount: Int) {
+                withContext(Dispatchers.Main) {
+                    tvOutput.append("\n✅ 上下文压缩完成 [压缩后: ${compressedMessageCount} 条消息]\n\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+            }
         }
 
         // 创建临时 LLMSession 执行压缩
@@ -632,21 +655,16 @@ class MainActivity : AppCompatActivity() {
 
         val session = LLMSession(client, model, prompt)
         try {
-            session.replaceHistoryWithTLDR(strategy)
+            session.replaceHistoryWithTLDR(strategy, listener = listener)
 
             // 用压缩后的消息替换内存中的历史
             val compressed = session.prompt.messages
             messageHistory.clear()
             messageHistory.addAll(compressed)
-
-            withContext(Dispatchers.Main) {
-                tvOutput.append("[✅ 上下文压缩完成: ${compressed.size} 条消息]\n\n")
-                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-            }
         } catch (e: Exception) {
             // 压缩失败不影响正常对话
             withContext(Dispatchers.Main) {
-                tvOutput.append("[⚠️ 压缩失败: ${e.message}]\n\n")
+                tvOutput.append("\n[⚠️ 压缩失败: ${e.message}]\n\n")
                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         } finally {

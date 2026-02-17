@@ -278,7 +278,8 @@ private suspend fun <T> LLMSession.use(block: suspend (LLMSession) -> T): T {
  */
 suspend fun LLMSession.replaceHistoryWithTLDR(
     strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory,
-    preserveMemory: Boolean = true
+    preserveMemory: Boolean = true,
+    listener: CompressionEventListener? = null
 ) {
     val memoryMessages = if (preserveMemory) {
         prompt.messages.filter { msg ->
@@ -291,7 +292,7 @@ suspend fun LLMSession.replaceHistoryWithTLDR(
     } else {
         emptyList()
     }
-    strategy.compress(this, memoryMessages)
+    strategy.compress(this, memoryMessages, listener)
 }
 
 /**
@@ -299,9 +300,10 @@ suspend fun LLMSession.replaceHistoryWithTLDR(
  * 配合 TokenBudget 策略使用
  */
 suspend fun LLMSession.compressIfNeeded(
-    strategy: HistoryCompressionStrategy.TokenBudget
+    strategy: HistoryCompressionStrategy.TokenBudget,
+    listener: CompressionEventListener? = null
 ) {
     if (strategy.shouldCompress(prompt.messages)) {
-        replaceHistoryWithTLDR(strategy)
+        replaceHistoryWithTLDR(strategy, listener = listener)
     }
 }

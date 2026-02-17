@@ -5,6 +5,21 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
 import com.lhzkml.jasmine.core.prompt.model.prompt
 
 /**
+ * 压缩过程事件监听器
+ * 用于在 UI 层实时显示压缩的详细过程
+ */
+interface CompressionEventListener {
+    /** 压缩开始，显示策略信息 */
+    suspend fun onCompressionStart(strategyName: String, originalMessageCount: Int) {}
+    /** LLM 正在生成摘要（流式输出） */
+    suspend fun onSummaryChunk(chunk: String) {}
+    /** 单个块压缩完成 */
+    suspend fun onBlockCompressed(blockIndex: Int, totalBlocks: Int) {}
+    /** 压缩完成 */
+    suspend fun onCompressionDone(compressedMessageCount: Int) {}
+}
+
+/**
  * 历史压缩策略抽象基类
  * 完整移植 koog 的 HistoryCompressionStrategy，定义不同的上下文压缩方式。
  *
@@ -27,19 +42,24 @@ abstract class HistoryCompressionStrategy {
      * 执行压缩
      * @param session 当前 LLM 会话
      * @param memoryMessages 需要保留的记忆消息（如之前的摘要）
+     * @param listener 压缩过程事件监听器（可选）
      */
     abstract suspend fun compress(
         session: LLMSession,
-        memoryMessages: List<ChatMessage> = emptyList()
+        memoryMessages: List<ChatMessage> = emptyList(),
+        listener: CompressionEventListener? = null
     )
 
     // ========== TLDR 摘要生成 ==========
 
     /**
      * 让 LLM 对当前 prompt 生成 TLDR 摘要
-     * 流程：去掉末尾工具调用 → 追加"请总结"的用户消息 → 请求 LLM（不带工具）→ 返回摘要
+     * 流程：去掉末尾工具调用 → 追加"请总结"的用户消息 → 流式请求 LLM（不带工具）→ 返回摘要
      */
-    protected suspend fun compressPromptIntoTLDR(session: LLMSession): List<ChatMessage> {
+    protected suspend fun compressPromptIntoTLDR(
+        session: LLMSession,
+        listener: CompressionEventListener? = null
+    ): List<ChatMessage> {
         // 去掉末尾未完成的工具调用
         session.dropTrailingToolCalls()
 
@@ -48,9 +68,16 @@ abstract class HistoryCompressionStrategy {
             user(SUMMARIZE_PROMPT)
         }
 
-        // 请求 LLM 生成摘要（不带工具，避免 LLM 调用工具而非生成摘要）
-        val result = session.requestLLMWithoutTools()
-        return listOf(ChatMessage.assistant(result.content))
+        // 流式请求 LLM 生成摘要（不带工具，避免 LLM 调用工具而非生成摘要）
+        if (listener != null) {
+            val result = session.requestLLMStreamWithoutTools(
+                onChunk = { chunk -> listener.onSummaryChunk(chunk) }
+            )
+            return listOf(ChatMessage.assistant(result.content))
+        } else {
+            val result = session.requestLLMWithoutTools()
+            return listOf(ChatMessage.assistant(result.content))
+        }
     }
 
     // ========== 消息重组 ==========
@@ -134,11 +161,17 @@ abstract class HistoryCompressionStrategy {
      * → [System, User1, Memory, TLDR(全部历史)]
      */
     object WholeHistory : HistoryCompressionStrategy() {
-        override suspend fun compress(session: LLMSession, memoryMessages: List<ChatMessage>) {
+        override suspend fun compress(
+            session: LLMSession,
+            memoryMessages: List<ChatMessage>,
+            listener: CompressionEventListener?
+        ) {
             val originalMessages = session.prompt.messages
-            val tldrMessages = compressPromptIntoTLDR(session)
+            listener?.onCompressionStart("WholeHistory", originalMessages.size)
+            val tldrMessages = compressPromptIntoTLDR(session, listener)
             val compressed = composeMessageHistory(originalMessages, tldrMessages, memoryMessages)
             session.rewritePrompt { it.withMessages { compressed } }
+            listener?.onCompressionDone(compressed.size)
         }
     }
 
@@ -152,15 +185,21 @@ abstract class HistoryCompressionStrategy {
      * → [System1, User1, Memory, TLDR(block1), System2, User2, TLDR(block2)]
      */
     object WholeHistoryMultipleSystemMessages : HistoryCompressionStrategy() {
-        override suspend fun compress(session: LLMSession, memoryMessages: List<ChatMessage>) {
+        override suspend fun compress(
+            session: LLMSession,
+            memoryMessages: List<ChatMessage>,
+            listener: CompressionEventListener?
+        ) {
             val compressedMessages = mutableListOf<ChatMessage>()
 
             val messageBlocks = splitHistoryBySystemMessages(session.prompt.messages)
+            listener?.onCompressionStart("WholeHistoryMultipleSystemMessages", session.prompt.messages.size)
 
             messageBlocks.forEachIndexed { index, messageBlock ->
                 session.rewritePrompt { it.withMessages { messageBlock } }
 
-                val tldrMessageBlock = compressPromptIntoTLDR(session)
+                val tldrMessageBlock = compressPromptIntoTLDR(session, listener)
+                listener?.onBlockCompressed(index + 1, messageBlocks.size)
 
                 val compressedMessageBlock = composeMessageHistory(
                     originalMessages = messageBlock,
@@ -170,6 +209,7 @@ abstract class HistoryCompressionStrategy {
                 compressedMessages.addAll(compressedMessageBlock)
             }
             session.rewritePrompt { it.withMessages { compressedMessages } }
+            listener?.onCompressionDone(compressedMessages.size)
         }
     }
 
@@ -179,12 +219,18 @@ abstract class HistoryCompressionStrategy {
      * @param n 保留的最近消息数
      */
     data class FromLastNMessages(val n: Int) : HistoryCompressionStrategy() {
-        override suspend fun compress(session: LLMSession, memoryMessages: List<ChatMessage>) {
+        override suspend fun compress(
+            session: LLMSession,
+            memoryMessages: List<ChatMessage>,
+            listener: CompressionEventListener?
+        ) {
             val originalMessages = session.prompt.messages
+            listener?.onCompressionStart("FromLastNMessages(n=$n)", originalMessages.size)
             session.leaveLastNMessages(n)
-            val tldrMessages = compressPromptIntoTLDR(session)
+            val tldrMessages = compressPromptIntoTLDR(session, listener)
             val compressed = composeMessageHistory(originalMessages, tldrMessages, memoryMessages)
             session.rewritePrompt { it.withMessages { compressed } }
+            listener?.onCompressionDone(compressed.size)
         }
     }
 
@@ -197,12 +243,18 @@ abstract class HistoryCompressionStrategy {
      * @param timestamp 起始时间戳（毫秒），只保留此时间之后的消息
      */
     data class FromTimestamp(val timestamp: Long) : HistoryCompressionStrategy() {
-        override suspend fun compress(session: LLMSession, memoryMessages: List<ChatMessage>) {
+        override suspend fun compress(
+            session: LLMSession,
+            memoryMessages: List<ChatMessage>,
+            listener: CompressionEventListener?
+        ) {
             val originalMessages = session.prompt.messages
+            listener?.onCompressionStart("FromTimestamp", originalMessages.size)
             session.leaveMessagesFromTimestamp(timestamp)
-            val tldrMessages = compressPromptIntoTLDR(session)
+            val tldrMessages = compressPromptIntoTLDR(session, listener)
             val compressed = composeMessageHistory(originalMessages, tldrMessages, memoryMessages)
             session.rewritePrompt { it.withMessages { compressed } }
+            listener?.onCompressionDone(compressed.size)
         }
     }
 
@@ -212,14 +264,23 @@ abstract class HistoryCompressionStrategy {
      * @param chunkSize 每块的消息数
      */
     data class Chunked(val chunkSize: Int) : HistoryCompressionStrategy() {
-        override suspend fun compress(session: LLMSession, memoryMessages: List<ChatMessage>) {
+        override suspend fun compress(
+            session: LLMSession,
+            memoryMessages: List<ChatMessage>,
+            listener: CompressionEventListener?
+        ) {
             val originalMessages = session.prompt.messages
-            val tldrChunks = originalMessages.chunked(chunkSize).flatMap { chunk ->
+            listener?.onCompressionStart("Chunked(chunkSize=$chunkSize)", originalMessages.size)
+            val chunks = originalMessages.chunked(chunkSize)
+            val tldrChunks = mutableListOf<ChatMessage>()
+            chunks.forEachIndexed { index, chunk ->
                 session.rewritePrompt { it.withMessages { chunk } }
-                compressPromptIntoTLDR(session)
+                tldrChunks.addAll(compressPromptIntoTLDR(session, listener))
+                listener?.onBlockCompressed(index + 1, chunks.size)
             }
             val compressed = composeMessageHistory(originalMessages, tldrChunks, memoryMessages)
             session.rewritePrompt { it.withMessages { compressed } }
+            listener?.onCompressionDone(compressed.size)
         }
     }
 
@@ -243,9 +304,13 @@ abstract class HistoryCompressionStrategy {
             return totalTokens > (maxTokens * threshold).toInt()
         }
 
-        override suspend fun compress(session: LLMSession, memoryMessages: List<ChatMessage>) {
+        override suspend fun compress(
+            session: LLMSession,
+            memoryMessages: List<ChatMessage>,
+            listener: CompressionEventListener?
+        ) {
             if (shouldCompress(session.prompt.messages)) {
-                WholeHistory.compress(session, memoryMessages)
+                WholeHistory.compress(session, memoryMessages, listener)
             }
         }
     }
