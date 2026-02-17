@@ -1,8 +1,5 @@
 package com.lhzkml.jasmine
 
-import android.animation.AnimatorSet
-import android.animation.ObjectAnimator
-import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
@@ -13,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -72,6 +70,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mainContent: LinearLayout
     private lateinit var etInput: EditText
     private lateinit var btnSend: MaterialButton
+    private lateinit var progressSend: ProgressBar
     private lateinit var tvOutput: TextView
     private lateinit var scrollView: ScrollView
     private lateinit var tvDrawerEmpty: TextView
@@ -88,7 +87,6 @@ class MainActivity : AppCompatActivity() {
     private var webSearchTool: WebSearchTool? = null
     private var currentJob: Job? = null
     private var isGenerating = false
-    private var pulseAnimator: AnimatorSet? = null
 
     /**
      * 根据设置构建工具注册表
@@ -166,6 +164,7 @@ class MainActivity : AppCompatActivity() {
         mainContent = findViewById(R.id.mainContent)
         etInput = findViewById(R.id.etInput)
         btnSend = findViewById(R.id.btnSend)
+        progressSend = findViewById(R.id.progressSend)
         tvOutput = findViewById(R.id.tvOutput)
         scrollView = findViewById(R.id.scrollView)
         tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
@@ -403,53 +402,19 @@ class MainActivity : AppCompatActivity() {
         when (state) {
             ButtonState.IDLE -> {
                 isGenerating = false
-                stopPulseAnimation()
                 btnSend.text = "↑"
                 btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.accent))
                 btnSend.isEnabled = true
-                btnSend.alpha = 1f
+                progressSend.visibility = View.GONE
             }
             ButtonState.GENERATING, ButtonState.COMPRESSING -> {
                 isGenerating = true
                 btnSend.text = "■"
+                btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.generating_green))
                 btnSend.isEnabled = true
-                startPulseAnimation()
+                progressSend.visibility = View.VISIBLE
             }
         }
-    }
-
-    private fun startPulseAnimation() {
-        if (pulseAnimator != null) return
-
-        val greenDark = getColor(R.color.generating_green)
-        val greenLight = getColor(R.color.generating_green_light)
-
-        // 颜色在深绿和亮绿之间来回渐变
-        val colorAnim = ValueAnimator.ofArgb(greenDark, greenLight).apply {
-            repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.REVERSE
-            duration = 800
-            addUpdateListener { anim ->
-                btnSend.backgroundTintList = ColorStateList.valueOf(anim.animatedValue as Int)
-            }
-        }
-
-        // 透明度呼吸：1.0 → 0.4 → 1.0
-        val alphaAnim = ObjectAnimator.ofFloat(btnSend, "alpha", 1f, 0.4f).apply {
-            repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.REVERSE
-            duration = 800
-        }
-
-        pulseAnimator = AnimatorSet().apply {
-            playTogether(colorAnim, alphaAnim)
-            start()
-        }
-    }
-
-    private fun stopPulseAnimation() {
-        pulseAnimator?.cancel()
-        pulseAnimator = null
     }
 
     private enum class ButtonState { IDLE, GENERATING, COMPRESSING }
