@@ -187,6 +187,13 @@ open class ClaudeClient(
                     .mapNotNull { it.text }
                     .joinToString("")
 
+                // 提取 thinking 内容
+                val thinkingContent = claudeResponse.content
+                    .filter { it.type == "thinking" }
+                    .mapNotNull { it.text }
+                    .joinToString("")
+                    .ifEmpty { null }
+
                 // 提取 tool_use 块 → ToolCall
                 val toolCalls = claudeResponse.content
                     .filter { it.type == "tool_use" }
@@ -210,7 +217,8 @@ open class ClaudeClient(
                     content = textContent,
                     usage = usage,
                     finishReason = claudeResponse.stopReason,
-                    toolCalls = toolCalls
+                    toolCalls = toolCalls,
+                    thinking = thinkingContent
                 )
             } catch (e: ChatClientException) {
                 throw e
@@ -272,6 +280,8 @@ open class ClaudeClient(
                 val toolCallAccumulator = mutableMapOf<Int, Triple<String, String, StringBuilder>>()
                 var currentBlockIndex = -1
                 var currentBlockType = ""
+                // thinking 内容累积
+                val thinkingContent = StringBuilder()
 
                 statement.execute { response ->
                     if (!response.status.isSuccess()) {
@@ -322,6 +332,12 @@ open class ClaudeClient(
                                                         onChunk(text)
                                                     }
                                                 }
+                                                "thinking_delta" -> {
+                                                    val text = delta.thinking
+                                                    if (!text.isNullOrEmpty()) {
+                                                        thinkingContent.append(text)
+                                                    }
+                                                }
                                                 "input_json_delta" -> {
                                                     val partial = delta.partialJson
                                                     if (!partial.isNullOrEmpty()) {
@@ -361,7 +377,8 @@ open class ClaudeClient(
                     content = fullContent.toString(),
                     usage = usage,
                     finishReason = stopReason,
-                    toolCalls = toolCalls
+                    toolCalls = toolCalls,
+                    thinking = thinkingContent.toString().ifEmpty { null }
                 )
             } catch (e: ChatClientException) {
                 throw e

@@ -112,7 +112,9 @@ data class ClaudeStreamDelta(
     val partialJson: String? = null,
     @SerialName("stop_reason")
     val stopReason: String? = null,
-    val usage: ClaudeUsage? = null
+    val usage: ClaudeUsage? = null,
+    /** thinking 块的增量文本 */
+    val thinking: String? = null
 )
 
 @Serializable

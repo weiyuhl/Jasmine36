@@ -442,7 +442,30 @@ class MainActivity : AppCompatActivity() {
                 if (toolsEnabled) {
                     // Agent 模式：使用 ToolExecutor 自动循环
                     val registry = buildToolRegistry()
-                    val executor = ToolExecutor(client, registry)
+                    val listener = object : AgentEventListener {
+                        override suspend fun onToolCallStart(toolName: String, arguments: String) {
+                            withContext(Dispatchers.Main) {
+                                val argsPreview = if (arguments.length > 80) arguments.take(80) + "…" else arguments
+                                tvOutput.append("\n🔧 调用工具: $toolName($argsPreview)\n")
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
+                        }
+                        override suspend fun onToolCallResult(toolName: String, result: String) {
+                            withContext(Dispatchers.Main) {
+                                val preview = if (result.length > 200) result.take(200) + "…" else result
+                                tvOutput.append("📋 $toolName 结果: $preview\n\n")
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
+                        }
+                        override suspend fun onThinking(content: String) {
+                            withContext(Dispatchers.Main) {
+                                val preview = if (content.length > 300) content.take(300) + "…" else content
+                                tvOutput.append("💭 思考: $preview\n\n")
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
+                        }
+                    }
+                    val executor = ToolExecutor(client, registry, eventListener = listener)
 
                     if (useStream) {
                         withContext(Dispatchers.Main) {
@@ -458,6 +481,13 @@ class MainActivity : AppCompatActivity() {
                         }
                         result = streamResult.content
                         usage = streamResult.usage
+                        // 显示思考过程（最终轮次的）
+                        streamResult.thinking?.let { thinking ->
+                            withContext(Dispatchers.Main) {
+                                val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
+                                tvOutput.append("\n💭 思考: $preview\n")
+                            }
+                        }
                         withContext(Dispatchers.Main) {
                             tvOutput.append(formatUsageLine(usage))
                             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -468,8 +498,14 @@ class MainActivity : AppCompatActivity() {
                         )
                         result = chatResult.content
                         usage = chatResult.usage
+
+                        val thinkingLine = chatResult.thinking?.let { thinking ->
+                            val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
+                            "\n💭 思考: $preview\n"
+                        } ?: ""
+
                         withContext(Dispatchers.Main) {
-                            tvOutput.append("AI: $result${formatUsageLine(usage)}")
+                            tvOutput.append("AI: $result$thinkingLine${formatUsageLine(usage)}")
                             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                         }
                     }
@@ -489,6 +525,14 @@ class MainActivity : AppCompatActivity() {
                     result = streamResult.content
                     usage = streamResult.usage
 
+                    // 显示思考过程
+                    streamResult.thinking?.let { thinking ->
+                        withContext(Dispatchers.Main) {
+                            val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
+                            tvOutput.append("\n💭 思考: $preview\n")
+                        }
+                    }
+
                     withContext(Dispatchers.Main) {
                         tvOutput.append(formatUsageLine(usage))
                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -498,8 +542,14 @@ class MainActivity : AppCompatActivity() {
                     val chatResult = client.chatWithUsage(trimmedMessages, config.model, maxTokens, samplingParams)
                     result = chatResult.content
                     usage = chatResult.usage
+
+                    val thinkingLine = chatResult.thinking?.let { thinking ->
+                        val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
+                        "\n💭 思考: $preview\n"
+                    } ?: ""
+
                     withContext(Dispatchers.Main) {
-                        tvOutput.append("AI: $result${formatUsageLine(usage)}")
+                        tvOutput.append("AI: $result$thinkingLine${formatUsageLine(usage)}")
                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                     }
                 }
@@ -580,13 +630,13 @@ class MainActivity : AppCompatActivity() {
             messageHistory.addAll(compressed)
 
             withContext(Dispatchers.Main) {
-                tvOutput.append("[上下文已压缩: ${compressed.size} 条消息]\n\n")
+                tvOutput.append("[🗜️ 上下文已压缩: ${compressed.size} 条消息]\n\n")
                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         } catch (e: Exception) {
             // 压缩失败不影响正常对话
             withContext(Dispatchers.Main) {
-                tvOutput.append("[压缩失败: ${e.message}]\n\n")
+                tvOutput.append("[⚠️ 压缩失败: ${e.message}]\n\n")
             }
         } finally {
             session.close()

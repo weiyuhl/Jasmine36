@@ -17,7 +17,9 @@ data class StreamResult(
     val content: String,
     val usage: Usage? = null,
     val finishReason: String? = null,
-    val toolCalls: List<ToolCall> = emptyList()
+    val toolCalls: List<ToolCall> = emptyList(),
+    /** 思考/推理过程内容（Claude extended thinking 等） */
+    val thinking: String? = null
 ) {
     /** 是否包含工具调用 */
     val hasToolCalls: Boolean get() = toolCalls.isNotEmpty()
