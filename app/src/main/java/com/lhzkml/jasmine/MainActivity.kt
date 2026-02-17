@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -46,9 +47,11 @@ import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.conversation.storage.TimedMessage
 import com.lhzkml.jasmine.core.agent.tools.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,6 +83,8 @@ class MainActivity : AppCompatActivity() {
     private val drawerAdapter = DrawerConversationAdapter()
     private var contextManager = ContextManager()
     private var webSearchTool: WebSearchTool? = null
+    private var currentJob: Job? = null
+    private var isGenerating = false
 
     /**
      * 根据设置构建工具注册表
@@ -229,8 +234,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnSend.setOnClickListener {
-            val msg = etInput.text.toString().trim()
-            if (msg.isNotEmpty()) sendMessage(msg)
+            if (isGenerating) {
+                // 停止当前生成
+                currentJob?.cancel()
+            } else {
+                val msg = etInput.text.toString().trim()
+                if (msg.isNotEmpty()) sendMessage(msg)
+            }
         }
 
         intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
@@ -384,6 +394,32 @@ class MainActivity : AppCompatActivity() {
         return client
     }
 
+    /** 更新发送按钮状态 */
+    private fun updateSendButtonState(state: ButtonState) {
+        when (state) {
+            ButtonState.IDLE -> {
+                isGenerating = false
+                btnSend.text = "↑"
+                btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.accent))
+                btnSend.isEnabled = true
+            }
+            ButtonState.GENERATING -> {
+                isGenerating = true
+                btnSend.text = "■"
+                btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.stop_red))
+                btnSend.isEnabled = true
+            }
+            ButtonState.COMPRESSING -> {
+                isGenerating = true
+                btnSend.text = "■"
+                btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.stop_red))
+                btnSend.isEnabled = true
+            }
+        }
+    }
+
+    private enum class ButtonState { IDLE, GENERATING, COMPRESSING }
+
     private fun sendMessage(message: String) {
         val config = ProviderManager.getActiveConfig(this)
         if (config == null) {
@@ -392,7 +428,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        btnSend.isEnabled = false
+        updateSendButtonState(ButtonState.GENERATING)
         val now = formatTime(System.currentTimeMillis())
         tvOutput.append("You: $message\n$now\n\n")
         etInput.text.clear()
@@ -400,7 +436,7 @@ class MainActivity : AppCompatActivity() {
         val client = getOrCreateClient(config)
         val userMsg = ChatMessage.user(message)
 
-        CoroutineScope(Dispatchers.IO).launch {
+        currentJob = CoroutineScope(Dispatchers.IO).launch {
             try {
                 if (currentConversationId == null) {
                     val title = if (message.length > 20) message.substring(0, 20) + "..." else message
@@ -575,7 +611,15 @@ class MainActivity : AppCompatActivity() {
 
                 // 智能上下文压缩
                 if (ProviderManager.isCompressionEnabled(this@MainActivity)) {
+                    withContext(Dispatchers.Main) {
+                        updateSendButtonState(ButtonState.COMPRESSING)
+                    }
                     tryCompressHistory(client, config.model)
+                }
+            } catch (e: CancellationException) {
+                withContext(Dispatchers.Main) {
+                    tvOutput.append("\n[⏹ 已停止生成]\n\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             } catch (e: ChatClientException) {
                 withContext(Dispatchers.Main) {
@@ -597,7 +641,10 @@ class MainActivity : AppCompatActivity() {
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             } finally {
-                withContext(Dispatchers.Main) { btnSend.isEnabled = true }
+                withContext(Dispatchers.Main) {
+                    updateSendButtonState(ButtonState.IDLE)
+                    currentJob = null
+                }
             }
         }
     }
