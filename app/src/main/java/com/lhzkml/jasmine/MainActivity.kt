@@ -408,13 +408,10 @@ class MainActivity : AppCompatActivity() {
                 btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.accent))
                 btnSend.isEnabled = true
                 btnSend.alpha = 1f
-                btnSend.scaleX = 1f
-                btnSend.scaleY = 1f
             }
             ButtonState.GENERATING, ButtonState.COMPRESSING -> {
                 isGenerating = true
                 btnSend.text = "■"
-                btnSend.backgroundTintList = ColorStateList.valueOf(getColor(R.color.generating_green))
                 btnSend.isEnabled = true
                 startPulseAnimation()
             }
@@ -423,20 +420,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun startPulseAnimation() {
         if (pulseAnimator != null) return
-        val scaleX = ObjectAnimator.ofFloat(btnSend, "scaleX", 1f, 1.15f, 1f).apply {
+
+        val greenDark = getColor(R.color.generating_green)
+        val greenLight = getColor(R.color.generating_green_light)
+
+        // 颜色在深绿和亮绿之间来回渐变
+        val colorAnim = ValueAnimator.ofArgb(greenDark, greenLight).apply {
             repeatCount = ValueAnimator.INFINITE
-            duration = 1000
+            repeatMode = ValueAnimator.REVERSE
+            duration = 800
+            addUpdateListener { anim ->
+                btnSend.backgroundTintList = ColorStateList.valueOf(anim.animatedValue as Int)
+            }
         }
-        val scaleY = ObjectAnimator.ofFloat(btnSend, "scaleY", 1f, 1.15f, 1f).apply {
+
+        // 透明度呼吸：1.0 → 0.4 → 1.0
+        val alphaAnim = ObjectAnimator.ofFloat(btnSend, "alpha", 1f, 0.4f).apply {
             repeatCount = ValueAnimator.INFINITE
-            duration = 1000
+            repeatMode = ValueAnimator.REVERSE
+            duration = 800
         }
-        val alpha = ObjectAnimator.ofFloat(btnSend, "alpha", 1f, 0.6f, 1f).apply {
-            repeatCount = ValueAnimator.INFINITE
-            duration = 1000
-        }
+
         pulseAnimator = AnimatorSet().apply {
-            playTogether(scaleX, scaleY, alpha)
+            playTogether(colorAnim, alphaAnim)
             start()
         }
     }

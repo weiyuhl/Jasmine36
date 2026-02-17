@@ -9,6 +9,7 @@
     <color name="accent">#FF2D2D2D</color>
     <color name="accent_light">#FFF0F0F0</color>
     <color name="generating_green">#FF4CAF50</color>
+    <color name="generating_green_light">#FFA5D6A7</color>
     <color name="divider">#FFE8E8E8</color>
     <color name="status_bar">#FFFFFFFF</color>
     <color name="user_bubble">#FF2D2D2D</color>
