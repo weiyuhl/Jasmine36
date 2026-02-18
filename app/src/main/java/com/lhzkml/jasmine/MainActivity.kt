@@ -105,6 +105,9 @@ class MainActivity : AppCompatActivity() {
     private var agentMemory: AgentMemory? = null
     private var tracing: Tracing? = null
     private var mcpClients: MutableList<McpClient> = mutableListOf()
+    /** 预加载的 MCP 工具（APP 启动时后台连接） */
+    private var preloadedMcpTools: MutableList<McpToolAdapter> = mutableListOf()
+    private var mcpPreloaded = false
 
     /**
      * 根据设置构建工具注册表
@@ -165,17 +168,97 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * APP 启动时后台预连接 MCP 服务器
+     * 连接成功后缓存客户端和工具，发消息时直接复用。
+     */
+    private fun preconnectMcpServers() {
+        if (!ProviderManager.isMcpEnabled(this)) return
+
+        val servers = ProviderManager.getMcpServers(this).filter { it.enabled && it.url.isNotBlank() }
+        if (servers.isEmpty()) return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            for (server in servers) {
+                try {
+                    val headers = mutableMapOf<String, String>()
+                    if (server.headerName.isNotBlank() && server.headerValue.isNotBlank()) {
+                        headers[server.headerName] = server.headerValue
+                    }
+
+                    val client: McpClient = when (server.transportType) {
+                        ProviderManager.McpTransportType.SSE ->
+                            SseMcpClient(server.url, customHeaders = headers)
+                        ProviderManager.McpTransportType.STREAMABLE_HTTP ->
+                            HttpMcpClient(server.url, headers)
+                    }
+                    client.connect()
+                    mcpClients.add(client)
+
+                    val mcpRegistry = McpToolRegistryProvider.fromClient(client)
+                    for (descriptor in mcpRegistry.descriptors()) {
+                        val mcpTool = mcpRegistry.findTool(descriptor.name) ?: continue
+                        preloadedMcpTools.add(McpToolAdapter(mcpTool))
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        val transportLabel = when (server.transportType) {
+                            ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
+                            ProviderManager.McpTransportType.SSE -> "SSE"
+                        }
+                        tvOutput.append("MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)\n")
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append("MCP: ${server.name} 连接失败: ${e.message}\n")
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+            mcpPreloaded = true
+        }
+    }
+
+    /**
      * 加载 MCP 工具到注册表
+     * 优先复用 APP 启动时预连接的工具，避免重复连接。
      */
     private suspend fun loadMcpToolsInto(registry: ToolRegistry) {
         if (!ProviderManager.isMcpEnabled(this)) return
 
-        // 关闭旧的 MCP 客户端
-        mcpClients.forEach { try { it.close() } catch (_: Exception) {} }
-        mcpClients.clear()
+        // 如果已经预加载了，直接复用
+        if (mcpPreloaded && preloadedMcpTools.isNotEmpty()) {
+            for (tool in preloadedMcpTools) {
+                registry.register(tool)
+            }
+            return
+        }
 
+        // 还没预加载完成，等一下或者重新连接
         val servers = ProviderManager.getMcpServers(this).filter { it.enabled && it.url.isNotBlank() }
         if (servers.isEmpty()) return
+
+        // 如果预加载还在进行中（mcpClients 不为空但 mcpPreloaded 还是 false），等待
+        // 简单处理：如果已有客户端但工具为空，说明还在连接中，重新连接
+        if (mcpClients.isNotEmpty() && preloadedMcpTools.isEmpty()) {
+            // 预连接可能还在进行，等一小段时间
+            var waited = 0
+            while (!mcpPreloaded && waited < 10000) {
+                kotlinx.coroutines.delay(200)
+                waited += 200
+            }
+            if (preloadedMcpTools.isNotEmpty()) {
+                for (tool in preloadedMcpTools) {
+                    registry.register(tool)
+                }
+                return
+            }
+        }
+
+        // 预连接失败或未启动，重新连接
+        mcpClients.forEach { try { it.close() } catch (_: Exception) {} }
+        mcpClients.clear()
+        preloadedMcpTools.clear()
 
         for (server in servers) {
             try {
@@ -196,7 +279,9 @@ class MainActivity : AppCompatActivity() {
                 val mcpRegistry = McpToolRegistryProvider.fromClient(client)
                 for (descriptor in mcpRegistry.descriptors()) {
                     val mcpTool = mcpRegistry.findTool(descriptor.name) ?: continue
-                    registry.register(McpToolAdapter(mcpTool))
+                    val adapter = McpToolAdapter(mcpTool)
+                    preloadedMcpTools.add(adapter)
+                    registry.register(adapter)
                 }
 
                 withContext(Dispatchers.Main) {
@@ -204,16 +289,17 @@ class MainActivity : AppCompatActivity() {
                         ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
                         ProviderManager.McpTransportType.SSE -> "SSE"
                     }
-                    tvOutput.append("🔌 MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)\n")
+                    tvOutput.append("MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("🔌 MCP: ${server.name} 连接失败: ${e.message}\n")
+                    tvOutput.append("MCP: ${server.name} 连接失败: ${e.message}\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
         }
+        mcpPreloaded = true
     }
 
     /**
@@ -372,6 +458,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
+
+        // APP 启动时后台预连接 MCP 服务器
+        preconnectMcpServers()
     }
 
     override fun onNewIntent(intent: Intent) {
