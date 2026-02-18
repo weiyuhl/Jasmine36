@@ -1,13 +1,12 @@
 package com.lhzkml.jasmine.core.agent.tools.trace
 
+import com.lhzkml.jasmine.core.agent.tools.graph.StrategyGraph
+
 /**
  * 追踪事件基类
  * 参考 koog 的 DefinedFeatureEvent / FeatureMessage 体系，
- * 简化为适合 jasmine 的扁平结构。
- *
- * koog 有 6 大类 18 种事件（Agent/Strategy/Node/Subgraph/LLM/Tool），
- * jasmine 没有 graph-based agent，所以去掉 Strategy/Node/Subgraph，
- * 保留 Agent 生命周期、LLM 调用、LLM 流式、工具调用，并新增压缩事件。
+ * 完整移植 koog 的 6 大类事件：Agent/Strategy/Node/Subgraph/LLM/Tool，
+ * 并新增压缩事件。
  */
 sealed class TraceEvent {
     /** 事件唯一 ID */
@@ -168,6 +167,86 @@ sealed class TraceEvent {
         override val runId: String,
         val strategyName: String,
         val compressedMessageCount: Int,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : TraceEvent()
+
+    // ========== 策略执行（参考 koog StrategyStartingEvent / StrategyCompletedEvent） ==========
+
+    /** 策略开始执行 */
+    data class StrategyStarting(
+        override val eventId: String,
+        override val runId: String,
+        val strategyName: String,
+        val graph: StrategyGraph? = null,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : TraceEvent()
+
+    /** 策略执行完成 */
+    data class StrategyCompleted(
+        override val eventId: String,
+        override val runId: String,
+        val strategyName: String,
+        val result: String?,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : TraceEvent()
+
+    // ========== 节点执行（参考 koog NodeExecutionStartingEvent 等） ==========
+
+    /** 节点开始执行 */
+    data class NodeExecutionStarting(
+        override val eventId: String,
+        override val runId: String,
+        val nodeName: String,
+        val input: String?,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : TraceEvent()
+
+    /** 节点执行完成 */
+    data class NodeExecutionCompleted(
+        override val eventId: String,
+        override val runId: String,
+        val nodeName: String,
+        val input: String?,
+        val output: String?,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : TraceEvent()
+
+    /** 节点执行失败 */
+    data class NodeExecutionFailed(
+        override val eventId: String,
+        override val runId: String,
+        val nodeName: String,
+        val input: String?,
+        val error: TraceError,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : TraceEvent()
+
+    // ========== 子图执行（参考 koog SubgraphExecutionStartingEvent 等） ==========
+
+    /** 子图开始执行 */
+    data class SubgraphStarting(
+        override val eventId: String,
+        override val runId: String,
+        val subgraphName: String,
+        val input: String?,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : TraceEvent()
+
+    /** 子图执行完成 */
+    data class SubgraphCompleted(
+        override val eventId: String,
+        override val runId: String,
+        val subgraphName: String,
+        val result: String?,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : TraceEvent()
+
+    /** 子图执行失败 */
+    data class SubgraphFailed(
+        override val eventId: String,
+        override val runId: String,
+        val subgraphName: String,
+        val error: TraceError,
         override val timestamp: Long = System.currentTimeMillis()
     ) : TraceEvent()
 }

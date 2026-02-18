@@ -53,6 +53,28 @@ object TraceMessageFormat {
                 "CompressionStarting (runId: ${event.runId}, strategy: ${event.strategyName}, messages: ${event.originalMessageCount})"
             is TraceEvent.CompressionCompleted ->
                 "CompressionCompleted (runId: ${event.runId}, strategy: ${event.strategyName}, compressed: ${event.compressedMessageCount})"
+
+            // 策略
+            is TraceEvent.StrategyStarting ->
+                "StrategyStarting (runId: ${event.runId}, strategy: ${event.strategyName}, nodes: ${event.graph?.nodes?.size ?: 0}, edges: ${event.graph?.edges?.size ?: 0})"
+            is TraceEvent.StrategyCompleted ->
+                "StrategyCompleted (runId: ${event.runId}, strategy: ${event.strategyName}, result: ${event.result?.take(100)})"
+
+            // 节点
+            is TraceEvent.NodeExecutionStarting ->
+                "NodeExecutionStarting (runId: ${event.runId}, node: ${event.nodeName}, input: ${event.input?.take(100)})"
+            is TraceEvent.NodeExecutionCompleted ->
+                "NodeExecutionCompleted (runId: ${event.runId}, node: ${event.nodeName}, input: ${event.input?.take(100)}, output: ${event.output?.take(100)})"
+            is TraceEvent.NodeExecutionFailed ->
+                "NodeExecutionFailed (runId: ${event.runId}, node: ${event.nodeName}, error: ${event.error.message})"
+
+            // 子图
+            is TraceEvent.SubgraphStarting ->
+                "SubgraphStarting (runId: ${event.runId}, subgraph: ${event.subgraphName}, input: ${event.input?.take(100)})"
+            is TraceEvent.SubgraphCompleted ->
+                "SubgraphCompleted (runId: ${event.runId}, subgraph: ${event.subgraphName}, result: ${event.result?.take(100)})"
+            is TraceEvent.SubgraphFailed ->
+                "SubgraphFailed (runId: ${event.runId}, subgraph: ${event.subgraphName}, error: ${event.error.message})"
         }
         return "[$time] $body"
     }

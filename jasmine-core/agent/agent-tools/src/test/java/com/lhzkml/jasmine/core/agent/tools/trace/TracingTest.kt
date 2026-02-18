@@ -131,13 +131,22 @@ class TracingTest {
             TraceEvent.ToolCallCompleted("e11", "r1", "tc1", "calc", "{}", "42"),
             TraceEvent.ToolCallFailed("e12", "r1", "tc1", "calc", "{}", TraceError("err")),
             TraceEvent.CompressionStarting("e13", "r1", "WholeHistory", 20),
-            TraceEvent.CompressionCompleted("e14", "r1", "WholeHistory", 5)
+            TraceEvent.CompressionCompleted("e14", "r1", "WholeHistory", 5),
+            // Strategy/Node/Subgraph 事件
+            TraceEvent.StrategyStarting("e15", "r1", "my-strategy"),
+            TraceEvent.StrategyCompleted("e16", "r1", "my-strategy", "success"),
+            TraceEvent.NodeExecutionStarting("e17", "r1", "processInput", "hello"),
+            TraceEvent.NodeExecutionCompleted("e18", "r1", "processInput", "hello", "processed"),
+            TraceEvent.NodeExecutionFailed("e19", "r1", "processInput", "hello", TraceError("err")),
+            TraceEvent.SubgraphStarting("e20", "r1", "sub1", "input"),
+            TraceEvent.SubgraphCompleted("e21", "r1", "sub1", "result"),
+            TraceEvent.SubgraphFailed("e22", "r1", "sub1", TraceError("err"))
         )
 
         for (event in events) {
             val formatted = TraceMessageFormat.format(event)
             assertTrue("Format should not be empty for ${event::class.simpleName}", formatted.isNotEmpty())
-            assertTrue("Format should contain time bracket", formatted.startsWith("["))
+            assertTrue("Format should contain time bracket for ${event::class.simpleName}", formatted.startsWith("["))
         }
     }
 
