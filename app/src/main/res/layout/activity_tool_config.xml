@@ -39,9 +39,19 @@
             android:textStyle="bold"
             android:gravity="center" />
 
-        <View
-            android:layout_width="56dp"
-            android:layout_height="1dp" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSave"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="保存"
+            android:textColor="@color/accent"
+            android:textSize="14sp"
+            android:minWidth="0dp"
+            android:padding="6dp"
+            android:stateListAnimator="@null"
+            app:elevation="0dp"
+            app:rippleColor="@android:color/transparent" />
     </LinearLayout>
 
     <View

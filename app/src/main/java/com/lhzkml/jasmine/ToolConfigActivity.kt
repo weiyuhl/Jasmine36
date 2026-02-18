@@ -7,12 +7,13 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 /**
  * 工具管理界面
- * 以独立 Activity 展示所有可用工具的启用/禁用状态，
- * 勾选即时保存，退出时同步 BrightData Key。
+ * 独立 Activity，展示所有可用工具的启用/禁用状态。
+ * 点击"保存"按钮才写入 SharedPreferences。
  */
 class ToolConfigActivity : AppCompatActivity() {
 
@@ -40,6 +41,7 @@ class ToolConfigActivity : AppCompatActivity() {
         setContentView(R.layout.activity_tool_config)
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
+        findViewById<View>(R.id.btnSave).setOnClickListener { save() }
 
         cbSelectAll = findViewById(R.id.cbSelectAll)
         layoutToolList = findViewById(R.id.layoutToolList)
@@ -51,7 +53,7 @@ class ToolConfigActivity : AppCompatActivity() {
 
         // 加载当前启用的工具
         val enabledTools = ProviderManager.getEnabledTools(this)
-        val allEnabled = enabledTools.isEmpty() // 空集合 = 全部启用
+        val allEnabled = enabledTools.isEmpty()
 
         // 动态创建工具列表
         val inflater = LayoutInflater.from(this)
@@ -65,12 +67,13 @@ class ToolConfigActivity : AppCompatActivity() {
             tvDesc.text = tool.second
             cb.isChecked = allEnabled || tool.first in enabledTools
 
+            // checkbox 变化时只同步"全部启用"状态，不保存
             cb.setOnCheckedChangeListener { _, _ ->
-                if (!updatingSelectAll) {
-                    saveToolState()
-                    syncSelectAll()
-                }
+                if (!updatingSelectAll) syncSelectAll()
             }
+
+            // 点击整行时切换 checkbox（禁止 checkbox 自身的点击穿透）
+            cb.isClickable = false
             itemView.setOnClickListener { cb.isChecked = !cb.isChecked }
 
             checkBoxes.add(tool.first to cb)
@@ -91,12 +94,13 @@ class ToolConfigActivity : AppCompatActivity() {
         // 全选 checkbox
         syncSelectAll()
         cbSelectAll.setOnCheckedChangeListener { _, isChecked ->
-            updatingSelectAll = true
-            for ((_, cb) in checkBoxes) {
-                cb.isChecked = isChecked
+            if (!updatingSelectAll) {
+                updatingSelectAll = true
+                for ((_, cb) in checkBoxes) {
+                    cb.isChecked = isChecked
+                }
+                updatingSelectAll = false
             }
-            updatingSelectAll = false
-            saveToolState()
         }
 
         findViewById<LinearLayout>(R.id.layoutSelectAll).setOnClickListener {
@@ -104,23 +108,23 @@ class ToolConfigActivity : AppCompatActivity() {
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        // 保存 BrightData Key
-        ProviderManager.setBrightDataKey(this, etBrightDataKey.text.toString().trim())
-    }
-
-    private fun saveToolState() {
+    private fun save() {
         val selected = mutableSetOf<String>()
         for ((name, cb) in checkBoxes) {
             if (cb.isChecked) selected.add(name)
         }
-        // 全选时存空集合（表示全部启用）
+        // 全选时存空集合（表示全部启用），否则存选中的
         if (selected.size == allTools.size) {
             ProviderManager.setEnabledTools(this, emptySet())
         } else {
             ProviderManager.setEnabledTools(this, selected)
         }
+        // 保存 BrightData Key
+        ProviderManager.setBrightDataKey(this, etBrightDataKey.text.toString().trim())
+
+        Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
+        setResult(RESULT_OK)
+        finish()
     }
 
     private fun syncSelectAll() {
