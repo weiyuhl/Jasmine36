@@ -101,14 +101,27 @@ class McpServerActivity : AppCompatActivity() {
         rvServers.visibility = if (servers.isEmpty()) View.GONE else View.VISIBLE
     }
 
-    /** 自动连接所有启用的服务器 */
+    /** 自动连接所有启用的服务器（跳过已有缓存的） */
     private fun autoConnectAll() {
         val servers = ProviderManager.getMcpServers(this)
+        val cache = MainActivity.mcpConnectionCache
+
         servers.forEachIndexed { index, server ->
             if (server.enabled && server.url.isNotBlank()) {
-                connectServer(index)
+                // 如果全局缓存中已有该服务器的连接结果，直接复用
+                val cached = cache[server.name]
+                if (cached != null) {
+                    connectionResults[index] = ConnectionResult(
+                        success = cached.success,
+                        tools = cached.tools,
+                        error = cached.error
+                    )
+                } else {
+                    connectServer(index)
+                }
             }
         }
+        refreshList()
     }
 
     private fun connectServer(index: Int) {
@@ -133,6 +146,12 @@ class McpServerActivity : AppCompatActivity() {
                 val tools = client.listTools()
                 client.close()
 
+                // 更新全局缓存
+                MainActivity.Companion.mcpConnectionCache[server.name] = MainActivity.Companion.McpServerStatus(
+                    success = true,
+                    tools = tools
+                )
+
                 withContext(Dispatchers.Main) {
                     connectionResults[index] = ConnectionResult(
                         success = true,
@@ -141,6 +160,12 @@ class McpServerActivity : AppCompatActivity() {
                     refreshList()
                 }
             } catch (e: Exception) {
+                // 更新全局缓存
+                MainActivity.Companion.mcpConnectionCache[server.name] = MainActivity.Companion.McpServerStatus(
+                    success = false,
+                    error = e.message ?: "未知错误"
+                )
+
                 withContext(Dispatchers.Main) {
                     connectionResults[index] = ConnectionResult(
                         success = false,

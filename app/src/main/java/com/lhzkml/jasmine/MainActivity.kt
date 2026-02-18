@@ -14,7 +14,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -51,6 +50,7 @@ import com.lhzkml.jasmine.core.agent.tools.*
 import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpClient
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolAdapter
+import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolDefinition
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolRegistryProvider
 import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
 import com.lhzkml.jasmine.core.agent.tools.trace.CallbackTraceWriter
@@ -81,6 +81,19 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CONVERSATION_ID = "conversation_id"
+
+        /**
+         * 全局 MCP 连接状态缓存
+         * McpServerActivity 进入时读取此缓存，避免重复连接。
+         * key = 服务器名称
+         */
+        data class McpServerStatus(
+            val success: Boolean,
+            val tools: List<McpToolDefinition> = emptyList(),
+            val error: String? = null
+        )
+
+        val mcpConnectionCache = mutableMapOf<String, McpServerStatus>()
     }
 
     private lateinit var drawerLayout: DrawerLayout
@@ -201,16 +214,27 @@ class MainActivity : AppCompatActivity() {
                         preloadedMcpTools.add(McpToolAdapter(mcpTool))
                     }
 
+                    // 获取工具定义列表，缓存到全局状态
+                    val toolDefs = client.listTools()
+                    mcpConnectionCache[server.name] = McpServerStatus(
+                        success = true,
+                        tools = toolDefs
+                    )
+
                     withContext(Dispatchers.Main) {
                         val transportLabel = when (server.transportType) {
                             ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
                             ProviderManager.McpTransportType.SSE -> "SSE"
                         }
-                        Snackbar.make(mainContent, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Snackbar.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
+                    mcpConnectionCache[server.name] = McpServerStatus(
+                        success = false,
+                        error = e.message ?: "未知错误"
+                    )
                     withContext(Dispatchers.Main) {
-                        Snackbar.make(mainContent, "MCP: ${server.name} 连接失败", Snackbar.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "MCP: ${server.name} 连接失败", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -288,11 +312,11 @@ class MainActivity : AppCompatActivity() {
                         ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
                         ProviderManager.McpTransportType.SSE -> "SSE"
                     }
-                    Snackbar.make(mainContent, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Snackbar.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Snackbar.make(mainContent, "MCP: ${server.name} 连接失败", Snackbar.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "MCP: ${server.name} 连接失败", Toast.LENGTH_SHORT).show()
                 }
             }
         }
