@@ -33,8 +33,11 @@ class ToolConfigActivity : AppCompatActivity() {
     private lateinit var cbSelectAll: CheckBox
     private lateinit var layoutToolList: LinearLayout
     private lateinit var etBrightDataKey: EditText
-    private val checkBoxes = mutableListOf<Pair<String, CheckBox>>()
-    private var updatingSelectAll = false
+
+    /** 工具名 → 勾选状态（纯数据，不依赖 View 状态） */
+    private val toolStates = mutableMapOf<String, Boolean>()
+    private val toolCheckBoxes = mutableMapOf<String, CheckBox>()
+    private var ignoreCallbacks = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,7 +58,33 @@ class ToolConfigActivity : AppCompatActivity() {
         val enabledTools = ProviderManager.getEnabledTools(this)
         val allEnabled = enabledTools.isEmpty()
 
-        // 动态创建工具列表
+        // 初始化状态
+        for (tool in allTools) {
+            toolStates[tool.first] = allEnabled || tool.first in enabledTools
+        }
+
+        // 构建工具列表 UI
+        buildToolList()
+
+        // 同步全选状态
+        updateSelectAllCheckbox()
+
+        // 全选 checkbox — 禁止直接点击，只通过行点击
+        cbSelectAll.isClickable = false
+        cbSelectAll.isFocusable = false
+        findViewById<LinearLayout>(R.id.layoutSelectAll).setOnClickListener {
+            val newState = !cbSelectAll.isChecked
+            ignoreCallbacks = true
+            for (tool in allTools) {
+                toolStates[tool.first] = newState
+                toolCheckBoxes[tool.first]?.isChecked = newState
+            }
+            cbSelectAll.isChecked = newState
+            ignoreCallbacks = false
+        }
+    }
+
+    private fun buildToolList() {
         val inflater = LayoutInflater.from(this)
         for ((index, tool) in allTools.withIndex()) {
             val itemView = inflater.inflate(R.layout.item_tool_config, layoutToolList, false)
@@ -65,18 +94,23 @@ class ToolConfigActivity : AppCompatActivity() {
 
             tvName.text = tool.first
             tvDesc.text = tool.second
-            cb.isChecked = allEnabled || tool.first in enabledTools
+            cb.isChecked = toolStates[tool.first] == true
 
-            // checkbox 变化时只同步"全部启用"状态，不保存
-            cb.setOnCheckedChangeListener { _, _ ->
-                if (!updatingSelectAll) syncSelectAll()
+            // 禁止 checkbox 自身响应点击，只通过行点击
+            cb.isClickable = false
+            cb.isFocusable = false
+
+            toolCheckBoxes[tool.first] = cb
+
+            // 点击整行切换
+            itemView.setOnClickListener {
+                val current = toolStates[tool.first] == true
+                val newVal = !current
+                toolStates[tool.first] = newVal
+                cb.isChecked = newVal
+                updateSelectAllCheckbox()
             }
 
-            // 点击整行时切换 checkbox（禁止 checkbox 自身的点击穿透）
-            cb.isClickable = false
-            itemView.setOnClickListener { cb.isChecked = !cb.isChecked }
-
-            checkBoxes.add(tool.first to cb)
             layoutToolList.addView(itemView)
 
             // 分隔线（最后一个不加）
@@ -90,28 +124,18 @@ class ToolConfigActivity : AppCompatActivity() {
                 layoutToolList.addView(divider)
             }
         }
+    }
 
-        // 全选 checkbox
-        syncSelectAll()
-        cbSelectAll.setOnCheckedChangeListener { _, isChecked ->
-            if (!updatingSelectAll) {
-                updatingSelectAll = true
-                for ((_, cb) in checkBoxes) {
-                    cb.isChecked = isChecked
-                }
-                updatingSelectAll = false
-            }
-        }
-
-        findViewById<LinearLayout>(R.id.layoutSelectAll).setOnClickListener {
-            cbSelectAll.isChecked = !cbSelectAll.isChecked
-        }
+    private fun updateSelectAllCheckbox() {
+        if (ignoreCallbacks) return
+        val allChecked = allTools.all { toolStates[it.first] == true }
+        cbSelectAll.isChecked = allChecked
     }
 
     private fun save() {
         val selected = mutableSetOf<String>()
-        for ((name, cb) in checkBoxes) {
-            if (cb.isChecked) selected.add(name)
+        for (tool in allTools) {
+            if (toolStates[tool.first] == true) selected.add(tool.first)
         }
         // 全选时存空集合（表示全部启用），否则存选中的
         if (selected.size == allTools.size) {
@@ -125,13 +149,6 @@ class ToolConfigActivity : AppCompatActivity() {
         Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
         setResult(RESULT_OK)
         finish()
-    }
-
-    private fun syncSelectAll() {
-        val allChecked = checkBoxes.all { it.second.isChecked }
-        updatingSelectAll = true
-        cbSelectAll.isChecked = allChecked
-        updatingSelectAll = false
     }
 
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
