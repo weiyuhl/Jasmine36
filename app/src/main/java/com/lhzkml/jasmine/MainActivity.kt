@@ -14,6 +14,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -205,13 +206,11 @@ class MainActivity : AppCompatActivity() {
                             ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
                             ProviderManager.McpTransportType.SSE -> "SSE"
                         }
-                        tvOutput.append("MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)\n")
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        Snackbar.make(mainContent, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Snackbar.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        tvOutput.append("MCP: ${server.name} 连接失败: ${e.message}\n")
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        Snackbar.make(mainContent, "MCP: ${server.name} 连接失败", Snackbar.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -289,13 +288,11 @@ class MainActivity : AppCompatActivity() {
                         ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
                         ProviderManager.McpTransportType.SSE -> "SSE"
                     }
-                    tvOutput.append("MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)\n")
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    Snackbar.make(mainContent, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Snackbar.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("MCP: ${server.name} 连接失败: ${e.message}\n")
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    Snackbar.make(mainContent, "MCP: ${server.name} 连接失败", Snackbar.LENGTH_SHORT).show()
                 }
             }
         }
