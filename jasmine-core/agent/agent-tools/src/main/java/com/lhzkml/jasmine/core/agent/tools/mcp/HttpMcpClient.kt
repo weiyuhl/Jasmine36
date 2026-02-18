@@ -153,7 +153,8 @@ class HttpMcpClient(
         response.headers["Mcp-Session-Id"]?.let { sessionId = it }
 
         val body = response.body<String>()
-        val rpcResponse = json.decodeFromString(JsonRpcResponse.serializer(), body)
+        val jsonBody = extractJsonFromResponse(body)
+        val rpcResponse = json.decodeFromString(JsonRpcResponse.serializer(), jsonBody)
 
         if (rpcResponse.error != null) {
             throw McpException(
@@ -173,6 +174,42 @@ class HttpMcpClient(
             sessionId?.let { headers.append("Mcp-Session-Id", it) }
             setBody(json.encodeToString(JsonRpcRequest.serializer(), request))
         }
+    }
+
+    /**
+     * 从响应体中提取 JSON — 兼容纯 JSON 和 SSE 格式
+     *
+     * 有些 MCP 服务器即使客户端 Accept 了 application/json，
+     * 仍然返回 SSE 格式（event: message\ndata: {...}）。
+     * 此方法从 SSE 事件流中提取最后一个 JSON-RPC 响应。
+     */
+    private fun extractJsonFromResponse(body: String): String {
+        val trimmed = body.trim()
+
+        // 如果以 { 开头，就是纯 JSON
+        if (trimmed.startsWith("{")) return trimmed
+
+        // SSE 格式：提取所有 "data:" 行，找到包含 JSON-RPC 响应的那个
+        // SSE 格式示例：
+        //   event: message
+        //   data: {"jsonrpc":"2.0","id":1,"result":{...}}
+        //
+        //   event: message
+        //   data: {"jsonrpc":"2.0","method":"notifications/..."}
+        val dataLines = trimmed.lines()
+            .filter { it.startsWith("data:") }
+            .map { it.removePrefix("data:").trim() }
+            .filter { it.startsWith("{") }
+
+        // 优先找包含 "result" 或 "error" 的响应（即 JSON-RPC response，而非 notification）
+        val rpcResponse = dataLines.lastOrNull { line ->
+            line.contains("\"result\"") || line.contains("\"error\"")
+        }
+        if (rpcResponse != null) return rpcResponse
+
+        // 退而求其次，返回最后一个 data 行
+        return dataLines.lastOrNull()
+            ?: throw McpException("No JSON-RPC response found in SSE stream: ${trimmed.take(200)}")
     }
 
     // ========== Schema 解析 ==========
