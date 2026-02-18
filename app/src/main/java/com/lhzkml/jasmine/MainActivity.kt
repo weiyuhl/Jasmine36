@@ -51,6 +51,7 @@ import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpClient
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolAdapter
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolRegistryProvider
+import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
 import com.lhzkml.jasmine.core.agent.tools.trace.CallbackTraceWriter
 import com.lhzkml.jasmine.core.agent.tools.trace.LogTraceWriter
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
@@ -178,14 +179,17 @@ class MainActivity : AppCompatActivity() {
 
         for (server in servers) {
             try {
-                val headers = server.headers.lines()
-                    .filter { it.contains('=') }
-                    .associate { line ->
-                        val idx = line.indexOf('=')
-                        line.substring(0, idx).trim() to line.substring(idx + 1).trim()
-                    }
+                val headers = mutableMapOf<String, String>()
+                if (server.headerName.isNotBlank() && server.headerValue.isNotBlank()) {
+                    headers[server.headerName] = server.headerValue
+                }
 
-                val client = HttpMcpClient(server.url, headers)
+                val client: McpClient = when (server.transportType) {
+                    ProviderManager.McpTransportType.SSE ->
+                        SseMcpClient(server.url, customHeaders = headers)
+                    ProviderManager.McpTransportType.STREAMABLE_HTTP ->
+                        HttpMcpClient(server.url, headers)
+                }
                 client.connect()
                 mcpClients.add(client)
 
@@ -196,7 +200,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("🔌 MCP: ${server.name} 已连接 (${mcpRegistry.size} 个工具)\n")
+                    val transportLabel = when (server.transportType) {
+                        ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
+                        ProviderManager.McpTransportType.SSE -> "SSE"
+                    }
+                    tvOutput.append("🔌 MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             } catch (e: Exception) {

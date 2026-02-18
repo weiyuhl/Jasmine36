@@ -32,6 +32,12 @@
         <activity
             android:name=".ProviderConfigActivity"
             android:exported="false" />
+        <activity
+            android:name=".McpServerActivity"
+            android:exported="false" />
+        <activity
+            android:name=".McpServerEditActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * 支持 Streamable HTTP transport（MCP 2025-03-26 规范）。
  *
  * @param serverUrl MCP 服务器 URL（如 http://localhost:8080/mcp）
- * @param headers 自定义请求头（如认证 token）
+ * @param customHeaders 自定义请求头（如认证 token）
  */
 class HttpMcpClient(
     private val serverUrl: String,
@@ -51,7 +51,6 @@ class HttpMcpClient(
     private var sessionId: String? = null
 
     override suspend fun connect() {
-        // 发送 initialize 请求
         val result = rpcCall("initialize", buildJsonObject {
             put("protocolVersion", "2025-03-26")
             put("capabilities", buildJsonObject {})
@@ -61,7 +60,6 @@ class HttpMcpClient(
             })
         })
 
-        // 发送 initialized 通知
         rpcNotify("notifications/initialized")
     }
 
@@ -120,10 +118,13 @@ class HttpMcpClient(
         val params: JsonElement? = null
     )
 
+    /**
+     * JSON-RPC 响应 — id 使用 JsonElement 以兼容 int 和 string 类型
+     */
     @Serializable
     private data class JsonRpcResponse(
         val jsonrpc: String = "2.0",
-        val id: Int? = null,
+        val id: JsonElement? = null,
         val result: JsonElement? = null,
         val error: JsonRpcError? = null
     )
@@ -141,6 +142,8 @@ class HttpMcpClient(
 
         val response = httpClient.post(serverUrl) {
             contentType(ContentType.Application.Json)
+            // MCP 规范要求客户端同时接受 JSON 和 SSE
+            headers.append("Accept", "application/json, text/event-stream")
             for ((k, v) in customHeaders) { headers.append(k, v) }
             sessionId?.let { headers.append("Mcp-Session-Id", it) }
             setBody(json.encodeToString(JsonRpcRequest.serializer(), request))
@@ -165,6 +168,7 @@ class HttpMcpClient(
         val request = JsonRpcRequest(method = method, params = params)
         httpClient.post(serverUrl) {
             contentType(ContentType.Application.Json)
+            headers.append("Accept", "application/json, text/event-stream")
             for ((k, v) in customHeaders) { headers.append(k, v) }
             sessionId?.let { headers.append("Mcp-Session-Id", it) }
             setBody(json.encodeToString(JsonRpcRequest.serializer(), request))

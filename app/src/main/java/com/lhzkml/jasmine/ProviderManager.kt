@@ -329,36 +329,78 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("mcp_enabled", enabled).apply()
     }
 
+    /** MCP 传输类型 */
+    enum class McpTransportType {
+        STREAMABLE_HTTP,
+        SSE
+    }
+
     /**
      * MCP 服务器配置
      * @param name 显示名称
      * @param url 服务器 URL
-     * @param headers 自定义请求头（key=value 格式，换行分隔）
+     * @param transportType 传输类型（Streamable HTTP 或 SSE）
+     * @param headerName 请求头名称（如 Authorization）
+     * @param headerValue 请求头值（如 Bearer xxx）
      * @param enabled 是否启用
      */
     data class McpServerConfig(
         val name: String,
         val url: String,
-        val headers: String = "",
+        val transportType: McpTransportType = McpTransportType.STREAMABLE_HTTP,
+        val headerName: String = "",
+        val headerValue: String = "",
         val enabled: Boolean = true
     )
 
     /**
      * 获取所有 MCP 服务器配置
-     * 存储格式：JSON 数组字符串
+     * v2 格式：name:::url:::transportType:::headerName:::headerValue:::enabled
      */
     fun getMcpServers(ctx: Context): List<McpServerConfig> {
-        val raw = prefs(ctx).getString("mcp_servers", null) ?: return emptyList()
+        val raw = prefs(ctx).getString("mcp_servers_v2", null)
+        if (raw != null) {
+            return try {
+                raw.split("|||").filter { it.isNotBlank() }.map { entry ->
+                    val parts = entry.split(":::")
+                    McpServerConfig(
+                        name = parts.getOrElse(0) { "" },
+                        url = parts.getOrElse(1) { "" },
+                        transportType = try {
+                            McpTransportType.valueOf(parts.getOrElse(2) { "STREAMABLE_HTTP" })
+                        } catch (_: Exception) { McpTransportType.STREAMABLE_HTTP },
+                        headerName = parts.getOrElse(3) { "" },
+                        headerValue = parts.getOrElse(4) { "" },
+                        enabled = parts.getOrElse(5) { "true" }.toBooleanStrictOrNull() ?: true
+                    )
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        // 兼容旧版 v1 格式迁移
+        val oldRaw = prefs(ctx).getString("mcp_servers", null) ?: return emptyList()
         return try {
-            raw.split("|||").filter { it.isNotBlank() }.map { entry ->
+            val migrated = oldRaw.split("|||").filter { it.isNotBlank() }.map { entry ->
                 val parts = entry.split(":::")
+                val oldHeaders = parts.getOrElse(2) { "" }
+                // 尝试从旧的 key=value 格式提取第一个 header
+                val firstHeader = oldHeaders.lines().firstOrNull { it.contains('=') }
+                val hName = firstHeader?.substringBefore('=')?.trim() ?: ""
+                val hValue = firstHeader?.substringAfter('=')?.trim() ?: ""
                 McpServerConfig(
                     name = parts.getOrElse(0) { "" },
                     url = parts.getOrElse(1) { "" },
-                    headers = parts.getOrElse(2) { "" },
+                    transportType = McpTransportType.STREAMABLE_HTTP,
+                    headerName = hName,
+                    headerValue = hValue,
                     enabled = parts.getOrElse(3) { "true" }.toBooleanStrictOrNull() ?: true
                 )
             }
+            // 保存为新格式
+            setMcpServers(ctx, migrated)
+            migrated
         } catch (_: Exception) {
             emptyList()
         }
@@ -366,10 +408,10 @@ object ProviderManager {
 
     /** 保存所有 MCP 服务器配置 */
     fun setMcpServers(ctx: Context, servers: List<McpServerConfig>) {
-        val raw = servers.joinToString("|||") { server ->
-            "${server.name}:::${server.url}:::${server.headers}:::${server.enabled}"
+        val raw = servers.joinToString("|||") { s ->
+            "${s.name}:::${s.url}:::${s.transportType.name}:::${s.headerName}:::${s.headerValue}:::${s.enabled}"
         }
-        prefs(ctx).edit().putString("mcp_servers", raw).apply()
+        prefs(ctx).edit().putString("mcp_servers_v2", raw).apply()
     }
 
     /** 添加 MCP 服务器 */

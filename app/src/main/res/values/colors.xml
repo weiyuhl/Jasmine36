@@ -16,4 +16,8 @@
     <color name="user_bubble_text">#FFFFFFFF</color>
     <color name="ai_bubble">#FFF0F0F0</color>
     <color name="ai_bubble_text">#FF1A1A1A</color>
+    <color name="status_connected">#FF4CAF50</color>
+    <color name="status_failed">#FFF44336</color>
+    <color name="status_unknown">#FF9E9E9E</color>
+    <color name="status_testing">#FFFFC107</color>
 </resources>
