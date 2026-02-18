@@ -2,81 +2,132 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:background="@drawable/bg_card"
-    android:gravity="center_vertical"
-    android:paddingHorizontal="16dp"
-    android:paddingVertical="14dp"
     android:layout_marginBottom="10dp"
     android:clickable="true"
     android:focusable="true">
 
-    <!-- 连接状态指示灯 -->
-    <View
-        android:id="@+id/viewStatus"
-        android:layout_width="10dp"
-        android:layout_height="10dp"
-        android:background="@color/status_unknown"
-        android:layout_marginEnd="12dp" />
-
-    <!-- 服务器信息 -->
+    <!-- 主行：状态灯 + 信息 + 按钮 -->
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="14dp">
 
+        <!-- 连接状态指示灯 -->
+        <View
+            android:id="@+id/viewStatus"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:background="@color/status_unknown"
+            android:layout_marginEnd="12dp" />
+
+        <!-- 服务器信息 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="15sp"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tvUrl"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:id="@+id/tvTransport"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+
+        <!-- 重新连接按钮 -->
         <TextView
-            android:id="@+id/tvName"
+            android:id="@+id/btnTest"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="15sp"
-            android:textColor="@color/text_primary"
-            android:textStyle="bold"
-            android:singleLine="true"
-            android:ellipsize="end" />
+            android:text="重连"
+            android:textSize="13sp"
+            android:textColor="@color/generating_green"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- 更多操作 -->
+        <TextView
+            android:id="@+id/btnMore"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⋮"
+            android:textSize="20sp"
+            android:textColor="@color/text_secondary"
+            android:paddingHorizontal="8dp"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <!-- 工具列表区域（连接成功后显示） -->
+    <LinearLayout
+        android:id="@+id/layoutTools"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="38dp"
+        android:paddingBottom="12dp"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider"
+            android:layout_marginBottom="8dp" />
 
         <TextView
-            android:id="@+id/tvUrl"
+            android:id="@+id/tvToolsHeader"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="12sp"
             android:textColor="@color/text_secondary"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:layout_marginTop="2dp" />
+            android:layout_marginBottom="4dp" />
 
         <TextView
-            android:id="@+id/tvTransport"
-            android:layout_width="wrap_content"
+            android:id="@+id/tvToolsList"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="11sp"
-            android:textColor="@color/text_secondary"
-            android:layout_marginTop="2dp" />
+            android:textSize="12sp"
+            android:textColor="@color/text_primary"
+            android:lineSpacingExtra="3dp" />
     </LinearLayout>
 
-    <!-- 测试连接按钮 -->
+    <!-- 连接失败信息 -->
     <TextView
-        android:id="@+id/btnTest"
-        android:layout_width="wrap_content"
+        android:id="@+id/tvError"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="测试"
-        android:textSize="13sp"
-        android:textColor="@color/generating_green"
-        android:padding="8dp"
-        android:clickable="true"
-        android:focusable="true" />
-
-    <!-- 更多操作 -->
-    <TextView
-        android:id="@+id/btnMore"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="⋮"
-        android:textSize="20sp"
-        android:textColor="@color/text_secondary"
-        android:paddingHorizontal="8dp"
-        android:clickable="true"
-        android:focusable="true" />
+        android:paddingHorizontal="38dp"
+        android:paddingBottom="12dp"
+        android:textSize="12sp"
+        android:textColor="@color/status_failed"
+        android:visibility="gone" />
 
 </LinearLayout>

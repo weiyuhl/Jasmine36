@@ -153,14 +153,26 @@ class McpServerEditActivity : AppCompatActivity() {
                 client.close()
 
                 withContext(Dispatchers.Main) {
-                    tvTestResult.text = "✅ 连接成功，发现 ${tools.size} 个工具"
+                    val sb = StringBuilder()
+                    sb.appendLine("连接成功，发现 ${tools.size} 个工具：")
+                    tools.forEach { tool ->
+                        val desc = tool.description?.let { d ->
+                            if (d.length > 50) d.take(50) + "..." else d
+                        } ?: ""
+                        if (desc.isNotEmpty()) {
+                            sb.appendLine("  ${tool.name} — $desc")
+                        } else {
+                            sb.appendLine("  ${tool.name}")
+                        }
+                    }
+                    tvTestResult.text = sb.toString().trimEnd()
                     tvTestResult.setTextColor(getColor(R.color.status_connected))
                     btnTestConnection.isEnabled = true
                     btnTestConnection.text = "测试连接"
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    tvTestResult.text = "❌ 连接失败: ${e.message}"
+                    tvTestResult.text = "连接失败: ${e.message}"
                     tvTestResult.setTextColor(getColor(R.color.status_failed))
                     btnTestConnection.isEnabled = true
                     btnTestConnection.text = "测试连接"

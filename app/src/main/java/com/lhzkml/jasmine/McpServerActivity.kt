@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -13,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
+import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolDefinition
 import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +23,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * MCP 服务器管理界面
- * 显示已配置的 MCP 服务器列表，支持添加/编辑/删除/测试连接。
+ * 进入时自动连接所有启用的服务器，显示连接状态和工具列表。
  */
 class McpServerActivity : AppCompatActivity() {
 
@@ -34,8 +36,20 @@ class McpServerActivity : AppCompatActivity() {
     private lateinit var tvEmpty: TextView
     private val adapter = McpServerAdapter()
 
-    /** 每个服务器的连接状态：null=未测试, true=连接成功, false=连接失败 */
-    private val connectionStatus = mutableMapOf<Int, Boolean?>()
+    /**
+     * 连接结果：
+     * - 不在 map 中 = 未测试
+     * - ConnectionResult(true, tools) = 连接成功
+     * - ConnectionResult(false, error=...) = 连接失败
+     * - ConnectionResult(null) = 连接中
+     */
+    data class ConnectionResult(
+        val success: Boolean? = null, // null=连接中, true=成功, false=失败
+        val tools: List<McpToolDefinition> = emptyList(),
+        val error: String? = null
+    )
+
+    private val connectionResults = mutableMapOf<Int, ConnectionResult>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +60,7 @@ class McpServerActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.btnAdd).setOnClickListener {
+            @Suppress("DEPRECATION")
             startActivityForResult(
                 Intent(this, McpServerEditActivity::class.java),
                 REQUEST_EDIT
@@ -55,44 +70,58 @@ class McpServerActivity : AppCompatActivity() {
         rvServers.layoutManager = LinearLayoutManager(this)
         rvServers.adapter = adapter
 
-        adapter.onTestClick = { index, _ -> testConnection(index) }
+        adapter.onTestClick = { index, _ -> connectServer(index) }
         adapter.onMoreClick = { index, server -> showServerActions(index, server) }
         adapter.onItemClick = { index, _ ->
             val intent = Intent(this, McpServerEditActivity::class.java)
             intent.putExtra(EXTRA_EDIT_INDEX, index)
+            @Suppress("DEPRECATION")
             startActivityForResult(intent, REQUEST_EDIT)
         }
 
         refreshList()
+        // 自动连接所有启用的服务器
+        autoConnectAll()
     }
 
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_EDIT && resultCode == RESULT_OK) {
-            connectionStatus.clear()
+            connectionResults.clear()
             refreshList()
+            autoConnectAll()
         }
     }
 
     private fun refreshList() {
         val servers = ProviderManager.getMcpServers(this)
-        adapter.submitList(servers, connectionStatus)
+        adapter.submitList(servers, connectionResults)
         tvEmpty.visibility = if (servers.isEmpty()) View.VISIBLE else View.GONE
         rvServers.visibility = if (servers.isEmpty()) View.GONE else View.VISIBLE
     }
 
-    private fun testConnection(index: Int) {
+    /** 自动连接所有启用的服务器 */
+    private fun autoConnectAll() {
+        val servers = ProviderManager.getMcpServers(this)
+        servers.forEachIndexed { index, server ->
+            if (server.enabled && server.url.isNotBlank()) {
+                connectServer(index)
+            }
+        }
+    }
+
+    private fun connectServer(index: Int) {
         val servers = ProviderManager.getMcpServers(this)
         if (index !in servers.indices) return
         val server = servers[index]
 
-        // 标记为测试中（用 null 表示）
-        connectionStatus[index] = null
-        adapter.submitList(servers, connectionStatus)
+        // 标记为连接中
+        connectionResults[index] = ConnectionResult(success = null)
+        refreshList()
 
         CoroutineScope(Dispatchers.IO).launch {
-            val success = try {
+            try {
                 val headers = buildHeaders(server)
                 val client = when (server.transportType) {
                     ProviderManager.McpTransportType.SSE ->
@@ -103,16 +132,22 @@ class McpServerActivity : AppCompatActivity() {
                 client.connect()
                 val tools = client.listTools()
                 client.close()
-                true
-            } catch (_: Exception) {
-                false
-            }
 
-            withContext(Dispatchers.Main) {
-                connectionStatus[index] = success
-                adapter.submitList(ProviderManager.getMcpServers(this@McpServerActivity), connectionStatus)
-                val msg = if (success) "✅ ${server.name} 连接成功" else "❌ ${server.name} 连接失败"
-                Toast.makeText(this@McpServerActivity, msg, Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) {
+                    connectionResults[index] = ConnectionResult(
+                        success = true,
+                        tools = tools
+                    )
+                    refreshList()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    connectionResults[index] = ConnectionResult(
+                        success = false,
+                        error = e.message ?: "未知错误"
+                    )
+                    refreshList()
+                }
             }
         }
     }
@@ -130,19 +165,22 @@ class McpServerActivity : AppCompatActivity() {
                     0 -> {
                         val intent = Intent(this, McpServerEditActivity::class.java)
                         intent.putExtra(EXTRA_EDIT_INDEX, index)
+                        @Suppress("DEPRECATION")
                         startActivityForResult(intent, REQUEST_EDIT)
                     }
                     1 -> {
                         ProviderManager.updateMcpServer(this, index, server.copy(enabled = !server.enabled))
-                        connectionStatus.remove(index)
+                        connectionResults.remove(index)
                         refreshList()
+                        // 如果刚启用，自动连接
+                        if (!server.enabled) connectServer(index)
                     }
                     2 -> {
                         AlertDialog.Builder(this)
                             .setMessage("确定删除 ${server.name}？")
                             .setPositiveButton("删除") { _, _ ->
                                 ProviderManager.removeMcpServer(this, index)
-                                connectionStatus.clear()
+                                connectionResults.clear()
                                 refreshList()
                             }
                             .setNegativeButton("取消", null)
@@ -166,15 +204,15 @@ class McpServerActivity : AppCompatActivity() {
 
     private class McpServerAdapter : RecyclerView.Adapter<McpServerAdapter.VH>() {
         private var items = listOf<ProviderManager.McpServerConfig>()
-        private var statusMap = mapOf<Int, Boolean?>()
+        private var resultMap = mapOf<Int, ConnectionResult>()
 
         var onTestClick: ((Int, ProviderManager.McpServerConfig) -> Unit)? = null
         var onMoreClick: ((Int, ProviderManager.McpServerConfig) -> Unit)? = null
         var onItemClick: ((Int, ProviderManager.McpServerConfig) -> Unit)? = null
 
-        fun submitList(list: List<ProviderManager.McpServerConfig>, status: Map<Int, Boolean?>) {
+        fun submitList(list: List<ProviderManager.McpServerConfig>, results: Map<Int, ConnectionResult>) {
             items = list
-            statusMap = status.toMap()
+            resultMap = results.toMap()
             notifyDataSetChanged()
         }
 
@@ -188,6 +226,9 @@ class McpServerActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val server = items[position]
+            val result = resultMap[position]
+            val ctx = holder.itemView.context
+
             holder.tvName.text = server.name
             holder.tvUrl.text = server.url
 
@@ -198,27 +239,50 @@ class McpServerActivity : AppCompatActivity() {
             val enabledLabel = if (server.enabled) "" else " · 已禁用"
             holder.tvTransport.text = "$transportLabel$enabledLabel"
 
-            // 设置状态指示灯颜色（圆形）
+            // 状态指示灯
             val statusColor = when {
-                !server.enabled -> holder.itemView.context.getColor(R.color.status_unknown)
-                position in statusMap -> {
-                    val connected = statusMap[position]
-                    when (connected) {
-                        true -> holder.itemView.context.getColor(R.color.status_connected)
-                        false -> holder.itemView.context.getColor(R.color.status_failed)
-                        null -> holder.itemView.context.getColor(R.color.status_testing)
-                    }
-                }
-                else -> holder.itemView.context.getColor(R.color.status_unknown)
+                !server.enabled -> ctx.getColor(R.color.status_unknown)
+                result == null -> ctx.getColor(R.color.status_unknown)
+                result.success == null -> ctx.getColor(R.color.status_testing)
+                result.success -> ctx.getColor(R.color.status_connected)
+                else -> ctx.getColor(R.color.status_failed)
             }
-            val dot = GradientDrawable().apply {
+            holder.viewStatus.background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(statusColor)
             }
-            holder.viewStatus.background = dot
 
-            // 禁用的服务器半透明
             holder.itemView.alpha = if (server.enabled) 1f else 0.5f
+
+            // 工具列表（连接成功时显示）
+            if (result != null && result.success == true && result.tools.isNotEmpty()) {
+                holder.layoutTools.visibility = View.VISIBLE
+                holder.tvError.visibility = View.GONE
+                holder.tvToolsHeader.text = "可用工具 (${result.tools.size})"
+                holder.tvToolsList.text = result.tools.joinToString("\n") { tool ->
+                    val desc = tool.description?.let { d ->
+                        if (d.length > 60) d.take(60) + "..." else d
+                    } ?: ""
+                    if (desc.isNotEmpty()) "${tool.name} — $desc" else tool.name
+                }
+            } else if (result != null && result.success == false) {
+                holder.layoutTools.visibility = View.GONE
+                holder.tvError.visibility = View.VISIBLE
+                holder.tvError.text = "连接失败: ${result.error}"
+            } else if (result != null && result.success == null) {
+                holder.layoutTools.visibility = View.GONE
+                holder.tvError.visibility = View.VISIBLE
+                holder.tvError.setTextColor(ctx.getColor(R.color.status_testing))
+                holder.tvError.text = "连接中..."
+            } else {
+                holder.layoutTools.visibility = View.GONE
+                holder.tvError.visibility = View.GONE
+            }
+
+            // 失败状态恢复颜色
+            if (result?.success == false) {
+                holder.tvError.setTextColor(ctx.getColor(R.color.status_failed))
+            }
 
             holder.btnTest.setOnClickListener { onTestClick?.invoke(position, server) }
             holder.btnMore.setOnClickListener { onMoreClick?.invoke(position, server) }
@@ -232,6 +296,10 @@ class McpServerActivity : AppCompatActivity() {
             val tvTransport: TextView = view.findViewById(R.id.tvTransport)
             val btnTest: TextView = view.findViewById(R.id.btnTest)
             val btnMore: TextView = view.findViewById(R.id.btnMore)
+            val layoutTools: LinearLayout = view.findViewById(R.id.layoutTools)
+            val tvToolsHeader: TextView = view.findViewById(R.id.tvToolsHeader)
+            val tvToolsList: TextView = view.findViewById(R.id.tvToolsList)
+            val tvError: TextView = view.findViewById(R.id.tvError)
         }
     }
 }
