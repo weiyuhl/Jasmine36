@@ -2,7 +2,11 @@ package com.lhzkml.jasmine.core.agent.tools.a2a.server
 
 import com.lhzkml.jasmine.core.agent.tools.a2a.*
 import com.lhzkml.jasmine.core.agent.tools.a2a.model.*
+import com.lhzkml.jasmine.core.agent.tools.a2a.server.notifications.PushNotificationConfigStorage
+import com.lhzkml.jasmine.core.agent.tools.a2a.server.notifications.PushNotificationSender
 import com.lhzkml.jasmine.core.agent.tools.a2a.transport.*
+import com.lhzkml.jasmine.core.agent.tools.a2a.utils.KeyedMutex
+import com.lhzkml.jasmine.core.agent.tools.a2a.utils.withLock
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -18,6 +22,8 @@ import kotlinx.coroutines.flow.*
  * @param agentCardExtended 扩展名片（认证后返回）
  * @param taskStorage 任务存储
  * @param messageStorage 消息存储
+ * @param pushConfigStorage 推送通知配置存储
+ * @param pushSender 推送通知发送器
  * @param idGenerator ID 生成器
  * @param coroutineScope 协程作用域
  */
@@ -27,11 +33,26 @@ open class A2AServer(
     protected val agentCardExtended: AgentCard? = null,
     protected val taskStorage: TaskStorage = InMemoryTaskStorage(),
     protected val messageStorage: MessageStorage = InMemoryMessageStorage(),
+    protected val pushConfigStorage: PushNotificationConfigStorage? = null,
+    protected val pushSender: PushNotificationSender? = null,
     protected val idGenerator: IdGenerator = UuidIdGenerator,
     protected val coroutineScope: CoroutineScope = CoroutineScope(SupervisorJob())
 ) : RequestHandler {
 
-    protected open val sessionManager = SessionManager(coroutineScope)
+    /** 用于按任务 ID 锁定特定任务的互斥锁 */
+    protected val tasksMutex: KeyedMutex<String> = KeyedMutex()
+
+    /** 取消操作的特殊锁键 */
+    protected fun cancelKey(taskId: String): String = "cancel:$taskId"
+
+    protected open val sessionManager: SessionManager = SessionManager(
+        coroutineScope = coroutineScope,
+        cancelKey = ::cancelKey,
+        tasksMutex = tasksMutex,
+        taskStorage = taskStorage,
+        pushConfigStorage = pushConfigStorage,
+        pushSender = pushSender
+    )
 
     override suspend fun onGetAuthenticatedExtendedAgentCard(
         request: Request<Nothing?>,
@@ -45,7 +66,7 @@ open class A2AServer(
         return Response(
             data = agentCardExtended
                 ?: throw A2AAuthenticatedExtendedCardNotConfiguredException(
-                    "Extended agent card is supported but not configured"
+                    "Extended agent card is supported but not configured on the server"
                 ),
             id = request.id
         )
@@ -53,7 +74,9 @@ open class A2AServer(
 
     /**
      * 消息发送的通用逻辑
-     * 返回事件流
+     * 完成所有设置和验证，创建事件流。
+     *
+     * @return Agent 的事件流
      */
     protected open fun onSendMessageCommon(
         request: Request<MessageSendParams>,
@@ -67,59 +90,74 @@ open class A2AServer(
 
         val taskId = message.taskId ?: idGenerator.generateTaskId(message)
 
-        // 如果有正在运行的同任务会话，等待完成
-        sessionManager.getSession(taskId)?.join()
+        val (session, monitoringStarted) = tasksMutex.withLock(taskId) {
+            // 如果同一任务有正在运行的会话，等待其完成
+            sessionManager.getSession(taskId)?.join()
 
-        // 检查消息是否关联已有任务
-        val task: Task? = message.taskId?.let { tid ->
-            taskStorage.get(tid, historyLength = 0, includeArtifacts = false)
-                ?: throw A2ATaskNotFoundException("Task '$tid' not found")
-        }
-
-        // 创建事件处理器
-        val eventProcessor = SessionEventProcessor(
-            contextId = task?.contextId
-                ?: message.contextId
-                ?: idGenerator.generateContextId(message),
-            taskId = taskId,
-            taskStorage = taskStorage
-        )
-
-        // 创建请求上下文
-        val requestContext = RequestContext(
-            callContext = ctx,
-            params = request.data,
-            taskStorage = ContextTaskStorage(eventProcessor.contextId, taskStorage),
-            messageStorage = ContextMessageStorage(eventProcessor.contextId, messageStorage),
-            contextId = eventProcessor.contextId,
-            taskId = eventProcessor.taskId,
-            task = task
-        )
-
-        // 创建懒启动会话
-        val session = LazySession(
-            coroutineScope = coroutineScope,
-            eventProcessor = eventProcessor
-        ) {
-            agentExecutor.execute(requestContext, eventProcessor)
-        }
-
-        val monitoringJob = sessionManager.addSession(session)
-
-        // 收集事件并转发
-        val eventCollectionFinished = Job()
-
-        launch {
-            session.events.collect { event ->
-                send(Response(data = event, id = request.id))
+            // 检查消息是否关联已有任务
+            val task: Task? = message.taskId?.let { tid ->
+                taskStorage.get(tid, historyLength = 0, includeArtifacts = false)
+                    ?: throw A2ATaskNotFoundException("Task '$tid' not found")
             }
+
+            // 创建事件处理器
+            val eventProcessor = SessionEventProcessor(
+                contextId = task?.contextId
+                    ?: message.contextId
+                    ?: idGenerator.generateContextId(message),
+                taskId = taskId,
+                taskStorage = taskStorage
+            )
+
+            // 创建请求上下文
+            val requestContext = RequestContext(
+                callContext = ctx,
+                params = request.data,
+                taskStorage = ContextTaskStorage(eventProcessor.contextId, taskStorage),
+                messageStorage = ContextMessageStorage(eventProcessor.contextId, messageStorage),
+                contextId = eventProcessor.contextId,
+                taskId = eventProcessor.taskId,
+                task = task
+            )
+
+            LazySession(
+                coroutineScope = coroutineScope,
+                eventProcessor = eventProcessor
+            ) {
+                agentExecutor.execute(requestContext, eventProcessor)
+            }.let {
+                it to sessionManager.addSession(it)
+            }
+        }
+
+        // 事件收集已启动的信号
+        val eventCollectionStarted: CompletableJob = Job()
+        // 所有事件已收集的信号
+        val eventCollectionFinished: CompletableJob = Job()
+
+        // 订阅事件流并开始发送
+        launch {
+            session.events
+                .onStart {
+                    eventCollectionStarted.complete()
+                }
+                .collect { event ->
+                    send(Response(data = event, id = request.id))
+                }
             eventCollectionFinished.complete()
         }
 
-        monitoringJob.join()
+        // 确保事件收集已设置好以流式传输响应中的事件
+        eventCollectionStarted.join()
+        // 确保监控已准备好监控会话
+        monitoringStarted.join()
 
-        // 启动 Agent 执行并等待完成
+        /*
+         启动会话以执行 agent 并等待其完成。
+         使用 await 以传播 agent 执行抛出的任何异常。
+         */
         session.agentJob.await()
+        // 确保所有事件已收集并发送
         eventCollectionFinished.join()
     }
 
@@ -127,27 +165,28 @@ open class A2AServer(
         request: Request<MessageSendParams>,
         ctx: ServerCallContext
     ): Response<CommunicationEvent> {
-        val config = request.data.configuration
+        val messageConfiguration = request.data.configuration
         val eventStream = onSendMessageCommon(request, ctx)
 
-        val event = if (config?.blocking == true) {
+        val event = if (messageConfiguration?.blocking == true) {
             eventStream.lastOrNull()
         } else {
             eventStream.firstOrNull()
-        } ?: throw IllegalStateException("Event stream is empty")
+        } ?: throw IllegalStateException("Can't get response from the agent: event stream is empty")
 
         return when (val eventData = event.data) {
             is Message -> Response(data = eventData, id = event.id)
-            is TaskEvent -> {
-                val task = taskStorage.get(
-                    eventData.taskId,
-                    historyLength = config?.historyLength,
-                    includeArtifacts = true
-                ) ?: throw A2ATaskNotFoundException(
-                    "Task '${eventData.taskId}' not found after agent execution"
-                )
-                Response(data = task, id = event.id)
-            }
+            is TaskEvent ->
+                taskStorage
+                    .get(
+                        eventData.taskId,
+                        historyLength = messageConfiguration?.historyLength,
+                        includeArtifacts = true
+                    )
+                    ?.let { Response(data = it, id = event.id) }
+                    ?: throw A2ATaskNotFoundException(
+                        "Task '${eventData.taskId}' not found after the agent execution"
+                    )
         }
     }
 
@@ -163,10 +202,10 @@ open class A2AServer(
         request: Request<TaskQueryParams>,
         ctx: ServerCallContext
     ): Response<Task> {
-        val params = request.data
+        val taskParams = request.data
         return Response(
-            data = taskStorage.get(params.id, historyLength = params.historyLength, includeArtifacts = false)
-                ?: throw A2ATaskNotFoundException("Task '${params.id}' not found"),
+            data = taskStorage.get(taskParams.id, historyLength = taskParams.historyLength, includeArtifacts = false)
+                ?: throw A2ATaskNotFoundException("Task '${taskParams.id}' not found"),
             id = request.id
         )
     }
@@ -175,48 +214,75 @@ open class A2AServer(
         request: Request<TaskIdParams>,
         ctx: ServerCallContext
     ): Response<Task> {
-        val taskId = request.data.id
-        val session = sessionManager.getSession(taskId)
+        val taskParams = request.data
+        val taskId = taskParams.id
 
-        val task = taskStorage.get(taskId, historyLength = 0, includeArtifacts = true)
-            ?: throw A2ATaskNotFoundException("Task '$taskId' not found")
+        /*
+         取消使用两级锁。第一级是标准任务锁。
+         如果已被其他请求持有，忽略它，因为取消优先。
+         如果未被持有，获取它以在取消进行时阻止新请求。
+         */
+        val lockAcquired = tasksMutex.tryLock(taskId)
 
-        if (session == null && task.status.state.terminal) {
-            throw A2ATaskNotCancelableException(
-                "Task '$taskId' is already in terminal state ${task.status.state}"
-            )
-        }
+        return try {
+            /*
+             第二级是每任务取消锁。
+             取消时始终获取，以序列化取消操作并允许它们在常规任务锁被持有时继续。
+             它防止重叠取消并延迟会话拆除，使事件处理器不会在 agent job 取消后立即关闭。
+             这允许取消处理器通过同一处理器和会话发出额外的取消事件，
+             确保现有订阅者接收所有事件。
+             */
+            tasksMutex.withLock(cancelKey(taskId)) {
+                val session = sessionManager.getSession(taskParams.id)
 
-        val eventProcessor = session?.eventProcessor ?: SessionEventProcessor(
-            contextId = task.contextId,
-            taskId = task.id,
-            taskStorage = taskStorage
-        )
+                val task = taskStorage.get(taskParams.id, historyLength = 0, includeArtifacts = true)
+                    ?: throw A2ATaskNotFoundException("Task '${taskParams.id}' not found")
 
-        val requestContext = RequestContext(
-            callContext = ctx,
-            params = request.data,
-            taskStorage = ContextTaskStorage(eventProcessor.contextId, taskStorage),
-            messageStorage = ContextMessageStorage(eventProcessor.contextId, messageStorage),
-            contextId = eventProcessor.contextId,
-            taskId = eventProcessor.taskId,
-            task = task
-        )
-
-        agentExecutor.cancel(requestContext, eventProcessor, session?.agentJob)
-
-        return Response(
-            data = taskStorage.get(taskId, historyLength = 0, includeArtifacts = true)
-                ?.also {
-                    if (it.status.state != TaskState.Canceled) {
-                        throw A2ATaskNotCancelableException(
-                            "Task '$taskId' was not canceled successfully, current state is ${it.status.state}"
-                        )
-                    }
+                // 任务未运行，检查是否已在终态
+                if (session == null && task.status.state.terminal) {
+                    throw A2ATaskNotCancelableException(
+                        "Task '${taskParams.id}' is already in terminal state ${task.status.state}"
+                    )
                 }
-                ?: throw A2ATaskNotFoundException("Task '$taskId' not found"),
-            id = request.id
-        )
+
+                val eventProcessor = session?.eventProcessor ?: SessionEventProcessor(
+                    contextId = task.contextId,
+                    taskId = task.id,
+                    taskStorage = taskStorage
+                )
+
+                val requestContext = RequestContext(
+                    callContext = ctx,
+                    params = request.data,
+                    taskStorage = ContextTaskStorage(eventProcessor.contextId, taskStorage),
+                    messageStorage = ContextMessageStorage(eventProcessor.contextId, messageStorage),
+                    contextId = eventProcessor.contextId,
+                    taskId = eventProcessor.taskId,
+                    task = task
+                )
+
+                // 尝试取消 agent 执行并等待完成
+                agentExecutor.cancel(requestContext, eventProcessor, session?.agentJob)
+
+                // 返回最终任务状态
+                Response(
+                    data = taskStorage.get(taskParams.id, historyLength = 0, includeArtifacts = true)
+                        ?.also {
+                            if (it.status.state != TaskState.Canceled) {
+                                throw A2ATaskNotCancelableException(
+                                    "Task '${taskParams.id}' was not canceled successfully, current state is ${it.status.state}"
+                                )
+                            }
+                        }
+                        ?: throw A2ATaskNotFoundException("Task '${taskParams.id}' not found"),
+                    id = request.id
+                )
+            }
+        } finally {
+            if (lockAcquired) {
+                tasksMutex.unlock(taskId)
+            }
+        }
     }
 
     override fun onResubscribeTask(
@@ -224,7 +290,8 @@ open class A2AServer(
         ctx: ServerCallContext
     ): Flow<Response<Event>> = flow {
         checkStreamingSupport()
-        val session = sessionManager.getSession(request.data.id) ?: return@flow
+        val taskParams = request.data
+        val session = sessionManager.getSession(taskParams.id) ?: return@flow
         session.events
             .map { event -> Response(data = event, id = request.id) }
             .collect(this)
@@ -234,18 +301,29 @@ open class A2AServer(
         request: Request<TaskPushNotificationConfig>,
         ctx: ServerCallContext
     ): Response<TaskPushNotificationConfig> {
-        checkPushNotificationsSupported()
-        // 简化实现：直接返回（完整实现需要 PushNotificationConfigStorage）
-        return Response(data = request.data, id = request.id)
+        val pushStorage = storageIfPushNotificationSupported()
+        val taskPushConfig = request.data
+        pushStorage.save(taskPushConfig.taskId, taskPushConfig.pushNotificationConfig)
+        return Response(data = taskPushConfig, id = request.id)
     }
 
     override suspend fun onGetTaskPushNotificationConfig(
         request: Request<TaskPushNotificationConfigParams>,
         ctx: ServerCallContext
     ): Response<TaskPushNotificationConfig> {
-        checkPushNotificationsSupported()
-        throw A2APushNotificationNotSupportedException(
-            "Push notification config storage not configured"
+        val pushStorage = storageIfPushNotificationSupported()
+        val pushConfigParams = request.data
+        val pushConfig = pushStorage.get(pushConfigParams.id, pushConfigParams.pushNotificationConfigId)
+            ?: throw NoSuchElementException(
+                "Can't find push notification config with id '${pushConfigParams.pushNotificationConfigId}' " +
+                    "for task '${pushConfigParams.id}'"
+            )
+        return Response(
+            data = TaskPushNotificationConfig(
+                taskId = pushConfigParams.id,
+                pushNotificationConfig = pushConfig
+            ),
+            id = request.id
         )
     }
 
@@ -253,28 +331,44 @@ open class A2AServer(
         request: Request<TaskIdParams>,
         ctx: ServerCallContext
     ): Response<List<TaskPushNotificationConfig>> {
-        checkPushNotificationsSupported()
-        return Response(data = emptyList(), id = request.id)
+        val pushStorage = storageIfPushNotificationSupported()
+        val taskParams = request.data
+        return Response(
+            data = pushStorage
+                .getAll(taskParams.id)
+                .map { TaskPushNotificationConfig(taskId = taskParams.id, pushNotificationConfig = it) },
+            id = request.id
+        )
     }
 
     override suspend fun onDeleteTaskPushNotificationConfig(
         request: Request<TaskPushNotificationConfigParams>,
         ctx: ServerCallContext
     ): Response<Nothing?> {
-        checkPushNotificationsSupported()
+        val pushStorage = storageIfPushNotificationSupported()
+        val taskPushConfigParams = request.data
+        pushStorage.delete(taskPushConfigParams.id, taskPushConfigParams.pushNotificationConfigId)
         return Response(data = null, id = request.id)
     }
 
     protected open fun checkStreamingSupport() {
         if (agentCard.capabilities.streaming != true) {
-            throw A2AUnsupportedOperationException("Streaming is not supported")
+            throw A2AUnsupportedOperationException("Streaming is not supported by the server")
         }
     }
 
-    protected open fun checkPushNotificationsSupported() {
+    protected open fun storageIfPushNotificationSupported(): PushNotificationConfigStorage {
         if (agentCard.capabilities.pushNotifications != true) {
-            throw A2APushNotificationNotSupportedException("Push notifications are not supported")
+            throw A2APushNotificationNotSupportedException(
+                "Push notifications are not supported by the server"
+            )
         }
+        if (pushConfigStorage == null) {
+            throw A2APushNotificationNotSupportedException(
+                "Push notifications are supported, but not configured on the server"
+            )
+        }
+        return pushConfigStorage
     }
 
     /** 取消服务器及所有运行中的会话 */

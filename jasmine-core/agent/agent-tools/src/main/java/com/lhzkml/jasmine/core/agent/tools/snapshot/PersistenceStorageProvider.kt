@@ -4,20 +4,22 @@ package com.lhzkml.jasmine.core.agent.tools.snapshot
  * 持久化存储提供者接口
  * 完整移植 koog 的 PersistenceStorageProvider，定义检查点的存取操作。
  *
+ * @param Filter 过滤器类型，用于筛选检查点
+ *
  * 不同实现可以使用不同的存储后端：
  * - [InMemoryPersistenceStorageProvider] — 内存存储（测试用）
  * - [FilePersistenceStorageProvider] — 文件存储（Android 本地文件）
  * - [NoPersistenceStorageProvider] — 空实现（禁用持久化）
  */
-interface PersistenceStorageProvider {
-    /** 获取指定 Agent 的所有检查点 */
-    suspend fun getCheckpoints(agentId: String): List<AgentCheckpoint>
+interface PersistenceStorageProvider<Filter> {
+    /** 获取指定 Agent 的所有检查点，可选过滤 */
+    suspend fun getCheckpoints(agentId: String, filter: Filter? = null): List<AgentCheckpoint>
 
     /** 保存检查点 */
     suspend fun saveCheckpoint(agentId: String, checkpoint: AgentCheckpoint)
 
-    /** 获取最新的检查点 */
-    suspend fun getLatestCheckpoint(agentId: String): AgentCheckpoint?
+    /** 获取最新的检查点，可选过滤 */
+    suspend fun getLatestCheckpoint(agentId: String, filter: Filter? = null): AgentCheckpoint?
 
     /** 删除指定 Agent 的所有检查点 */
     suspend fun deleteCheckpoints(agentId: String)
@@ -27,10 +29,10 @@ interface PersistenceStorageProvider {
  * 空持久化提供者 — 不保存任何检查点
  * 参考 koog 的 NoPersistencyStorageProvider
  */
-class NoPersistenceStorageProvider : PersistenceStorageProvider {
-    override suspend fun getCheckpoints(agentId: String): List<AgentCheckpoint> = emptyList()
+class NoPersistenceStorageProvider<Filter> : PersistenceStorageProvider<Filter> {
+    override suspend fun getCheckpoints(agentId: String, filter: Filter?): List<AgentCheckpoint> = emptyList()
     override suspend fun saveCheckpoint(agentId: String, checkpoint: AgentCheckpoint) {}
-    override suspend fun getLatestCheckpoint(agentId: String): AgentCheckpoint? = null
+    override suspend fun getLatestCheckpoint(agentId: String, filter: Filter?): AgentCheckpoint? = null
     override suspend fun deleteCheckpoints(agentId: String) {}
 }
 
@@ -38,17 +40,17 @@ class NoPersistenceStorageProvider : PersistenceStorageProvider {
  * 内存持久化提供者 — 检查点保存在内存中
  * 参考 koog 的 InMemoryPersistencyStorageProvider
  */
-class InMemoryPersistenceStorageProvider : PersistenceStorageProvider {
+class InMemoryPersistenceStorageProvider<Filter> : PersistenceStorageProvider<Filter> {
     private val store = mutableMapOf<String, MutableList<AgentCheckpoint>>()
 
-    override suspend fun getCheckpoints(agentId: String): List<AgentCheckpoint> =
+    override suspend fun getCheckpoints(agentId: String, filter: Filter?): List<AgentCheckpoint> =
         store[agentId]?.toList() ?: emptyList()
 
     override suspend fun saveCheckpoint(agentId: String, checkpoint: AgentCheckpoint) {
         store.getOrPut(agentId) { mutableListOf() }.add(checkpoint)
     }
 
-    override suspend fun getLatestCheckpoint(agentId: String): AgentCheckpoint? =
+    override suspend fun getLatestCheckpoint(agentId: String, filter: Filter?): AgentCheckpoint? =
         store[agentId]?.maxByOrNull { it.createdAt }
 
     override suspend fun deleteCheckpoints(agentId: String) {
@@ -64,9 +66,9 @@ class InMemoryPersistenceStorageProvider : PersistenceStorageProvider {
  *
  * @param baseDir 基础目录路径
  */
-class FilePersistenceStorageProvider(
+class FilePersistenceStorageProvider<Filter>(
     private val baseDir: java.io.File
-) : PersistenceStorageProvider {
+) : PersistenceStorageProvider<Filter> {
 
     init {
         baseDir.mkdirs()
@@ -75,7 +77,7 @@ class FilePersistenceStorageProvider(
     private fun agentDir(agentId: String): java.io.File =
         java.io.File(baseDir, agentId).also { it.mkdirs() }
 
-    override suspend fun getCheckpoints(agentId: String): List<AgentCheckpoint> {
+    override suspend fun getCheckpoints(agentId: String, filter: Filter?): List<AgentCheckpoint> {
         val dir = agentDir(agentId)
         return dir.listFiles()?.filter { it.extension == "json" }?.mapNotNull { file ->
             try {
@@ -91,8 +93,8 @@ class FilePersistenceStorageProvider(
         file.writeText(serializeCheckpoint(checkpoint))
     }
 
-    override suspend fun getLatestCheckpoint(agentId: String): AgentCheckpoint? =
-        getCheckpoints(agentId).maxByOrNull { it.createdAt }
+    override suspend fun getLatestCheckpoint(agentId: String, filter: Filter?): AgentCheckpoint? =
+        getCheckpoints(agentId, filter).maxByOrNull { it.createdAt }
 
     override suspend fun deleteCheckpoints(agentId: String) {
         agentDir(agentId).deleteRecursively()
@@ -128,14 +130,12 @@ class FilePersistenceStorageProvider(
     }
 
     private fun deserializeCheckpoint(json: String): AgentCheckpoint {
-        // 简单解析 — 生产环境应使用 kotlinx.serialization 或 Gson
         val checkpointId = extractString(json, "checkpointId")
         val createdAt = extractLong(json, "createdAt")
         val nodePath = extractString(json, "nodePath")
         val lastInput = extractNullableString(json, "lastInput")
         val version = extractLong(json, "version")
 
-        // 消息历史简化解析
         val messages = mutableListOf<com.lhzkml.jasmine.core.prompt.model.ChatMessage>()
         val messagesStart = json.indexOf("\"messages\":[")
         if (messagesStart >= 0) {

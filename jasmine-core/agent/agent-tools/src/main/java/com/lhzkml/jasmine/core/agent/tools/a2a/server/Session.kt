@@ -3,6 +3,7 @@ package com.lhzkml.jasmine.core.agent.tools.a2a.server
 import com.lhzkml.jasmine.core.agent.tools.a2a.model.Event
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 
 /**
  * ID 生成器接口
@@ -23,81 +24,77 @@ object UuidIdGenerator : IdGenerator {
 }
 
 /**
- * 懒启动会话
- * 完整移植 koog 的 LazySession
+ * 会话
+ * 完整移植 koog 的 Session
  *
- * 会话在首次访问 agentJob 时启动 Agent 执行。
+ * 表示一个具有生命周期管理的会话。
+ *
+ * @property eventProcessor 会话事件处理器
+ * @property agentJob 与此会话执行关联的执行进程
  */
-class LazySession(
-    private val coroutineScope: CoroutineScope,
+class Session(
     val eventProcessor: SessionEventProcessor,
-    private val agentBlock: suspend () -> Unit
+    val agentJob: Deferred<Unit>
 ) {
-    /** Agent 执行任务 */
-    val agentJob: Deferred<Unit> by lazy {
-        coroutineScope.async {
-            try {
-                agentBlock()
-            } finally {
-                eventProcessor.close()
-            }
-        }
+    /** 与此会话关联的上下文 ID */
+    val contextId: String = eventProcessor.contextId
+
+    /** 与此会话关联的任务 ID */
+    val taskId: String = eventProcessor.taskId
+
+    /** 与此会话关联的事件流 */
+    val events: Flow<Event> = eventProcessor.events
+
+    /**
+     * 启动 [agentJob]（如果尚未启动）。
+     */
+    fun start() {
+        agentJob.start()
     }
 
-    /** 事件流 */
-    val events: Flow<Event> get() = eventProcessor.events
-
-    /** 等待会话完成 */
+    /**
+     * 挂起直到会话（即事件流和 agent job）完成。
+     * 先等待事件流完成，以避免过早触发 agent job。
+     * 假设事件流完成时，agent job 已经完成或被取消。
+     */
     suspend fun join() {
-        if ((this::agentJob as Lazy<*>).isInitialized()) {
-            try {
-                agentJob.await()
-            } catch (_: CancellationException) {
-                // 忽略取消
-            } catch (_: Exception) {
-                // 忽略执行异常
-            }
-        }
+        events.collect()
+        agentJob.join()
+    }
+
+    /**
+     * [start] 然后 [join] 会话。
+     */
+    suspend fun startAndJoin() {
+        start()
+        join()
+    }
+
+    /**
+     * 取消执行进程，等待其完成，然后关闭事件处理器。
+     */
+    suspend fun cancelAndJoin() {
+        agentJob.cancelAndJoin()
+        eventProcessor.close()
     }
 }
 
 /**
- * 会话管理器
- * 完整移植 koog 的 SessionManager
+ * 创建一个懒启动的 [Session] 实例
+ * 完整移植 koog 的 LazySession 工厂函数
  *
- * 管理活跃的 Agent 会话，支持按任务 ID 查找和监控。
+ * @param coroutineScope 用于运行 [block] 的协程作用域
+ * @param eventProcessor 会话事件处理器
+ * @param block 要执行的代码块
  */
-class SessionManager(
-    private val coroutineScope: CoroutineScope
-) {
-    private val sessions = mutableMapOf<String, LazySession>()
-    private val lock = Any()
-
-    /** 获取指定任务的会话 */
-    fun getSession(taskId: String): LazySession? = synchronized(lock) {
-        sessions[taskId]
-    }
-
-    /**
-     * 添加会话并启动监控
-     * @return 监控启动的 Job
-     */
-    fun addSession(session: LazySession): Job = synchronized(lock) {
-        sessions[session.eventProcessor.taskId] = session
-        // 启动监控：会话完成后自动移除
-        coroutineScope.launch {
-            try {
-                session.agentJob.await()
-            } catch (_: Exception) {
-                // 忽略
-            } finally {
-                removeSession(session.eventProcessor.taskId)
-            }
-        }
-    }
-
-    /** 移除会话 */
-    fun removeSession(taskId: String) = synchronized(lock) {
-        sessions.remove(taskId)
-    }
+@Suppress("FunctionName")
+fun LazySession(
+    coroutineScope: CoroutineScope,
+    eventProcessor: SessionEventProcessor,
+    block: suspend CoroutineScope.() -> Unit
+): Session {
+    return Session(
+        eventProcessor = eventProcessor,
+        agentJob = coroutineScope.async(start = CoroutineStart.LAZY, block = block)
+    )
 }

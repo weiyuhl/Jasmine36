@@ -16,7 +16,7 @@ import com.lhzkml.jasmine.core.prompt.model.ChatMessage
  * @param autoCheckpoint 是否在每个节点执行后自动创建检查点
  */
 class Persistence(
-    private val provider: PersistenceStorageProvider,
+    private val provider: PersistenceStorageProvider<*>,
     private val autoCheckpoint: Boolean = true
 ) {
     private var currentVersion: Long = 0
@@ -108,6 +108,6 @@ class Persistence(
 
     companion object {
         /** 禁用持久化 */
-        val DISABLED = Persistence(NoPersistenceStorageProvider(), autoCheckpoint = false)
+        val DISABLED = Persistence(NoPersistenceStorageProvider<Any>(), autoCheckpoint = false)
     }
 }
