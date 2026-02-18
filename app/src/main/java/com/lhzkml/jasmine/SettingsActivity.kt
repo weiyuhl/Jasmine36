@@ -90,7 +90,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         layoutToolConfig.setOnClickListener {
-            showToolConfigDialog()
+            startActivity(Intent(this, ToolConfigActivity::class.java))
         }
 
         // MCP 服务器开关
@@ -366,74 +366,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun refreshToolCount() {
         val enabled = ProviderManager.getEnabledTools(this)
         tvToolCount.text = if (enabled.isEmpty()) "全部工具已启用" else "已启用 ${enabled.size} 个工具"
-    }
-
-    private fun showToolConfigDialog() {
-        // 所有可用工具名称和描述
-        val allTools = listOf(
-            "calculator" to "计算器（四则运算）",
-            "get_current_time" to "获取当前时间",
-            "read_file" to "读取文件",
-            "write_file" to "写入文件",
-            "edit_file" to "编辑文件",
-            "list_directory" to "列出目录",
-            "search_by_regex" to "正则搜索",
-            "execute_shell_command" to "执行命令",
-            "web_search" to "网络搜索",
-            "web_scrape" to "网页抓取"
-        )
-
-        val enabledTools = ProviderManager.getEnabledTools(this).toMutableSet()
-        val names = allTools.map { "${it.first} — ${it.second}" }.toTypedArray()
-        // 空集合表示全部启用
-        val checked = if (enabledTools.isEmpty()) {
-            BooleanArray(allTools.size) { true }
-        } else {
-            BooleanArray(allTools.size) { allTools[it].first in enabledTools }
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("选择启用的工具")
-            .setMultiChoiceItems(names, checked) { _, which, isChecked ->
-                checked[which] = isChecked
-            }
-            .setPositiveButton("保存") { _, _ ->
-                val selected = mutableSetOf<String>()
-                for (i in allTools.indices) {
-                    if (checked[i]) selected.add(allTools[i].first)
-                }
-                // 全选时存空集合（表示全部启用）
-                if (selected.size == allTools.size) {
-                    ProviderManager.setEnabledTools(this, emptySet())
-                } else {
-                    ProviderManager.setEnabledTools(this, selected)
-                }
-                refreshToolCount()
-            }
-            .setNeutralButton("BrightData Key") { _, _ ->
-                showBrightDataKeyDialog()
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun showBrightDataKeyDialog() {
-        val current = ProviderManager.getBrightDataKey(this)
-        val editText = EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-            hint = "BrightData API Key（网络搜索需要）"
-            if (current.isNotEmpty()) setText(current)
-            setPadding(48, 32, 48, 32)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("BrightData API Key")
-            .setMessage("网络搜索和网页抓取工具需要 BrightData SERP API Key")
-            .setView(editText)
-            .setPositiveButton("保存") { _, _ ->
-                ProviderManager.setBrightDataKey(this, editText.text.toString().trim())
-            }
-            .setNegativeButton("取消", null)
-            .show()
     }
 
     private fun refreshCompressionInfo() {

@@ -38,6 +38,9 @@
         <activity
             android:name=".McpServerEditActivity"
             android:exported="false" />
+        <activity
+            android:name=".ToolConfigActivity"
+            android:exported="false" />
     </application>
 
 </manifest>
