@@ -47,6 +47,18 @@ import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.conversation.storage.TimedMessage
 import com.lhzkml.jasmine.core.agent.tools.*
+import com.lhzkml.jasmine.core.agent.tools.trace.CallbackTraceWriter
+import com.lhzkml.jasmine.core.agent.tools.trace.LogTraceWriter
+import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
+import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
+import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMPlanner
+import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
+import com.lhzkml.jasmine.core.prompt.llm.AgentMemory
+import com.lhzkml.jasmine.core.prompt.llm.LocalFileMemoryProvider
+import com.lhzkml.jasmine.core.prompt.model.MemoryScope
+import com.lhzkml.jasmine.core.prompt.model.MemoryScopeType
+import com.lhzkml.jasmine.core.prompt.model.MemoryScopesProfile
+import com.lhzkml.jasmine.core.prompt.model.MemorySubject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -85,6 +97,8 @@ class MainActivity : AppCompatActivity() {
     private var webSearchTool: WebSearchTool? = null
     private var currentJob: Job? = null
     private var isGenerating = false
+    private var agentMemory: AgentMemory? = null
+    private var tracing: Tracing? = null
 
     /**
      * 根据设置构建工具注册表
@@ -142,6 +156,62 @@ class MainActivity : AppCompatActivity() {
                 if (isEnabled("web_scrape")) register(wst.scrape)
             }
         }
+    }
+
+    /**
+     * 初始化/刷新记忆系统
+     */
+    private fun ensureMemory(): AgentMemory? {
+        if (!ProviderManager.isMemoryEnabled(this)) {
+            agentMemory = null
+            return null
+        }
+        if (agentMemory != null) return agentMemory
+
+        val rootDir = getExternalFilesDir(null) ?: return null
+        val provider = LocalFileMemoryProvider(rootDir)
+        val agentName = ProviderManager.getMemoryAgentName(this)
+        val profile = MemoryScopesProfile(
+            MemoryScopeType.AGENT to agentName
+        )
+        agentMemory = AgentMemory(provider, profile)
+        return agentMemory
+    }
+
+    /**
+     * 构建追踪系统
+     */
+    private fun buildTracing(): Tracing? {
+        if (!ProviderManager.isTraceEnabled(this)) return null
+
+        return Tracing.build {
+            addWriter(LogTraceWriter())
+            if (ProviderManager.isTraceInlineDisplay(this@MainActivity)) {
+                addWriter(CallbackTraceWriter(callback = { event ->
+                    val msg = formatTraceEvent(event) ?: return@CallbackTraceWriter
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        tvOutput.append(msg)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }))
+            }
+        }
+    }
+
+    /**
+     * 格式化追踪事件为用户可读文本
+     */
+    private fun formatTraceEvent(event: TraceEvent): String? = when (event) {
+        is TraceEvent.AgentStarting -> "📊 Agent 启动 [模型: ${event.model}, 工具: ${event.toolCount}]\n"
+        is TraceEvent.AgentCompleted -> "📊 Agent 完成 [迭代: ${event.totalIterations}]\n"
+        is TraceEvent.AgentFailed -> "📊 Agent 失败: ${event.error.message}\n"
+        is TraceEvent.LLMCallStarting -> "📊 LLM 请求 [消息: ${event.messageCount}, 工具: ${event.tools.size}]\n"
+        is TraceEvent.LLMCallCompleted -> "📊 LLM 回复 [提示: ${event.promptTokens}, 回复: ${event.completionTokens}]\n"
+        is TraceEvent.ToolCallStarting -> null // 已有 AgentEventListener 显示
+        is TraceEvent.ToolCallCompleted -> null
+        is TraceEvent.CompressionStarting -> "📊 压缩开始 [原始: ${event.originalMessageCount} 条]\n"
+        is TraceEvent.CompressionCompleted -> "📊 压缩完成 [压缩后: ${event.compressedMessageCount} 条]\n"
+        else -> null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -255,6 +325,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         clientRouter.close()
         webSearchTool?.close()
+        tracing?.close()
     }
 
     @Suppress("DEPRECATION")
@@ -449,6 +520,41 @@ class MainActivity : AppCompatActivity() {
                 messageHistory.add(userMsg)
                 conversationRepo.addMessage(currentConversationId!!, userMsg)
 
+                // 加载记忆事实到上下文
+                val memory = ensureMemory()
+                if (memory != null) {
+                    try {
+                        val tempPrompt = Prompt.build("memory-load") {
+                            for (msg in messageHistory) {
+                                when (msg.role) {
+                                    "system" -> system(msg.content)
+                                    "user" -> user(msg.content)
+                                    "assistant" -> assistant(msg.content)
+                                }
+                            }
+                        }
+                        val tempSession = LLMSession(client, config.model, tempPrompt)
+                        memory.loadAllFactsToAgent(tempSession)
+                        // 如果有记忆消息被注入，同步到 messageHistory
+                        val injected = tempSession.prompt.messages
+                        if (injected.size > messageHistory.size) {
+                            val newMsgs = injected.subList(messageHistory.size, injected.size)
+                            messageHistory.addAll(newMsgs)
+                            withContext(Dispatchers.Main) {
+                                tvOutput.append("🧠 已加载 ${newMsgs.size} 条记忆事实\n\n")
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
+                        }
+                        tempSession.close()
+                    } catch (e: Exception) {
+                        // 记忆加载失败不影响正常对话
+                    }
+                }
+
+                // 构建追踪系统
+                tracing?.close()
+                tracing = buildTracing()
+
                 // 上下文窗口裁剪，避免超出模型 token 限制
                 val trimmedMessages = contextManager.trimMessages(messageHistory.toList())
 
@@ -496,7 +602,44 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    val executor = ToolExecutor(client, registry, eventListener = listener)
+                    val executor = ToolExecutor(client, registry, eventListener = listener, tracing = tracing)
+
+                    // 任务规划（Agent 模式下可选）
+                    if (ProviderManager.isPlannerEnabled(this@MainActivity)) {
+                        try {
+                            val planPrompt = Prompt.build("planner") {
+                                for (msg in trimmedMessages) {
+                                    when (msg.role) {
+                                        "system" -> system(msg.content)
+                                        "user" -> user(msg.content)
+                                        "assistant" -> assistant(msg.content)
+                                    }
+                                }
+                            }
+                            val planSession = LLMSession(client, config.model, planPrompt)
+                            planSession.appendPrompt {
+                                user(buildString {
+                                    appendLine("Before executing, create a brief plan for the task.")
+                                    appendLine("Format: GOAL: <goal>")
+                                    appendLine("Then list steps with '- ' prefix.")
+                                    appendLine("Keep it concise (3-5 steps max).")
+                                })
+                            }
+                            val planResult = planSession.requestLLMWithoutTools()
+                            planSession.close()
+
+                            withContext(Dispatchers.Main) {
+                                tvOutput.append("📋 任务规划:\n${planResult.content}\n\n")
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
+                        } catch (e: Exception) {
+                            // 规划失败不影响正常执行
+                            withContext(Dispatchers.Main) {
+                                tvOutput.append("📋 [规划跳过: ${e.message}]\n\n")
+                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            }
+                        }
+                    }
 
                     if (useStream) {
                         withContext(Dispatchers.Main) {
@@ -601,6 +744,33 @@ class MainActivity : AppCompatActivity() {
                         model = config.model,
                         usage = usage
                     )
+                }
+
+                // 自动提取记忆事实
+                if (memory != null && ProviderManager.isMemoryAutoExtract(this@MainActivity)) {
+                    try {
+                        val memPrompt = Prompt.build("memory-extract") {
+                            for (msg in messageHistory) {
+                                when (msg.role) {
+                                    "system" -> system(msg.content)
+                                    "user" -> user(msg.content)
+                                    "assistant" -> assistant(msg.content)
+                                }
+                            }
+                        }
+                        val memSession = LLMSession(client, config.model, memPrompt)
+                        memory.saveAutoDetectedFacts(
+                            session = memSession,
+                            scopes = listOf(MemoryScopeType.AGENT)
+                        )
+                        memSession.close()
+                        withContext(Dispatchers.Main) {
+                            tvOutput.append("🧠 记忆已更新\n")
+                            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        }
+                    } catch (e: Exception) {
+                        // 记忆提取失败不影响正常对话
+                    }
                 }
 
                 // 智能上下文压缩

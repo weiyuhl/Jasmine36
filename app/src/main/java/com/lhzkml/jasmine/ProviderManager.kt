@@ -319,6 +319,60 @@ object ProviderManager {
         prefs(ctx).edit().putString("brightdata_api_key", key).apply()
     }
 
+    // ========== 跨对话记忆设置 ==========
+
+    /** 是否启用跨对话记忆 */
+    fun isMemoryEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("memory_enabled", false)
+
+    fun setMemoryEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("memory_enabled", enabled).apply()
+    }
+
+    /** 记忆作用域名称（Agent 级别） */
+    fun getMemoryAgentName(ctx: Context): String =
+        prefs(ctx).getString("memory_agent_name", null) ?: "jasmine"
+
+    fun setMemoryAgentName(ctx: Context, name: String) {
+        prefs(ctx).edit().putString("memory_agent_name", name).apply()
+    }
+
+    /** 是否在每轮对话后自动提取事实 */
+    fun isMemoryAutoExtract(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("memory_auto_extract", true)
+
+    fun setMemoryAutoExtract(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("memory_auto_extract", enabled).apply()
+    }
+
+    // ========== 执行追踪设置 ==========
+
+    /** 是否启用执行追踪 */
+    fun isTraceEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("trace_enabled", false)
+
+    fun setTraceEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("trace_enabled", enabled).apply()
+    }
+
+    /** 是否在聊天中内联显示追踪事件 */
+    fun isTraceInlineDisplay(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("trace_inline_display", true)
+
+    fun setTraceInlineDisplay(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("trace_inline_display", enabled).apply()
+    }
+
+    // ========== 任务规划设置 ==========
+
+    /** 是否启用任务规划（Agent 模式下） */
+    fun isPlannerEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("planner_enabled", false)
+
+    fun setPlannerEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("planner_enabled", enabled).apply()
+    }
+
     // ========== 智能上下文压缩设置 ==========
 
     /** 是否启用智能上下文压缩 */

@@ -23,10 +23,15 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var switchStream: SwitchCompat
     private lateinit var switchTools: SwitchCompat
     private lateinit var switchCompression: SwitchCompat
+    private lateinit var switchMemory: SwitchCompat
+    private lateinit var switchTrace: SwitchCompat
+    private lateinit var switchPlanner: SwitchCompat
     private lateinit var layoutToolConfig: LinearLayout
     private lateinit var layoutCompressionConfig: LinearLayout
+    private lateinit var layoutMemoryConfig: LinearLayout
     private lateinit var tvToolCount: TextView
     private lateinit var tvCompressionInfo: TextView
+    private lateinit var tvMemoryInfo: TextView
     private lateinit var tvMaxTokens: TextView
     private lateinit var tvSystemPrompt: TextView
     private lateinit var tvPromptTokens: TextView
@@ -101,6 +106,36 @@ class SettingsActivity : AppCompatActivity() {
             showCompressionConfigDialog()
         }
 
+        // 跨对话记忆开关
+        switchMemory = findViewById(R.id.switchMemory)
+        layoutMemoryConfig = findViewById(R.id.layoutMemoryConfig)
+        tvMemoryInfo = findViewById(R.id.tvMemoryInfo)
+
+        switchMemory.isChecked = ProviderManager.isMemoryEnabled(this)
+        layoutMemoryConfig.visibility = if (switchMemory.isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        switchMemory.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setMemoryEnabled(this, isChecked)
+            layoutMemoryConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
+        layoutMemoryConfig.setOnClickListener {
+            showMemoryConfigDialog()
+        }
+
+        // 执行追踪开关
+        switchTrace = findViewById(R.id.switchTrace)
+        switchTrace.isChecked = ProviderManager.isTraceEnabled(this)
+        switchTrace.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setTraceEnabled(this, isChecked)
+        }
+
+        // 任务规划开关
+        switchPlanner = findViewById(R.id.switchPlanner)
+        switchPlanner.isChecked = ProviderManager.isPlannerEnabled(this)
+        switchPlanner.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setPlannerEnabled(this, isChecked)
+        }
+
         // 系统提示词编辑
         findViewById<LinearLayout>(R.id.layoutSystemPrompt).setOnClickListener {
             showSystemPromptDialog()
@@ -131,6 +166,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshTopKVisibility()
         refreshToolCount()
         refreshCompressionInfo()
+        refreshMemoryInfo()
     }
 
     private fun refreshTopKVisibility() {
@@ -512,6 +548,49 @@ class SettingsActivity : AppCompatActivity() {
                 refreshCompressionInfo()
             }
         }
+    }
+
+    private fun refreshMemoryInfo() {
+        val autoExtract = ProviderManager.isMemoryAutoExtract(this)
+        val agentName = ProviderManager.getMemoryAgentName(this)
+        val autoStr = if (autoExtract) "自动提取" else "手动提取"
+        tvMemoryInfo.text = "$autoStr · Agent: $agentName"
+    }
+
+    private fun showMemoryConfigDialog() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 16)
+        }
+
+        val switchAutoExtract = SwitchCompat(this).apply {
+            text = "每轮对话后自动提取事实"
+            isChecked = ProviderManager.isMemoryAutoExtract(this@SettingsActivity)
+        }
+        layout.addView(switchAutoExtract)
+
+        val etAgentName = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            hint = "Agent 名称（用于记忆作用域）"
+            setText(ProviderManager.getMemoryAgentName(this@SettingsActivity))
+        }
+        layout.addView(TextView(this).apply {
+            text = "\nAgent 名称"
+            textSize = 14f
+        })
+        layout.addView(etAgentName)
+
+        AlertDialog.Builder(this)
+            .setTitle("记忆配置")
+            .setView(layout)
+            .setPositiveButton("保存") { _, _ ->
+                ProviderManager.setMemoryAutoExtract(this, switchAutoExtract.isChecked)
+                val name = etAgentName.text.toString().trim().ifEmpty { "jasmine" }
+                ProviderManager.setMemoryAgentName(this, name)
+                refreshMemoryInfo()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun formatNumber(n: Int): String {
