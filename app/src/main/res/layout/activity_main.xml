@@ -68,6 +68,7 @@
                 android:lineSpacingExtra="6dp"
                 android:fontFamily="sans-serif"
                 android:text=""
+                android:paddingBottom="200dp"
                 android:importantForAccessibility="yes"
                 android:contentDescription="Chat output" />
         </ScrollView>
