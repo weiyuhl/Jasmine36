@@ -30,20 +30,18 @@ data class AgentCheckpoint(
 ) {
     /** 是否为墓碑检查点（标记已终止的会话） */
     fun isTombstone(): Boolean =
-        properties?.get(TOMBSTONE_KEY) == "true"
+        properties?.get(PersistenceUtils.TOMBSTONE_CHECKPOINT_NAME) == "true"
 
     companion object {
-        const val TOMBSTONE_KEY = "tombstone"
-
         /** 创建墓碑检查点 */
         fun tombstone(version: Long): AgentCheckpoint = AgentCheckpoint(
             checkpointId = java.util.UUID.randomUUID().toString(),
             createdAt = System.currentTimeMillis(),
-            nodePath = "__tombstone__",
+            nodePath = PersistenceUtils.TOMBSTONE_CHECKPOINT_NAME,
             lastInput = null,
             messageHistory = emptyList(),
             version = version,
-            properties = mapOf(TOMBSTONE_KEY to "true")
+            properties = mapOf(PersistenceUtils.TOMBSTONE_CHECKPOINT_NAME to "true")
         )
     }
 }

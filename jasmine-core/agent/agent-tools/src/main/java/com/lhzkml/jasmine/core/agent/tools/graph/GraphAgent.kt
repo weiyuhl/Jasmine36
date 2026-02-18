@@ -86,4 +86,73 @@ class GraphAgent<TInput, TOutput>(
             session.close()
         }
     }
+
+    /**
+     * 带回调的执行方式
+     * 通过 context.storage 传递回调函数，供流式策略使用。
+     *
+     * @param prompt 初始提示词
+     * @param input Agent 输入
+     * @param onChunk 流式文本回调（可选）
+     * @param onThinking 思考内容回调（可选）
+     * @param onToolCallStart 工具调用开始回调（可选）
+     * @param onToolCallResult 工具调用结果回调（可选）
+     * @return Agent 输出
+     */
+    suspend fun runWithCallbacks(
+        prompt: Prompt,
+        input: TInput,
+        onChunk: (suspend (String) -> Unit)? = null,
+        onThinking: (suspend (String) -> Unit)? = null,
+        onToolCallStart: (suspend (String, String) -> Unit)? = null,
+        onToolCallResult: (suspend (String, String) -> Unit)? = null,
+        onNodeEnter: (suspend (String) -> Unit)? = null,
+        onNodeExit: (suspend (String, Boolean) -> Unit)? = null,
+        onEdge: (suspend (String, String, String) -> Unit)? = null
+    ): TOutput? {
+        val runId = tracing?.newRunId() ?: ""
+        val session = LLMSession(client, model, prompt, toolRegistry.descriptors())
+
+        tracing?.emit(TraceEvent.AgentStarting(
+            eventId = tracing.newEventId(), runId = runId,
+            agentId = agentId, model = model, toolCount = toolRegistry.descriptors().size
+        ))
+
+        val context = AgentGraphContext(
+            agentId = agentId,
+            runId = runId,
+            client = client,
+            model = model,
+            session = session,
+            toolRegistry = toolRegistry,
+            tracing = tracing
+        )
+
+        // 通过 storage 传递回调
+        onChunk?.let { context.put("onChunk", it) }
+        onThinking?.let { context.put("onThinking", it) }
+        onToolCallStart?.let { context.put("onToolCallStart", it) }
+        onToolCallResult?.let { context.put("onToolCallResult", it) }
+        onNodeEnter?.let { context.put(PredefinedStrategies.KEY_ON_NODE_ENTER, it) }
+        onNodeExit?.let { context.put(PredefinedStrategies.KEY_ON_NODE_EXIT, it) }
+        onEdge?.let { context.put(PredefinedStrategies.KEY_ON_EDGE, it) }
+
+        return try {
+            val result = strategy.execute(context, input)
+            tracing?.emit(TraceEvent.AgentCompleted(
+                eventId = tracing.newEventId(), runId = runId,
+                agentId = agentId, result = result.toString().take(100),
+                totalIterations = context.iterations
+            ))
+            result
+        } catch (e: Exception) {
+            tracing?.emit(TraceEvent.AgentFailed(
+                eventId = tracing.newEventId(), runId = runId,
+                agentId = agentId, error = TraceError.from(e)
+            ))
+            throw e
+        } finally {
+            session.close()
+        }
+    }
 }

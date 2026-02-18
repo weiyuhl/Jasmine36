@@ -7,6 +7,22 @@ import com.lhzkml.jasmine.core.prompt.model.PromptBuilder
 import com.lhzkml.jasmine.core.prompt.model.ToolChoice
 import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.prompt
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+/**
+ * 结构化响应
+ * 参考 koog 的 StructuredResponse，封装解析后的结构化数据和原始内容。
+ *
+ * @param T 结构化数据类型
+ * @property data 解析后的结构化数据
+ * @property content 原始 LLM 响应内容
+ */
+data class StructuredResponse<T>(
+    val data: T,
+    val content: String
+)
 
 /**
  * LLM 会话
@@ -235,6 +251,96 @@ class LLMSession(
         return result
     }
 
+    // ========== 结构化输出 ==========
+
+    companion object {
+        /** JSON 解析器，宽松模式以容忍 LLM 输出的格式偏差 */
+        private val lenientJson = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            coerceInputValues = true
+        }
+    }
+
+    /**
+     * 请求 LLM 返回结构化 JSON 输出
+     * 参考 koog 的 requestLLMStructured，使用 Manual 模式：
+     * 向 LLM 发送 JSON 格式指令和示例，然后解析响应。
+     *
+     * @param serializer 目标类型的序列化器
+     * @param examples 可选的示例列表，帮助 LLM 理解输出格式
+     * @return Result 包含解析后的 StructuredResponse 或错误
+     */
+    suspend fun <T> requestLLMStructured(
+        serializer: KSerializer<T>,
+        examples: List<T> = emptyList()
+    ): Result<StructuredResponse<T>> {
+        checkActive()
+
+        // 构建结构化输出指令
+        val instructionPrompt = buildString {
+            appendLine("You MUST respond with a valid JSON object that matches the following structure.")
+            appendLine("Do NOT include any text before or after the JSON. Only output the JSON object.")
+            appendLine()
+            if (examples.isNotEmpty()) {
+                appendLine("## Examples")
+                examples.forEachIndexed { index, example ->
+                    appendLine("Example ${index + 1}:")
+                    appendLine("```json")
+                    appendLine(lenientJson.encodeToString(serializer, example))
+                    appendLine("```")
+                }
+                appendLine()
+            }
+            appendLine("Respond ONLY with a valid JSON object. No markdown, no explanation, just JSON.")
+        }
+
+        appendPrompt { user(instructionPrompt) }
+        val result = requestLLMWithoutTools()
+
+        return runCatching {
+            val jsonContent = extractJson(result.content)
+            val data = lenientJson.decodeFromString(serializer, jsonContent)
+            StructuredResponse(data = data, content = result.content)
+        }
+    }
+
+    /**
+     * 请求 LLM 返回结构化 JSON 输出（inline reified 版本）
+     */
+    suspend inline fun <reified T> requestLLMStructured(
+        examples: List<T> = emptyList()
+    ): Result<StructuredResponse<T>> {
+        return requestLLMStructured(
+            serializer = kotlinx.serialization.serializer<T>(),
+            examples = examples
+        )
+    }
+
+    /**
+     * 从 LLM 响应中提取 JSON 内容
+     * 处理 LLM 可能包裹在 markdown 代码块中的情况
+     */
+    private fun extractJson(content: String): String {
+        val trimmed = content.trim()
+
+        // 尝试提取 ```json ... ``` 代码块
+        val codeBlockRegex = Regex("```(?:json)?\\s*\\n?(.*?)\\n?```", RegexOption.DOT_MATCHES_ALL)
+        val match = codeBlockRegex.find(trimmed)
+        if (match != null) {
+            return match.groupValues[1].trim()
+        }
+
+        // 尝试提取第一个 { ... } 或 [ ... ]
+        val jsonStart = trimmed.indexOfFirst { it == '{' || it == '[' }
+        val jsonEnd = trimmed.indexOfLast { it == '}' || it == ']' }
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            return trimmed.substring(jsonStart, jsonEnd + 1)
+        }
+
+        return trimmed
+    }
+
     override fun close() {
         isActive = false
     }
@@ -274,25 +380,12 @@ private suspend fun <T> LLMSession.use(block: suspend (LLMSession) -> T): T {
  * 参考 koog 的 replaceHistoryWithTLDR
  *
  * @param strategy 压缩策略，默认 WholeHistory
- * @param preserveMemory 是否保留记忆相关消息
  */
 suspend fun LLMSession.replaceHistoryWithTLDR(
     strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory,
-    preserveMemory: Boolean = true,
     listener: CompressionEventListener? = null
 ) {
-    val memoryMessages = if (preserveMemory) {
-        prompt.messages.filter { msg ->
-            msg.content.contains("Here are the relevant facts from memory") ||
-                msg.content.contains("Memory feature is not enabled") ||
-                msg.content.contains("CONTEXT RESTORATION") ||
-                msg.content.contains("compressed summary") ||
-                msg.content.contains("Key Objectives")
-        }
-    } else {
-        emptyList()
-    }
-    strategy.compress(this, memoryMessages, listener)
+    strategy.compress(this, listener)
 }
 
 /**

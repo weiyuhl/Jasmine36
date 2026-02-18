@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.Tokenizer
 
 /**
  * 上下文窗口管理器

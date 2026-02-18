@@ -1,5 +1,7 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
+import com.lhzkml.jasmine.core.prompt.model.Tokenizer
+
 /**
  * 默认 Token 估算器
  * 不引入 tiktoken 等外部依赖，使用字符级近似估算

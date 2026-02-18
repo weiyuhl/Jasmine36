@@ -23,15 +23,24 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var switchStream: SwitchCompat
     private lateinit var switchTools: SwitchCompat
     private lateinit var switchCompression: SwitchCompat
-    private lateinit var switchMemory: SwitchCompat
     private lateinit var switchTrace: SwitchCompat
     private lateinit var switchPlanner: SwitchCompat
+    private lateinit var switchSnapshot: SwitchCompat
+    private lateinit var switchEventHandler: SwitchCompat
+    private lateinit var layoutTraceConfig: LinearLayout
+    private lateinit var layoutPlannerConfig: LinearLayout
+    private lateinit var layoutSnapshotConfig: LinearLayout
+    private lateinit var layoutEventHandlerConfig: LinearLayout
+    private lateinit var tvTraceInfo: TextView
+    private lateinit var tvPlannerInfo: TextView
+    private lateinit var tvSnapshotInfo: TextView
+    private lateinit var tvEventHandlerInfo: TextView
     private lateinit var layoutToolConfig: LinearLayout
     private lateinit var layoutCompressionConfig: LinearLayout
-    private lateinit var layoutMemoryConfig: LinearLayout
+    private lateinit var layoutAgentStrategy: LinearLayout
+    private lateinit var tvAgentStrategy: TextView
     private lateinit var tvToolCount: TextView
     private lateinit var tvCompressionInfo: TextView
-    private lateinit var tvMemoryInfo: TextView
     private lateinit var tvMcpInfo: TextView
     private lateinit var switchMcp: SwitchCompat
     private lateinit var layoutMcpConfig: LinearLayout
@@ -87,10 +96,19 @@ class SettingsActivity : AppCompatActivity() {
         switchTools.setOnCheckedChangeListener { _, isChecked ->
             ProviderManager.setToolsEnabled(this, isChecked)
             layoutToolConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+            layoutAgentStrategy.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
         }
 
         layoutToolConfig.setOnClickListener {
             startActivity(Intent(this, ToolConfigActivity::class.java))
+        }
+
+        // Agent 策略选择
+        layoutAgentStrategy = findViewById(R.id.layoutAgentStrategy)
+        tvAgentStrategy = findViewById(R.id.tvAgentStrategy)
+        layoutAgentStrategy.visibility = if (switchTools.isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        layoutAgentStrategy.setOnClickListener {
+            startActivity(Intent(this, AgentStrategyActivity::class.java))
         }
 
         // MCP 服务器开关
@@ -122,37 +140,63 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         layoutCompressionConfig.setOnClickListener {
-            showCompressionConfigDialog()
-        }
-
-        // 跨对话记忆开关
-        switchMemory = findViewById(R.id.switchMemory)
-        layoutMemoryConfig = findViewById(R.id.layoutMemoryConfig)
-        tvMemoryInfo = findViewById(R.id.tvMemoryInfo)
-
-        switchMemory.isChecked = ProviderManager.isMemoryEnabled(this)
-        layoutMemoryConfig.visibility = if (switchMemory.isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        switchMemory.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setMemoryEnabled(this, isChecked)
-            layoutMemoryConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        }
-
-        layoutMemoryConfig.setOnClickListener {
-            showMemoryConfigDialog()
+            startActivity(android.content.Intent(this, CompressionConfigActivity::class.java))
         }
 
         // 执行追踪开关
         switchTrace = findViewById(R.id.switchTrace)
         switchTrace.isChecked = ProviderManager.isTraceEnabled(this)
+        layoutTraceConfig = findViewById(R.id.layoutTraceConfig)
+        tvTraceInfo = findViewById(R.id.tvTraceInfo)
+        layoutTraceConfig.visibility = if (switchTrace.isChecked) android.view.View.VISIBLE else android.view.View.GONE
         switchTrace.setOnCheckedChangeListener { _, isChecked ->
             ProviderManager.setTraceEnabled(this, isChecked)
+            layoutTraceConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        layoutTraceConfig.setOnClickListener {
+            startActivity(android.content.Intent(this, TraceConfigActivity::class.java))
         }
 
         // 任务规划开关
         switchPlanner = findViewById(R.id.switchPlanner)
         switchPlanner.isChecked = ProviderManager.isPlannerEnabled(this)
+        layoutPlannerConfig = findViewById(R.id.layoutPlannerConfig)
+        tvPlannerInfo = findViewById(R.id.tvPlannerInfo)
+        layoutPlannerConfig.visibility = if (switchPlanner.isChecked) android.view.View.VISIBLE else android.view.View.GONE
         switchPlanner.setOnCheckedChangeListener { _, isChecked ->
             ProviderManager.setPlannerEnabled(this, isChecked)
+            layoutPlannerConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        layoutPlannerConfig.setOnClickListener {
+            startActivity(android.content.Intent(this, PlannerConfigActivity::class.java))
+        }
+
+        // 快照/检查点开关
+        switchSnapshot = findViewById(R.id.switchSnapshot)
+        switchSnapshot.isChecked = ProviderManager.isSnapshotEnabled(this)
+        layoutSnapshotConfig = findViewById(R.id.layoutSnapshotConfig)
+        tvSnapshotInfo = findViewById(R.id.tvSnapshotInfo)
+        layoutSnapshotConfig.visibility = if (switchSnapshot.isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        switchSnapshot.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setSnapshotEnabled(this, isChecked)
+            layoutSnapshotConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        layoutSnapshotConfig.setOnClickListener {
+            startActivity(android.content.Intent(this, SnapshotConfigActivity::class.java))
+        }
+
+        // 事件处理器开关
+        switchEventHandler = findViewById(R.id.switchEventHandler)
+        switchEventHandler.isChecked = ProviderManager.isEventHandlerEnabled(this)
+        layoutEventHandlerConfig = findViewById(R.id.layoutEventHandlerConfig)
+        tvEventHandlerInfo = findViewById(R.id.tvEventHandlerInfo)
+        layoutEventHandlerConfig.visibility = if (switchEventHandler.isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        switchEventHandler.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setEventHandlerEnabled(this, isChecked)
+            layoutEventHandlerConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        layoutEventHandlerConfig.setOnClickListener {
+            startActivity(android.content.Intent(this, EventHandlerConfigActivity::class.java))
         }
 
         // 系统提示词编辑
@@ -184,9 +228,13 @@ class SettingsActivity : AppCompatActivity() {
         refreshUsageStats()
         refreshTopKVisibility()
         refreshToolCount()
+        refreshAgentStrategy()
         refreshCompressionInfo()
-        refreshMemoryInfo()
         refreshMcpInfo()
+        refreshTraceInfo()
+        refreshPlannerInfo()
+        refreshSnapshotInfo()
+        refreshEventHandlerInfo()
     }
 
     private fun refreshTopKVisibility() {
@@ -368,6 +416,14 @@ class SettingsActivity : AppCompatActivity() {
         tvToolCount.text = if (enabled.isEmpty()) "全部工具已启用" else "已启用 ${enabled.size} 个工具"
     }
 
+    private fun refreshAgentStrategy() {
+        val strategy = ProviderManager.getAgentStrategy(this)
+        tvAgentStrategy.text = when (strategy) {
+            ProviderManager.AgentStrategyType.SIMPLE_LOOP -> "简单循环（ToolExecutor）"
+            ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH -> "图策略（GraphAgent）"
+        }
+    }
+
     private fun refreshCompressionInfo() {
         val strategy = ProviderManager.getCompressionStrategy(this)
         val info = when (strategy) {
@@ -390,165 +446,57 @@ class SettingsActivity : AppCompatActivity() {
         tvCompressionInfo.text = info
     }
 
-    private fun showCompressionConfigDialog() {
-        val strategies = ProviderManager.CompressionStrategy.entries.toTypedArray()
-        val names = arrayOf(
-            "Token 预算（推荐）— 超过阈值自动压缩",
-            "整体压缩 — 整个历史生成摘要",
-            "保留最后 N 条 — 只压缩最近消息",
-            "分块压缩 — 按固定大小分块"
-        )
-        val current = ProviderManager.getCompressionStrategy(this)
-        val checkedIndex = strategies.indexOf(current)
-
-        AlertDialog.Builder(this)
-            .setTitle("选择压缩策略")
-            .setSingleChoiceItems(names, checkedIndex) { dialog, which ->
-                val selected = strategies[which]
-                ProviderManager.setCompressionStrategy(this, selected)
-                dialog.dismiss()
-                // 选完策略后弹出参数配置
-                showStrategyParamsDialog(selected)
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun showStrategyParamsDialog(strategy: ProviderManager.CompressionStrategy) {
-        when (strategy) {
-            ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
-                val layout = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(48, 32, 48, 16)
-                }
-
-                val etMaxTokens = EditText(this).apply {
-                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                    hint = "0 表示跟随模型上下文窗口"
-                    val current = ProviderManager.getCompressionMaxTokens(this@SettingsActivity)
-                    if (current > 0) setText(current.toString())
-                }
-                layout.addView(TextView(this).apply {
-                    text = "最大 Token 数"
-                    textSize = 14f
-                })
-                layout.addView(etMaxTokens)
-
-                val etThreshold = EditText(this).apply {
-                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                    hint = "1~99，默认 75"
-                    setText(ProviderManager.getCompressionThreshold(this@SettingsActivity).toString())
-                }
-                layout.addView(TextView(this).apply {
-                    text = "\n触发阈值（%）"
-                    textSize = 14f
-                })
-                layout.addView(etThreshold)
-
-                AlertDialog.Builder(this)
-                    .setTitle("Token 预算参数")
-                    .setView(layout)
-                    .setPositiveButton("保存") { _, _ ->
-                        val maxTokens = etMaxTokens.text.toString().trim().toIntOrNull() ?: 0
-                        val threshold = (etThreshold.text.toString().trim().toIntOrNull() ?: 75).coerceIn(1, 99)
-                        ProviderManager.setCompressionMaxTokens(this, maxTokens)
-                        ProviderManager.setCompressionThreshold(this, threshold)
-                        refreshCompressionInfo()
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-            }
-            ProviderManager.CompressionStrategy.LAST_N -> {
-                val editText = EditText(this).apply {
-                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                    hint = "保留的消息数，默认 10"
-                    setText(ProviderManager.getCompressionLastN(this@SettingsActivity).toString())
-                    setPadding(48, 32, 48, 32)
-                }
-                AlertDialog.Builder(this)
-                    .setTitle("保留最后 N 条消息")
-                    .setMessage("压缩时只保留最近的 N 条消息用于生成摘要")
-                    .setView(editText)
-                    .setPositiveButton("保存") { _, _ ->
-                        val n = (editText.text.toString().trim().toIntOrNull() ?: 10).coerceAtLeast(2)
-                        ProviderManager.setCompressionLastN(this, n)
-                        refreshCompressionInfo()
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-            }
-            ProviderManager.CompressionStrategy.CHUNKED -> {
-                val editText = EditText(this).apply {
-                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                    hint = "每块消息数，默认 20"
-                    setText(ProviderManager.getCompressionChunkSize(this@SettingsActivity).toString())
-                    setPadding(48, 32, 48, 32)
-                }
-                AlertDialog.Builder(this)
-                    .setTitle("分块大小")
-                    .setMessage("将历史按固定大小分块，每块独立生成摘要")
-                    .setView(editText)
-                    .setPositiveButton("保存") { _, _ ->
-                        val size = (editText.text.toString().trim().toIntOrNull() ?: 20).coerceAtLeast(5)
-                        ProviderManager.setCompressionChunkSize(this, size)
-                        refreshCompressionInfo()
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-            }
-            ProviderManager.CompressionStrategy.WHOLE_HISTORY -> {
-                refreshCompressionInfo()
-            }
-        }
-    }
-
     private fun refreshMcpInfo() {
         val servers = ProviderManager.getMcpServers(this)
         val enabledCount = servers.count { it.enabled }
         tvMcpInfo.text = if (servers.isEmpty()) "未配置服务器" else "已配置 ${servers.size} 个 · 启用 $enabledCount 个"
     }
 
-    private fun refreshMemoryInfo() {
-        val autoExtract = ProviderManager.isMemoryAutoExtract(this)
-        val agentName = ProviderManager.getMemoryAgentName(this)
-        val autoStr = if (autoExtract) "自动提取" else "手动提取"
-        tvMemoryInfo.text = "$autoStr · Agent: $agentName"
+    // ========== 追踪配置 ==========
+
+    private fun refreshTraceInfo() {
+        val file = ProviderManager.isTraceFileEnabled(this)
+        val filter = ProviderManager.getTraceEventFilter(this)
+        val outputParts = mutableListOf<String>()
+        outputParts.add("Android Log")
+        if (file) outputParts.add("文件输出")
+        val filterStr = if (filter.isEmpty()) "全部事件" else "${filter.size} 类事件"
+        tvTraceInfo.text = "${outputParts.joinToString(" · ")} · $filterStr"
     }
 
-    private fun showMemoryConfigDialog() {
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(48, 32, 48, 16)
-        }
+    // ========== 规划配置 ==========
 
-        val switchAutoExtract = SwitchCompat(this).apply {
-            text = "每轮对话后自动提取事实"
-            isChecked = ProviderManager.isMemoryAutoExtract(this@SettingsActivity)
-        }
-        layout.addView(switchAutoExtract)
+    private fun refreshPlannerInfo() {
+        val maxIter = ProviderManager.getPlannerMaxIterations(this)
+        val critic = ProviderManager.isPlannerCriticEnabled(this)
+        val criticStr = if (critic) "Critic 评估" else "无 Critic"
+        tvPlannerInfo.text = "迭代 $maxIter 次 · $criticStr"
+    }
 
-        val etAgentName = EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-            hint = "Agent 名称（用于记忆作用域）"
-            setText(ProviderManager.getMemoryAgentName(this@SettingsActivity))
-        }
-        layout.addView(TextView(this).apply {
-            text = "\nAgent 名称"
-            textSize = 14f
-        })
-        layout.addView(etAgentName)
+    // ========== 快照配置 ==========
 
-        AlertDialog.Builder(this)
-            .setTitle("记忆配置")
-            .setView(layout)
-            .setPositiveButton("保存") { _, _ ->
-                ProviderManager.setMemoryAutoExtract(this, switchAutoExtract.isChecked)
-                val name = etAgentName.text.toString().trim().ifEmpty { "jasmine" }
-                ProviderManager.setMemoryAgentName(this, name)
-                refreshMemoryInfo()
-            }
-            .setNegativeButton("取消", null)
-            .show()
+    private fun refreshSnapshotInfo() {
+        val storage = ProviderManager.getSnapshotStorage(this)
+        val auto = ProviderManager.isSnapshotAutoCheckpoint(this)
+        val rollback = ProviderManager.getSnapshotRollbackStrategy(this)
+        val storageName = when (storage) {
+            ProviderManager.SnapshotStorage.MEMORY -> "内存存储"
+            ProviderManager.SnapshotStorage.FILE -> "文件存储"
+        }
+        val autoStr = if (auto) "自动检查点" else "手动检查点"
+        val rollbackName = when (rollback) {
+            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> "从节点重启"
+            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> "跳过节点"
+            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT -> "默认输出"
+        }
+        tvSnapshotInfo.text = "$storageName · $autoStr · $rollbackName"
+    }
+
+    // ========== 事件处理器配置 ==========
+
+    private fun refreshEventHandlerInfo() {
+        val filter = ProviderManager.getEventHandlerFilter(this)
+        tvEventHandlerInfo.text = if (filter.isEmpty()) "全部事件" else "${filter.size} 类事件"
     }
 
     private fun formatNumber(n: Int): String {

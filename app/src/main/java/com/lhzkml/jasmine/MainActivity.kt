@@ -53,19 +53,18 @@ import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolAdapter
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolDefinition
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolRegistryProvider
 import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
-import com.lhzkml.jasmine.core.agent.tools.trace.CallbackTraceWriter
 import com.lhzkml.jasmine.core.agent.tools.trace.LogTraceWriter
-import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
 import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
 import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMPlanner
+import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMWithCriticPlanner
 import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
-import com.lhzkml.jasmine.core.prompt.llm.AgentMemory
-import com.lhzkml.jasmine.core.prompt.llm.LocalFileMemoryProvider
-import com.lhzkml.jasmine.core.prompt.llm.saveToMemoryAutoDetectFacts
-import com.lhzkml.jasmine.core.prompt.model.MemoryScope
-import com.lhzkml.jasmine.core.prompt.model.MemoryScopeType
-import com.lhzkml.jasmine.core.prompt.model.MemoryScopesProfile
-import com.lhzkml.jasmine.core.prompt.model.MemorySubject
+import com.lhzkml.jasmine.core.agent.tools.graph.GraphAgent
+import com.lhzkml.jasmine.core.agent.tools.graph.PredefinedStrategies
+import com.lhzkml.jasmine.core.agent.tools.event.EventHandler
+import com.lhzkml.jasmine.core.agent.tools.event.*
+import com.lhzkml.jasmine.core.agent.tools.snapshot.Persistence
+import com.lhzkml.jasmine.core.agent.tools.snapshot.AgentCheckpoint
+import com.lhzkml.jasmine.core.agent.tools.snapshot.InMemoryPersistenceStorageProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -117,12 +116,15 @@ class MainActivity : AppCompatActivity() {
     private var webSearchTool: WebSearchTool? = null
     private var currentJob: Job? = null
     private var isGenerating = false
-    private var agentMemory: AgentMemory? = null
     private var tracing: Tracing? = null
+    private var eventHandler: EventHandler? = null
+    private var persistence: Persistence? = null
     private var mcpClients: MutableList<McpClient> = mutableListOf()
     /** 预加载的 MCP 工具（APP 启动时后台连接） */
     private var preloadedMcpTools: MutableList<McpToolAdapter> = mutableListOf()
     private var mcpPreloaded = false
+    /** 中间过程日志收集器，用于持久化到对话历史 */
+    private var agentLogBuilder = StringBuilder()
 
     /**
      * 根据设置构建工具注册表
@@ -325,59 +327,251 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 初始化/刷新记忆系统
-     */
-    private fun ensureMemory(): AgentMemory? {
-        if (!ProviderManager.isMemoryEnabled(this)) {
-            agentMemory = null
-            return null
-        }
-        if (agentMemory != null) return agentMemory
-
-        val rootDir = getExternalFilesDir(null) ?: return null
-        val provider = LocalFileMemoryProvider(rootDir)
-        val agentName = ProviderManager.getMemoryAgentName(this)
-        val profile = MemoryScopesProfile(
-            MemoryScopeType.AGENT to agentName
-        )
-        agentMemory = AgentMemory(provider, profile)
-        return agentMemory
-    }
-
-    /**
      * 构建追踪系统
+     * Trace 专注于数据记录（日志文件、Android Log），不负责 UI 显示。
+     * UI 显示由 EventHandler 负责。
      */
     private fun buildTracing(): Tracing? {
         if (!ProviderManager.isTraceEnabled(this)) return null
 
         return Tracing.build {
             addWriter(LogTraceWriter())
-            if (ProviderManager.isTraceInlineDisplay(this@MainActivity)) {
-                addWriter(CallbackTraceWriter(callback = { event ->
-                    val msg = formatTraceEvent(event) ?: return@CallbackTraceWriter
-                    kotlinx.coroutines.withContext(Dispatchers.Main) {
-                        tvOutput.append(msg)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }))
+            if (ProviderManager.isTraceFileEnabled(this@MainActivity)) {
+                val traceDir = getExternalFilesDir("traces")
+                if (traceDir != null) {
+                    traceDir.mkdirs()
+                    val traceFile = java.io.File(traceDir, "trace_${System.currentTimeMillis()}.log")
+                    addWriter(com.lhzkml.jasmine.core.agent.tools.trace.FileTraceWriter(traceFile))
+                }
             }
         }
     }
 
     /**
-     * 格式化追踪事件为用户可读文本
+     * 构建事件处理器
+     * EventHandler 是 UI 通知系统，负责在聊天界面实时显示 Agent 执行过程。
+     * 与 Trace（纯数据记录）职责分离：Trace 写日志/文件，EventHandler 更新 UI。
      */
-    private fun formatTraceEvent(event: TraceEvent): String? = when (event) {
-        is TraceEvent.AgentStarting -> "📊 Agent 启动 [模型: ${event.model}, 工具: ${event.toolCount}]\n"
-        is TraceEvent.AgentCompleted -> "📊 Agent 完成 [迭代: ${event.totalIterations}]\n"
-        is TraceEvent.AgentFailed -> "📊 Agent 失败: ${event.error.message}\n"
-        is TraceEvent.LLMCallStarting -> "📊 LLM 请求 [消息: ${event.messageCount}, 工具: ${event.tools.size}]\n"
-        is TraceEvent.LLMCallCompleted -> "📊 LLM 回复 [提示: ${event.promptTokens}, 回复: ${event.completionTokens}]\n"
-        is TraceEvent.ToolCallStarting -> null // 已有 AgentEventListener 显示
-        is TraceEvent.ToolCallCompleted -> null
-        is TraceEvent.CompressionStarting -> "📊 压缩开始 [原始: ${event.originalMessageCount} 条]\n"
-        is TraceEvent.CompressionCompleted -> "📊 压缩完成 [压缩后: ${event.compressedMessageCount} 条]\n"
-        else -> null
+    private fun buildEventHandler(): EventHandler? {
+        if (!ProviderManager.isEventHandlerEnabled(this)) return null
+
+        val filter = ProviderManager.getEventHandlerFilter(this)
+        fun isEnabled(cat: ProviderManager.EventCategory) = filter.isEmpty() || cat in filter
+
+        return EventHandler.build {
+            if (isEnabled(ProviderManager.EventCategory.AGENT)) {
+                onAgentStarting { ctx ->
+                    val line = "[EVENT] Agent 开始 [${ctx.agentId}]\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onAgentCompleted { ctx ->
+                    val line = "[EVENT] Agent 完成 [${ctx.agentId}]\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onAgentExecutionFailed { ctx ->
+                    val line = "[EVENT] Agent 失败: ${ctx.throwable.message}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+            if (isEnabled(ProviderManager.EventCategory.TOOL)) {
+                onToolCallStarting { ctx ->
+                    val line = "[EVENT] 工具调用: ${ctx.toolName}(${ctx.toolArgs.take(60)})\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onToolCallCompleted { ctx ->
+                    val line = "[EVENT] 工具完成: ${ctx.toolName} -> ${(ctx.result ?: "").take(100)}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onToolCallFailed { ctx ->
+                    val line = "[EVENT] 工具失败: ${ctx.toolName} - ${ctx.throwable.message}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onToolValidationFailed { ctx ->
+                    val line = "[EVENT] 工具验证失败: ${ctx.toolName} - ${ctx.validationError}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+            if (isEnabled(ProviderManager.EventCategory.LLM)) {
+                onLLMCallStarting { ctx ->
+                    val line = "[EVENT] LLM 请求 [消息: ${ctx.messageCount}, 工具: ${ctx.tools.size}]\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onLLMCallCompleted { ctx ->
+                    val line = "[EVENT] LLM 回复 [${ctx.totalTokens} tokens]\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+            if (isEnabled(ProviderManager.EventCategory.STRATEGY)) {
+                onStrategyStarting { ctx ->
+                    val line = "[EVENT] 策略开始: ${ctx.strategyName}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onStrategyCompleted { ctx ->
+                    val line = "[EVENT] 策略完成: ${ctx.strategyName} -> ${ctx.result?.take(80) ?: ""}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+            if (isEnabled(ProviderManager.EventCategory.NODE)) {
+                onNodeExecutionStarting { ctx ->
+                    val line = "[EVENT] 节点开始: ${ctx.nodeName}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onNodeExecutionCompleted { ctx ->
+                    val line = "[EVENT] 节点完成: ${ctx.nodeName}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onNodeExecutionFailed { ctx ->
+                    val line = "[EVENT] 节点失败: ${ctx.nodeName} - ${ctx.throwable.message}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+            if (isEnabled(ProviderManager.EventCategory.SUBGRAPH)) {
+                onSubgraphExecutionStarting { ctx ->
+                    val line = "[EVENT] 子图开始: ${ctx.subgraphName}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onSubgraphExecutionCompleted { ctx ->
+                    val line = "[EVENT] 子图完成: ${ctx.subgraphName}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onSubgraphExecutionFailed { ctx ->
+                    val line = "[EVENT] 子图失败: ${ctx.subgraphName} - ${ctx.throwable.message}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+            if (isEnabled(ProviderManager.EventCategory.STREAMING)) {
+                onLLMStreamingStarting { ctx ->
+                    val line = "[EVENT] LLM 流式开始 [模型: ${ctx.model}]\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onLLMStreamingCompleted { ctx ->
+                    val line = "[EVENT] LLM 流式完成 [${ctx.totalTokens} tokens]\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+                onLLMStreamingFailed { ctx ->
+                    val line = "[EVENT] LLM 流式失败: ${ctx.throwable.message}\n"
+                    agentLogBuilder.append(line)
+                    withContext(Dispatchers.Main) {
+                        tvOutput.append(line)
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 构建快照/持久化系统
+     */
+    private fun buildPersistence(): Persistence? {
+        if (!ProviderManager.isSnapshotEnabled(this)) return null
+
+        val provider = when (ProviderManager.getSnapshotStorage(this)) {
+            ProviderManager.SnapshotStorage.MEMORY -> InMemoryPersistenceStorageProvider()
+            ProviderManager.SnapshotStorage.FILE -> {
+                val snapshotDir = getExternalFilesDir("snapshots")
+                if (snapshotDir != null) {
+                    com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider(snapshotDir)
+                } else {
+                    InMemoryPersistenceStorageProvider()
+                }
+            }
+        }
+
+        val autoCheckpoint = ProviderManager.isSnapshotAutoCheckpoint(this)
+
+        val persistence = Persistence(
+            provider = provider,
+            autoCheckpoint = autoCheckpoint
+        )
+
+        // 设置回滚策略
+        persistence.rollbackStrategy = when (ProviderManager.getSnapshotRollbackStrategy(this)) {
+            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE ->
+                com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE
+            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE ->
+                com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.SKIP_NODE
+            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT ->
+                com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT
+        }
+
+        return persistence
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -529,7 +723,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 currentConversationId = conversationId
                 messageHistory.clear()
-                messageHistory.addAll(messages)
+                // 只将 user/assistant/system/tool 消息加入 LLM 上下文，排除 agent_log
+                messageHistory.addAll(messages.filter { it.role != "agent_log" })
 
                 val sb = StringBuilder()
                 var usageIndex = 0
@@ -537,6 +732,11 @@ class MainActivity : AppCompatActivity() {
                     val time = formatTime(msg.createdAt)
                     when (msg.role) {
                         "user" -> sb.append("You: ${msg.content}\n$time\n\n")
+                        "agent_log" -> {
+                            // 渲染中间过程日志（thinking, tool calls, trace, events 等）
+                            sb.append(msg.content)
+                            if (!msg.content.endsWith("\n")) sb.append("\n")
+                        }
                         "assistant" -> {
                             sb.append("AI: ${msg.content}")
                             val usage = usageList.getOrNull(usageIndex)
@@ -691,37 +891,6 @@ class MainActivity : AppCompatActivity() {
                 messageHistory.add(userMsg)
                 conversationRepo.addMessage(currentConversationId!!, userMsg)
 
-                // 加载记忆事实到上下文
-                val memory = ensureMemory()
-                if (memory != null) {
-                    try {
-                        val tempPrompt = Prompt.build("memory-load") {
-                            for (msg in messageHistory) {
-                                when (msg.role) {
-                                    "system" -> system(msg.content)
-                                    "user" -> user(msg.content)
-                                    "assistant" -> assistant(msg.content)
-                                }
-                            }
-                        }
-                        val tempSession = LLMSession(client, config.model, tempPrompt)
-                        memory.loadAllFactsToAgent(tempSession)
-                        // 如果有记忆消息被注入，同步到 messageHistory
-                        val injected = tempSession.prompt.messages
-                        if (injected.size > messageHistory.size) {
-                            val newMsgs = injected.subList(messageHistory.size, injected.size)
-                            messageHistory.addAll(newMsgs)
-                            withContext(Dispatchers.Main) {
-                                tvOutput.append("🧠 已加载 ${newMsgs.size} 条记忆事实\n\n")
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                            }
-                        }
-                        tempSession.close()
-                    } catch (e: Exception) {
-                        // 记忆加载失败不影响正常对话
-                    }
-                }
-
                 // 构建追踪系统
                 tracing?.close()
                 tracing = buildTracing()
@@ -745,6 +914,8 @@ class MainActivity : AppCompatActivity() {
 
                 val result: String
                 var usage: Usage? = null
+                // 重置中间过程日志收集器
+                agentLogBuilder = StringBuilder()
 
                 val toolsEnabled = ProviderManager.isToolsEnabled(this@MainActivity)
 
@@ -753,30 +924,68 @@ class MainActivity : AppCompatActivity() {
                     val registry = buildToolRegistry()
                     loadMcpToolsInto(registry)
                     val listener = object : AgentEventListener {
+                        var thinkingStarted = false
                         override suspend fun onToolCallStart(toolName: String, arguments: String) {
                             withContext(Dispatchers.Main) {
+                                if (thinkingStarted) {
+                                    tvOutput.append("\n")
+                                    agentLogBuilder.append("\n")
+                                    thinkingStarted = false
+                                }
                                 val argsPreview = if (arguments.length > 80) arguments.take(80) + "…" else arguments
-                                tvOutput.append("\n🔧 调用工具: $toolName($argsPreview)\n")
+                                val line = "\n[Tool] 调用工具: $toolName($argsPreview)\n"
+                                tvOutput.append(line)
+                                agentLogBuilder.append(line)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
                         }
                         override suspend fun onToolCallResult(toolName: String, result: String) {
                             withContext(Dispatchers.Main) {
                                 val preview = if (result.length > 200) result.take(200) + "…" else result
-                                tvOutput.append("📋 $toolName 结果: $preview\n\n")
+                                val line = "[Result] $toolName 结果: $preview\n\n"
+                                tvOutput.append(line)
+                                agentLogBuilder.append(line)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
+                            // 工具调用完成后创建检查点（细粒度恢复）
+                            persistence?.onNodeCompleted(
+                                agentId = currentConversationId ?: "unknown",
+                                nodePath = "tool:$toolName",
+                                lastInput = result.take(200),
+                                messageHistory = messageHistory.toList()
+                            )
                         }
                         override suspend fun onThinking(content: String) {
                             withContext(Dispatchers.Main) {
-                                tvOutput.append("💭 $content")
+                                if (!thinkingStarted) {
+                                    tvOutput.append("[Think] ")
+                                    agentLogBuilder.append("[Think] ")
+                                    thinkingStarted = true
+                                }
+                                tvOutput.append(content)
+                                agentLogBuilder.append(content)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
                         }
                     }
                     val executor = ToolExecutor(client, registry, eventListener = listener, tracing = tracing)
 
-                    // 任务规划（Agent 模式下可选）
+                    // 构建事件处理器
+                    eventHandler = buildEventHandler()
+
+                    // 构建快照/持久化
+                    persistence = buildPersistence()
+
+                    // 触发 Agent 开始事件
+                    val agentRunId = tracing?.newRunId() ?: java.util.UUID.randomUUID().toString()
+                    eventHandler?.fireAgentStarting(AgentStartingContext(
+                        runId = agentRunId,
+                        agentId = currentConversationId ?: "unknown",
+                        model = config.model,
+                        toolCount = registry.descriptors().size
+                    ))
+
+                    // 任务规划（Agent 模式下可选）— 使用 SimpleLLMPlanner 结构化输出
                     if (ProviderManager.isPlannerEnabled(this@MainActivity)) {
                         try {
                             val planPrompt = Prompt.build("planner") {
@@ -789,65 +998,270 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                             val planSession = LLMSession(client, config.model, planPrompt)
-                            planSession.appendPrompt {
-                                user(buildString {
-                                    appendLine("Before executing, create a brief plan for the task.")
-                                    appendLine("Format: GOAL: <goal>")
-                                    appendLine("Then list steps with '- ' prefix.")
-                                    appendLine("Keep it concise (3-5 steps max).")
-                                })
+                            val planContext = AgentGraphContext(
+                                agentId = currentConversationId ?: "planner",
+                                runId = agentRunId,
+                                client = client,
+                                model = config.model,
+                                session = planSession,
+                                toolRegistry = registry,
+                                tracing = tracing
+                            )
+
+                            val maxIter = ProviderManager.getPlannerMaxIterations(this@MainActivity)
+                            val planner = if (ProviderManager.isPlannerCriticEnabled(this@MainActivity)) {
+                                SimpleLLMWithCriticPlanner(maxIterations = maxIter)
+                            } else {
+                                SimpleLLMPlanner(maxIterations = maxIter)
                             }
-                            val planResult = planSession.requestLLMWithoutTools()
+                            val plan = planner.buildPlanPublic(planContext, message, null)
                             planSession.close()
 
                             withContext(Dispatchers.Main) {
-                                tvOutput.append("📋 任务规划:\n${planResult.content}\n\n")
+                                tvOutput.append("[Plan] 任务规划:\n")
+                                tvOutput.append("[Goal] 目标: ${plan.goal}\n")
+                                agentLogBuilder.append("[Plan] 任务规划:\n")
+                                agentLogBuilder.append("[Goal] 目标: ${plan.goal}\n")
+                                plan.steps.forEachIndexed { index, step ->
+                                    val stepLine = "  ${index + 1}. ${step.description}\n"
+                                    tvOutput.append(stepLine)
+                                    agentLogBuilder.append(stepLine)
+                                }
+                                tvOutput.append("\n")
+                                agentLogBuilder.append("\n")
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
+
+                            // 快照：规划完成后创建检查点
+                            persistence?.onNodeCompleted(
+                                agentId = currentConversationId ?: "unknown",
+                                nodePath = "planner",
+                                lastInput = message,
+                                messageHistory = messageHistory.toList()
+                            )
                         } catch (e: Exception) {
                             // 规划失败不影响正常执行
                             withContext(Dispatchers.Main) {
-                                tvOutput.append("📋 [规划跳过: ${e.message}]\n\n")
+                                val line = "[Plan] [规划跳过: ${e.message}]\n\n"
+                                tvOutput.append(line)
+                                agentLogBuilder.append(line)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
                         }
                     }
 
-                    if (useStream) {
-                        withContext(Dispatchers.Main) {
-                            tvOutput.append("AI: ")
+                    val agentStrategy = ProviderManager.getAgentStrategy(this@MainActivity)
+
+                    when (agentStrategy) {
+                        ProviderManager.AgentStrategyType.SIMPLE_LOOP -> {
+                            // 简单循环模式：使用 ToolExecutor
+                            if (useStream) {
+                                withContext(Dispatchers.Main) {
+                                    tvOutput.append("AI: ")
+                                }
+                                val streamResult = executor.executeStream(
+                                    trimmedMessages, config.model, maxTokens, samplingParams
+                                ) { chunk ->
+                                    withContext(Dispatchers.Main) {
+                                        tvOutput.append(chunk)
+                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    }
+                                }
+                                result = streamResult.content
+                                usage = streamResult.usage
+                                withContext(Dispatchers.Main) {
+                                    tvOutput.append(formatUsageLine(usage))
+                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                }
+                            } else {
+                                val chatResult = executor.execute(
+                                    trimmedMessages, config.model, maxTokens, samplingParams
+                                )
+                                result = chatResult.content
+                                usage = chatResult.usage
+
+                                val thinkingLine = chatResult.thinking?.let { thinking ->
+                                    val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
+                                    val line = "\n[Think] 思考: $preview\n"
+                                    agentLogBuilder.append(line)
+                                    line
+                                } ?: ""
+
+                                withContext(Dispatchers.Main) {
+                                    tvOutput.append("AI: $result$thinkingLine${formatUsageLine(usage)}")
+                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                }
+                            }
                         }
-                        val streamResult = executor.executeStream(
-                            trimmedMessages, config.model, maxTokens, samplingParams
-                        ) { chunk ->
+
+                        ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH -> {
+                            // 图策略模式：使用 GraphAgent + PredefinedStrategies
+                            val strategy = if (useStream) {
+                                PredefinedStrategies.singleRunStreamStrategy()
+                            } else {
+                                PredefinedStrategies.singleRunStrategy()
+                            }
+
+                            val graphAgent = GraphAgent(
+                                client = client,
+                                model = config.model,
+                                strategy = strategy,
+                                toolRegistry = registry,
+                                tracing = tracing,
+                                agentId = currentConversationId ?: "graph-agent"
+                            )
+
+                            // 构建初始 Prompt（系统提示 + 历史消息，不含最后一条 user）
+                            val graphPrompt = Prompt.build("graph-agent") {
+                                for (msg in trimmedMessages.dropLast(1)) {
+                                    when (msg.role) {
+                                        "system" -> system(msg.content)
+                                        "user" -> user(msg.content)
+                                        "assistant" -> assistant(msg.content)
+                                    }
+                                }
+                            }.copy(maxTokens = maxTokens, samplingParams = samplingParams)
+
+                            // 显示图策略流程头
                             withContext(Dispatchers.Main) {
-                                tvOutput.append(chunk)
+                                val header = "┌─ [Graph] 图策略执行 ─────────────\n│ [>] Start\n"
+                                tvOutput.append(header)
+                                agentLogBuilder.append(header)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
-                        }
-                        result = streamResult.content
-                        usage = streamResult.usage
-                        withContext(Dispatchers.Main) {
-                            tvOutput.append(formatUsageLine(usage))
-                            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                        }
-                    } else {
-                        val chatResult = executor.execute(
-                            trimmedMessages, config.model, maxTokens, samplingParams
-                        )
-                        result = chatResult.content
-                        usage = chatResult.usage
 
-                        val thinkingLine = chatResult.thinking?.let { thinking ->
-                            val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
-                            "\n💭 思考: $preview\n"
-                        } ?: ""
+                            if (useStream) {
+                                withContext(Dispatchers.Main) {
+                                    tvOutput.append("└─────────────────────────\n\nAI: ")
+                                    agentLogBuilder.append("└─────────────────────────\n")
+                                }
+                            }
 
-                        withContext(Dispatchers.Main) {
-                            tvOutput.append("AI: $result$thinkingLine${formatUsageLine(usage)}")
-                            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                            val chunkCallback: (suspend (String) -> Unit)? = if (useStream) {
+                                { chunk: String ->
+                                    withContext(Dispatchers.Main) {
+                                        tvOutput.append(chunk)
+                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    }
+                                }
+                            } else null
+
+                            var graphThinkingStarted = false
+                            val thinkingCallback: (suspend (String) -> Unit)? = if (useStream) {
+                                { text: String ->
+                                    withContext(Dispatchers.Main) {
+                                        if (!graphThinkingStarted) {
+                                            tvOutput.append("[Think] ")
+                                            agentLogBuilder.append("[Think] ")
+                                            graphThinkingStarted = true
+                                        }
+                                        tvOutput.append(text)
+                                        agentLogBuilder.append(text)
+                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    }
+                                }
+                            } else null
+
+                            // 节点生命周期回调 — 在聊天中渲染可视化节点卡片
+                            val nodeEnterCallback: suspend (String) -> Unit = { nodeName ->
+                                val icon = when {
+                                    nodeName.contains("LLM", true) -> "[LLM]"
+                                    nodeName.contains("Tool", true) -> "[Tool]"
+                                    nodeName.contains("Send", true) -> "[Send]"
+                                    else -> "[Node]"
+                                }
+                                val line = "│ $icon $nodeName ...\n"
+                                agentLogBuilder.append(line)
+                                withContext(Dispatchers.Main) {
+                                    tvOutput.append(line)
+                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                }
+                            }
+
+                            val nodeExitCallback: suspend (String, Boolean) -> Unit = { nodeName, success ->
+                                val status = if (success) "[OK]" else "[FAIL]"
+                                val line = "│ $status $nodeName 完成\n"
+                                agentLogBuilder.append(line)
+                                withContext(Dispatchers.Main) {
+                                    tvOutput.append(line)
+                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                }
+                            }
+
+                            val edgeCallback: suspend (String, String, String) -> Unit = { from, to, label ->
+                                val labelStr = if (label.isNotEmpty()) " ($label)" else ""
+                                val line = "│  ↓ $from → $to$labelStr\n"
+                                agentLogBuilder.append(line)
+                                withContext(Dispatchers.Main) {
+                                    tvOutput.append(line)
+                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                }
+                            }
+
+                            val graphResult = graphAgent.runWithCallbacks(
+                                prompt = graphPrompt,
+                                input = message,
+                                onChunk = chunkCallback,
+                                onThinking = thinkingCallback,
+                                onToolCallStart = { toolName, args ->
+                                    val argsPreview = if (args.length > 80) args.take(80) + "…" else args
+                                    val line = "│  [Tool] $toolName($argsPreview)\n"
+                                    agentLogBuilder.append(line)
+                                    withContext(Dispatchers.Main) {
+                                        tvOutput.append(line)
+                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    }
+                                },
+                                onToolCallResult = { toolName, toolResult ->
+                                    val preview = if (toolResult.length > 200) toolResult.take(200) + "…" else toolResult
+                                    val line = "│  [Result] $toolName -> $preview\n"
+                                    agentLogBuilder.append(line)
+                                    withContext(Dispatchers.Main) {
+                                        tvOutput.append(line)
+                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    }
+                                },
+                                onNodeEnter = nodeEnterCallback,
+                                onNodeExit = nodeExitCallback,
+                                onEdge = edgeCallback
+                            )
+
+                            result = graphResult ?: ""
+
+                            if (!useStream) {
+                                withContext(Dispatchers.Main) {
+                                    val footer = "│ [x] Finish\n└─────────────────────────\n\n"
+                                    tvOutput.append(footer)
+                                    agentLogBuilder.append(footer)
+                                    tvOutput.append("AI: $result${formatUsageLine(null)}")
+                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    tvOutput.append(formatUsageLine(null))
+                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                }
+                            }
                         }
                     }
+
+                    // 快照：Agent 执行完成后创建检查点
+                    persistence?.onNodeCompleted(
+                        agentId = currentConversationId ?: "unknown",
+                        nodePath = "agent_execution",
+                        lastInput = message,
+                        messageHistory = messageHistory.toList()
+                    )
+                    // 标记执行完成（墓碑检查点），防止下次误恢复
+                    persistence?.markCompleted(currentConversationId ?: "unknown")
+
+                    // 触发 Agent 完成事件
+                    eventHandler?.fireAgentCompleted(AgentCompletedContext(
+                        runId = agentRunId,
+                        agentId = currentConversationId ?: "unknown",
+                        result = result.take(200),
+                        totalIterations = 0
+                    ))
                 } else if (useStream) {
                     // 普通流式输出
                     withContext(Dispatchers.Main) {
@@ -871,10 +1285,12 @@ class MainActivity : AppCompatActivity() {
                         onThinking = { text ->
                             withContext(Dispatchers.Main) {
                                 if (!thinkingStarted) {
-                                    tvOutput.append("💭 ")
+                                    tvOutput.append("[Think] ")
+                                    agentLogBuilder.append("[Think] ")
                                     thinkingStarted = true
                                 }
                                 tvOutput.append(text)
+                                agentLogBuilder.append(text)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
                         }
@@ -895,7 +1311,9 @@ class MainActivity : AppCompatActivity() {
 
                     val thinkingLine = chatResult.thinking?.let { thinking ->
                         val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
-                        "\n💭 思考: $preview\n"
+                        val line = "\n[Think] 思考: $preview\n"
+                        agentLogBuilder.append(line)
+                        line
                     } ?: ""
 
                     withContext(Dispatchers.Main) {
@@ -906,6 +1324,13 @@ class MainActivity : AppCompatActivity() {
 
                 val assistantMsg = ChatMessage.assistant(result)
                 messageHistory.add(assistantMsg)
+
+                // 保存中间过程日志（thinking, tool calls, trace, events, graph flow 等）
+                val logContent = agentLogBuilder.toString()
+                if (logContent.isNotBlank()) {
+                    conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
+                }
+
                 conversationRepo.addMessage(currentConversationId!!, assistantMsg)
 
                 // 记录 token 用量
@@ -918,34 +1343,6 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
 
-                // 自动提取记忆事实
-                if (memory != null && ProviderManager.isMemoryAutoExtract(this@MainActivity)) {
-                    try {
-                        val memPrompt = Prompt.build("memory-extract") {
-                            for (msg in messageHistory) {
-                                when (msg.role) {
-                                    "system" -> system(msg.content)
-                                    "user" -> user(msg.content)
-                                    "assistant" -> assistant(msg.content)
-                                }
-                            }
-                        }
-                        val memSession = LLMSession(client, config.model, memPrompt)
-                        saveToMemoryAutoDetectFacts(
-                            session = memSession,
-                            memory = memory,
-                            scopes = listOf(MemoryScopeType.AGENT)
-                        )
-                        memSession.close()
-                        withContext(Dispatchers.Main) {
-                            tvOutput.append("🧠 记忆已更新\n")
-                            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                        }
-                    } catch (e: Exception) {
-                        // 记忆提取失败不影响正常对话
-                    }
-                }
-
                 // 智能上下文压缩
                 if (ProviderManager.isCompressionEnabled(this@MainActivity)) {
                     withContext(Dispatchers.Main) {
@@ -956,28 +1353,138 @@ class MainActivity : AppCompatActivity() {
             } catch (e: CancellationException) {
                 // 用户主动停止，已渲染文字保留，不追加任何内容
             } catch (e: ChatClientException) {
+                val errorMsg = when (e.errorType) {
+                    ErrorType.NETWORK -> "网络错误: ${e.message}\n请检查网络连接后重试"
+                    ErrorType.AUTHENTICATION -> "认证失败: ${e.message}\n请检查 API Key 是否正确"
+                    ErrorType.RATE_LIMIT -> "请求过于频繁: ${e.message}\n请稍后再试"
+                    ErrorType.MODEL_UNAVAILABLE -> "模型不可用: ${e.message}\n请检查模型名称或稍后重试"
+                    ErrorType.INVALID_REQUEST -> "请求参数错误: ${e.message}"
+                    ErrorType.SERVER_ERROR -> "服务器错误: ${e.message}\n请稍后重试"
+                    else -> "错误: ${e.message}"
+                }
                 withContext(Dispatchers.Main) {
-                    val errorMsg = when (e.errorType) {
-                        ErrorType.NETWORK -> "网络错误: ${e.message}\n请检查网络连接后重试"
-                        ErrorType.AUTHENTICATION -> "认证失败: ${e.message}\n请检查 API Key 是否正确"
-                        ErrorType.RATE_LIMIT -> "请求过于频繁: ${e.message}\n请稍后再试"
-                        ErrorType.MODEL_UNAVAILABLE -> "模型不可用: ${e.message}\n请检查模型名称或稍后重试"
-                        ErrorType.INVALID_REQUEST -> "请求参数错误: ${e.message}"
-                        ErrorType.SERVER_ERROR -> "服务器错误: ${e.message}\n请稍后重试"
-                        else -> "错误: ${e.message}"
-                    }
                     tvOutput.append("\n$errorMsg\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
+                // 快照恢复：检查是否有可用检查点
+                tryOfferCheckpointRecovery(e, message)
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     tvOutput.append("\n未知错误: ${e.message}\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
+                // 快照恢复：检查是否有可用检查点
+                tryOfferCheckpointRecovery(e, message)
             } finally {
                 withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
                     updateSendButtonState(ButtonState.IDLE)
                     currentJob = null
+                }
+            }
+        }
+    }
+
+    /**
+     * 快照恢复：Agent 执行失败时，检查是否有可用检查点，弹窗询问用户是否恢复。
+     * 根据配置的回滚策略执行不同的恢复行为：
+     * - RESTART_FROM_NODE: 恢复消息历史并重新执行（从头开始）
+     * - SKIP_NODE: 恢复消息历史，不重新执行（仅恢复上下文）
+     * - USE_DEFAULT_OUTPUT: 恢复消息历史并添加默认回复
+     */
+    private suspend fun tryOfferCheckpointRecovery(error: Exception, originalMessage: String) {
+        val p = persistence ?: return
+        val agentId = currentConversationId ?: return
+
+        // 获取所有非墓碑检查点
+        val allCheckpoints = p.getCheckpoints(agentId).filter { !it.isTombstone() }
+        if (allCheckpoints.isEmpty()) return
+
+        val latest = allCheckpoints.maxByOrNull { it.createdAt } ?: return
+
+        val rollbackStrategy = ProviderManager.getSnapshotRollbackStrategy(this@MainActivity)
+        val strategyName = when (rollbackStrategy) {
+            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> "从节点重启"
+            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> "跳过节点 (仅恢复上下文)"
+            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT -> "使用默认输出"
+        }
+
+        // 构建检查点选择列表
+        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        val checkpointLabels = allCheckpoints.sortedByDescending { it.createdAt }.map { cp ->
+            val time = timeFormat.format(java.util.Date(cp.createdAt))
+            "[$time] ${cp.nodePath} (${cp.messageHistory.size} 条消息)"
+        }.toTypedArray()
+
+        // 在主线程弹窗，让用户选择恢复到哪个检查点
+        val deferred = CompletableDeferred<AgentCheckpoint?>()
+        withContext(Dispatchers.Main) {
+            val sortedCps = allCheckpoints.sortedByDescending { it.createdAt }
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("检查点恢复 [$strategyName]")
+                .setMessage("Agent 执行失败: ${error.message?.take(100)}\n\n选择要恢复的检查点:")
+                .setItems(checkpointLabels) { _, which ->
+                    deferred.complete(sortedCps[which])
+                }
+                .setNegativeButton("取消") { _, _ -> deferred.complete(null) }
+                .setCancelable(false)
+                .show()
+        }
+
+        val selectedCheckpoint = deferred.await() ?: return
+
+        // 恢复消息历史到检查点状态
+        messageHistory.clear()
+        messageHistory.addAll(selectedCheckpoint.messageHistory)
+
+        val line = "[Snapshot] 从检查点恢复 [策略: $strategyName, 节点: ${selectedCheckpoint.nodePath}, 消息: ${selectedCheckpoint.messageHistory.size}]\n"
+        agentLogBuilder.append(line)
+        withContext(Dispatchers.Main) {
+            tvOutput.append(line)
+            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        }
+
+        // 根据回滚策略执行不同行为
+        when (rollbackStrategy) {
+            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> {
+                // 恢复消息历史后重新发送消息
+                withContext(Dispatchers.Main) {
+                    sendMessage(originalMessage)
+                }
+            }
+            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> {
+                // 仅恢复上下文，不重新执行
+                val skipLine = "[Snapshot] 已恢复到检查点状态，跳过失败节点。可继续发送新消息。\n"
+                agentLogBuilder.append(skipLine)
+                withContext(Dispatchers.Main) {
+                    tvOutput.append(skipLine)
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+                // 保存恢复日志到对话
+                val logContent = agentLogBuilder.toString()
+                if (logContent.isNotBlank() && currentConversationId != null) {
+                    conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
+                }
+            }
+            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT -> {
+                // 恢复上下文并添加默认回复
+                val defaultReply = "抱歉，之前的处理过程中遇到了问题。已从检查点 [${selectedCheckpoint.nodePath}] 恢复。请重新描述您的需求，我会重新处理。"
+                val assistantMsg = ChatMessage.assistant(defaultReply)
+                messageHistory.add(assistantMsg)
+
+                val defaultLine = "[Snapshot] 使用默认输出恢复\n"
+                agentLogBuilder.append(defaultLine)
+                withContext(Dispatchers.Main) {
+                    tvOutput.append(defaultLine)
+                    tvOutput.append("AI: $defaultReply\n${formatTime(System.currentTimeMillis())}\n\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+                // 保存到对话
+                if (currentConversationId != null) {
+                    val logContent = agentLogBuilder.toString()
+                    if (logContent.isNotBlank()) {
+                        conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
+                    }
+                    conversationRepo.addMessage(currentConversationId!!, assistantMsg)
                 }
             }
         }
@@ -998,26 +1505,33 @@ class MainActivity : AppCompatActivity() {
         // 创建压缩事件监听器，实时显示压缩过程
         val listener = object : CompressionEventListener {
             override suspend fun onCompressionStart(strategyName: String, originalMessageCount: Int) {
+                val line = "[Compress] 开始压缩上下文 [策略: $strategyName, 原始消息: ${originalMessageCount} 条]\n"
+                agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("🗜️ 开始压缩上下文 [策略: $strategyName, 原始消息: ${originalMessageCount} 条]\n")
+                    tvOutput.append(line)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
             override suspend fun onSummaryChunk(chunk: String) {
+                agentLogBuilder.append(chunk)
                 withContext(Dispatchers.Main) {
                     tvOutput.append(chunk)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
             override suspend fun onBlockCompressed(blockIndex: Int, totalBlocks: Int) {
+                val line = "\n[Block] 块 $blockIndex/$totalBlocks 压缩完成\n"
+                agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("\n📦 块 $blockIndex/$totalBlocks 压缩完成\n")
+                    tvOutput.append(line)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
             override suspend fun onCompressionDone(compressedMessageCount: Int) {
+                val line = "\n[OK] 上下文压缩完成 [压缩后: ${compressedMessageCount} 条消息]\n\n"
+                agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("\n✅ 上下文压缩完成 [压缩后: ${compressedMessageCount} 条消息]\n\n")
+                    tvOutput.append(line)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
@@ -1044,8 +1558,10 @@ class MainActivity : AppCompatActivity() {
             messageHistory.addAll(compressed)
         } catch (e: Exception) {
             // 压缩失败不影响正常对话
+            val line = "\n[WARN] 压缩失败: ${e.message}]\n\n"
+            agentLogBuilder.append(line)
             withContext(Dispatchers.Main) {
-                tvOutput.append("\n[⚠️ 压缩失败: ${e.message}]\n\n")
+                tvOutput.append(line)
                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         } finally {

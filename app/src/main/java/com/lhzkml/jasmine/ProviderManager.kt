@@ -439,30 +439,25 @@ object ProviderManager {
         }
     }
 
-    // ========== 跨对话记忆设置 ==========
+    // ========== Agent 策略设置 ==========
 
-    /** 是否启用跨对话记忆 */
-    fun isMemoryEnabled(ctx: Context): Boolean =
-        prefs(ctx).getBoolean("memory_enabled", false)
-
-    fun setMemoryEnabled(ctx: Context, enabled: Boolean) {
-        prefs(ctx).edit().putBoolean("memory_enabled", enabled).apply()
+    /**
+     * Agent 执行策略类型
+     * - SIMPLE_LOOP: 简单 while 循环（ToolExecutor），默认
+     * - SINGLE_RUN_GRAPH: 图策略（GraphAgent + singleRunStrategy），参考 koog
+     */
+    enum class AgentStrategyType {
+        SIMPLE_LOOP,
+        SINGLE_RUN_GRAPH
     }
 
-    /** 记忆作用域名称（Agent 级别） */
-    fun getMemoryAgentName(ctx: Context): String =
-        prefs(ctx).getString("memory_agent_name", null) ?: "jasmine"
-
-    fun setMemoryAgentName(ctx: Context, name: String) {
-        prefs(ctx).edit().putString("memory_agent_name", name).apply()
+    fun getAgentStrategy(ctx: Context): AgentStrategyType {
+        val name = prefs(ctx).getString("agent_strategy", null) ?: return AgentStrategyType.SIMPLE_LOOP
+        return try { AgentStrategyType.valueOf(name) } catch (_: Exception) { AgentStrategyType.SIMPLE_LOOP }
     }
 
-    /** 是否在每轮对话后自动提取事实 */
-    fun isMemoryAutoExtract(ctx: Context): Boolean =
-        prefs(ctx).getBoolean("memory_auto_extract", true)
-
-    fun setMemoryAutoExtract(ctx: Context, enabled: Boolean) {
-        prefs(ctx).edit().putBoolean("memory_auto_extract", enabled).apply()
+    fun setAgentStrategy(ctx: Context, strategy: AgentStrategyType) {
+        prefs(ctx).edit().putString("agent_strategy", strategy.name).apply()
     }
 
     // ========== 执行追踪设置 ==========
@@ -475,12 +470,37 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("trace_enabled", enabled).apply()
     }
 
-    /** 是否在聊天中内联显示追踪事件 */
-    fun isTraceInlineDisplay(ctx: Context): Boolean =
-        prefs(ctx).getBoolean("trace_inline_display", true)
+    /** 是否启用文件输出追踪 */
+    fun isTraceFileEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("trace_file_enabled", false)
 
-    fun setTraceInlineDisplay(ctx: Context, enabled: Boolean) {
-        prefs(ctx).edit().putBoolean("trace_inline_display", enabled).apply()
+    fun setTraceFileEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("trace_file_enabled", enabled).apply()
+    }
+
+    /**
+     * 追踪事件过滤：选择要追踪的事件类别
+     * 空集合表示全部追踪
+     */
+    enum class TraceEventCategory {
+        AGENT,      // Agent 生命周期
+        LLM,        // LLM 调用
+        TOOL,       // 工具调用
+        STRATEGY,   // 策略执行
+        NODE,       // 节点执行
+        SUBGRAPH,   // 子图执行
+        COMPRESSION // 压缩事件
+    }
+
+    fun getTraceEventFilter(ctx: Context): Set<TraceEventCategory> {
+        val raw = prefs(ctx).getString("trace_event_filter", null) ?: return emptySet()
+        return raw.split(",").filter { it.isNotBlank() }.mapNotNull {
+            try { TraceEventCategory.valueOf(it) } catch (_: Exception) { null }
+        }.toSet()
+    }
+
+    fun setTraceEventFilter(ctx: Context, categories: Set<TraceEventCategory>) {
+        prefs(ctx).edit().putString("trace_event_filter", categories.joinToString(",") { it.name }).apply()
     }
 
     // ========== 任务规划设置 ==========
@@ -491,6 +511,106 @@ object ProviderManager {
 
     fun setPlannerEnabled(ctx: Context, enabled: Boolean) {
         prefs(ctx).edit().putBoolean("planner_enabled", enabled).apply()
+    }
+
+    /** 规划器最大迭代次数，默认 1 */
+    fun getPlannerMaxIterations(ctx: Context): Int =
+        prefs(ctx).getInt("planner_max_iterations", 1)
+
+    fun setPlannerMaxIterations(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt("planner_max_iterations", value.coerceIn(1, 20)).apply()
+    }
+
+    /** 是否启用 Critic 评估（SimpleLLMWithCriticPlanner） */
+    fun isPlannerCriticEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("planner_critic_enabled", false)
+
+    fun setPlannerCriticEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("planner_critic_enabled", enabled).apply()
+    }
+
+    // ========== 快照/持久化设置 ==========
+
+    /** 是否启用快照（Agent 模式下自动创建检查点） */
+    fun isSnapshotEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("snapshot_enabled", false)
+
+    fun setSnapshotEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("snapshot_enabled", enabled).apply()
+    }
+
+    /** 快照存储方式 */
+    enum class SnapshotStorage {
+        MEMORY,  // 内存存储（应用关闭后丢失）
+        FILE     // 文件存储（持久化到本地）
+    }
+
+    fun getSnapshotStorage(ctx: Context): SnapshotStorage {
+        val name = prefs(ctx).getString("snapshot_storage", null) ?: return SnapshotStorage.MEMORY
+        return try { SnapshotStorage.valueOf(name) } catch (_: Exception) { SnapshotStorage.MEMORY }
+    }
+
+    fun setSnapshotStorage(ctx: Context, storage: SnapshotStorage) {
+        prefs(ctx).edit().putString("snapshot_storage", storage.name).apply()
+    }
+
+    /** 是否启用自动检查点（每个节点执行后自动创建） */
+    fun isSnapshotAutoCheckpoint(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("snapshot_auto_checkpoint", true)
+
+    fun setSnapshotAutoCheckpoint(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("snapshot_auto_checkpoint", enabled).apply()
+    }
+
+    /** 回滚策略 */
+    enum class SnapshotRollbackStrategy {
+        RESTART_FROM_NODE,   // 从节点重新执行
+        SKIP_NODE,           // 跳过该节点
+        USE_DEFAULT_OUTPUT   // 使用默认输出
+    }
+
+    fun getSnapshotRollbackStrategy(ctx: Context): SnapshotRollbackStrategy {
+        val name = prefs(ctx).getString("snapshot_rollback_strategy", null) ?: return SnapshotRollbackStrategy.RESTART_FROM_NODE
+        return try { SnapshotRollbackStrategy.valueOf(name) } catch (_: Exception) { SnapshotRollbackStrategy.RESTART_FROM_NODE }
+    }
+
+    fun setSnapshotRollbackStrategy(ctx: Context, strategy: SnapshotRollbackStrategy) {
+        prefs(ctx).edit().putString("snapshot_rollback_strategy", strategy.name).apply()
+    }
+
+    // ========== 事件处理器设置 ==========
+
+    /** 是否启用事件处理器（Agent 生命周期事件回调） */
+    fun isEventHandlerEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("event_handler_enabled", false)
+
+    fun setEventHandlerEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("event_handler_enabled", enabled).apply()
+    }
+
+    /**
+     * 事件处理器：选择要监听的事件类别
+     * 空集合表示全部监听
+     */
+    enum class EventCategory {
+        AGENT,      // Agent 开始/完成/失败
+        TOOL,       // 工具调用开始/完成
+        LLM,        // LLM 调用完成
+        STRATEGY,   // 策略开始/完成
+        NODE,       // 节点执行
+        SUBGRAPH,   // 子图执行
+        STREAMING   // LLM 流式事件
+    }
+
+    fun getEventHandlerFilter(ctx: Context): Set<EventCategory> {
+        val raw = prefs(ctx).getString("event_handler_filter", null) ?: return emptySet()
+        return raw.split(",").filter { it.isNotBlank() }.mapNotNull {
+            try { EventCategory.valueOf(it) } catch (_: Exception) { null }
+        }.toSet()
+    }
+
+    fun setEventHandlerFilter(ctx: Context, categories: Set<EventCategory>) {
+        prefs(ctx).edit().putString("event_handler_filter", categories.joinToString(",") { it.name }).apply()
     }
 
     // ========== 智能上下文压缩设置 ==========

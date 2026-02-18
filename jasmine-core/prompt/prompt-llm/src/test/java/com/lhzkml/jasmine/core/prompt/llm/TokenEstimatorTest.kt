@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
+import com.lhzkml.jasmine.core.prompt.model.Tokenizer
 import org.junit.Assert.*
 import org.junit.Test
 

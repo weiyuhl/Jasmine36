@@ -1,13 +1,18 @@
 package com.lhzkml.jasmine.core.agent.tools.planner
 
 import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
+import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.prompt
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
 
 /**
  * 简单 LLM 规划器
  * 完整移植 koog 的 SimpleLLMPlanner，使用 LLM 生成和执行计划。
  *
  * 工作流程：
- * 1. 让 LLM 根据当前状态生成一个带步骤的计划
+ * 1. 让 LLM 根据当前状态生成一个带步骤的计划（结构化 JSON 输出）
  * 2. 逐步执行计划中的每一步
  * 3. 每步执行后重新评估计划（可选：带 Critic）
  * 4. 所有步骤完成后返回最终状态
@@ -19,8 +24,11 @@ import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
  * 计划步骤
  * 参考 koog 的 PlanStep
  */
+@Serializable
 data class PlanStep(
     val description: String,
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault
     val isCompleted: Boolean = false
 )
 
@@ -28,6 +36,7 @@ data class PlanStep(
  * 简单计划
  * 参考 koog 的 SimplePlan
  */
+@Serializable
 data class SimplePlan(
     val goal: String,
     val steps: MutableList<PlanStep>
@@ -52,7 +61,7 @@ sealed interface PlanAssessment<Plan> {
  * 简单 LLM 规划器
  * 完整移植 koog 的 SimpleLLMPlanner
  *
- * 使用 LLM 生成计划，逐步执行，支持重新规划。
+ * 使用 LLM 结构化输出生成计划，逐步执行，支持重新规划。
  * 操作 String 状态。
  */
 open class SimpleLLMPlanner(
@@ -64,45 +73,115 @@ open class SimpleLLMPlanner(
         state: String,
         plan: SimplePlan?
     ): SimplePlan {
-        val assessment = assessPlan(context, state, plan)
-        if (assessment is PlanAssessment.Continue) {
-            return assessment.currentPlan
+        val planAssessment = assessPlan(context, state, plan)
+        if (planAssessment is PlanAssessment.Continue) {
+            return planAssessment.currentPlan
         }
 
-        val shouldReplan = assessment is PlanAssessment.Replan
+        val shouldReplan = planAssessment is PlanAssessment.Replan
 
-        // 构建规划 prompt
-        val planPrompt = buildString {
-            appendLine("You are a planning agent. Create a detailed plan with steps.")
-            appendLine()
-            if (shouldReplan) {
-                val replanAssessment = assessment as PlanAssessment.Replan
-                appendLine("## Previous Plan (failed)")
-                appendLine("Goal: ${replanAssessment.currentPlan.goal}")
-                appendLine("Steps:")
-                replanAssessment.currentPlan.steps.forEach { step ->
-                    val status = if (step.isCompleted) "[COMPLETED]" else "[PENDING]"
-                    appendLine("  $status ${step.description}")
+        // 参考 koog：使用 rewritePrompt 构建规划 prompt
+        context.session.rewritePrompt { _ ->
+            prompt("planner") {
+                system(buildString {
+                    appendLine("# Main Goal -- Create a Plan")
+                    appendLine("You are a planning agent. Your task is to create a detailed plan with steps.")
+                    appendLine()
+
+                    if (shouldReplan) {
+                        val replanAssessment = planAssessment as PlanAssessment.Replan
+                        appendLine("# Previous Plan (failed)")
+                        appendLine("Previously it was attempted to solve the problem with another plan, but it has failed")
+                        appendLine("Below you'll see the previous plan with the reason for replan")
+                        appendLine()
+                        appendLine("## Previous Plan Overview")
+                        appendLine("Previously, the following plan has been tried:")
+                        appendLine()
+                        appendLine("### Previous Plan Goal")
+                        appendLine("The goal of the previous plan was:")
+                        appendLine(replanAssessment.currentPlan.goal)
+                        appendLine()
+                        appendLine("### Previous Plan Steps")
+                        appendLine("The previous plan consisted of the following consecutive steps:")
+                        replanAssessment.currentPlan.steps.forEach { step ->
+                            if (step.isCompleted) {
+                                appendLine("- [COMPLETED!] ${step.description}")
+                            } else {
+                                appendLine("- ${step.description}")
+                            }
+                        }
+                        appendLine()
+                        appendLine("## Reason(s) to Replan")
+                        appendLine("The previous plan needs to be revised for the following reason")
+                        appendLine("> ${replanAssessment.reason}")
+                        appendLine()
+                    }
+
+                    appendLine("# What to do next?")
+                    appendLine("You need to create a new plan with steps that will solve the user's problem:")
+                    appendLine("> $state")
+
+                    if (shouldReplan) {
+                        appendLine()
+                        appendLine("**Note: Below you'll see some observations from the previous attempt**")
+                    }
+                })
+
+                // 参考 koog：如果是 replan，保留非 system 消息作为上下文
+                if (shouldReplan) {
+                    context.session.prompt.messages
+                        .filter { it.role != "system" }
+                        .forEach { message(it) }
                 }
-                appendLine()
-                appendLine("Reason for replan: ${replanAssessment.reason}")
-                appendLine()
             }
-            appendLine("## Task")
-            appendLine(state)
-            appendLine()
-            appendLine("## Instructions")
-            appendLine("Create a plan with clear, actionable steps.")
-            appendLine("Format each step on a new line, prefixed with '- '")
-            appendLine("First line should be the goal, prefixed with 'GOAL: '")
         }
 
-        // 请求 LLM 生成计划
-        context.session.appendPrompt { user(planPrompt) }
-        val result = context.session.requestLLMWithoutTools()
+        // 参考 koog：使用 requestLLMStructured 获取结构化计划
+        val structuredPlanResult = context.session.requestLLMStructured(
+            serializer = SimplePlan.serializer(),
+            examples = listOf(
+                SimplePlan(
+                    goal = "The main goal to be achieved by the system",
+                    steps = mutableListOf(
+                        PlanStep("First step description", isCompleted = true),
+                        PlanStep("Second step description", isCompleted = true),
+                        PlanStep("Some other action", isCompleted = false),
+                        PlanStep("Action to be performed on the step 4", isCompleted = false),
+                        PlanStep("Next high-level goal (5)", isCompleted = false),
+                    )
+                )
+            )
+        ).getOrThrow()
 
-        // 解析 LLM 响应为 SimplePlan
-        return parsePlanFromResponse(result.content)
+        val newPlan = structuredPlanResult.data
+
+        // 参考 koog：重写 prompt 为执行模式，将计划写入 system 消息
+        context.session.rewritePrompt { oldPrompt ->
+            prompt("agent") {
+                system(buildString {
+                    appendLine("# Plan")
+                    appendLine("You must follow the following plan to solve the problem:")
+                    appendLine()
+                    appendLine("## Main Goal:")
+                    appendLine(newPlan.goal)
+                    appendLine()
+                    appendLine("## Plan Steps:")
+                    newPlan.steps.forEachIndexed { index, step ->
+                        if (step.isCompleted) {
+                            appendLine("${index + 1}. [COMPLETED!] ${step.description}")
+                        } else {
+                            appendLine("${index + 1}. ${step.description}")
+                        }
+                    }
+                })
+
+                oldPrompt.messages
+                    .filter { it.role != "system" }
+                    .forEach { message(it) }
+            }
+        }
+
+        return SimplePlan(goal = newPlan.goal, steps = newPlan.steps.toMutableList())
     }
 
     /**
@@ -124,16 +203,13 @@ open class SimpleLLMPlanner(
         plan: SimplePlan
     ): String {
         val currentStep = plan.steps.firstOrNull { !it.isCompleted }
-            ?: return "All steps completed!"
+            ?: return "All steps of the plan are completed!"
 
-        // 执行当前步骤
+        // 参考 koog：执行当前步骤
         context.session.appendPrompt {
-            user(buildString {
-                appendLine("Execute the following step in the plan:")
-                appendLine("Goal: ${plan.goal}")
-                appendLine("Current step: ${currentStep.description}")
-                appendLine("Current state: $state")
-            })
+            system("You are executing a step in a plan. The goal is: ${plan.goal}")
+            user("Execute the following step: ${currentStep.description}")
+            user("Current state: $state")
         }
 
         val result = context.session.requestLLMWithoutTools()
@@ -152,31 +228,11 @@ open class SimpleLLMPlanner(
     ): Boolean = plan.steps.all { it.isCompleted }
 
     /**
-     * 从 LLM 响应解析计划
+     * 公开的 buildPlan 方法，供应用层直接调用
      */
-    private fun parsePlanFromResponse(response: String): SimplePlan {
-        val lines = response.lines().map { it.trim() }.filter { it.isNotEmpty() }
-
-        val goal = lines.firstOrNull { it.startsWith("GOAL:", ignoreCase = true) }
-            ?.substringAfter(":")?.trim()
-            ?: lines.firstOrNull()
-            ?: "Complete the task"
-
-        val steps = lines
-            .filter { it.startsWith("- ") || it.startsWith("* ") || it.matches(Regex("^\\d+\\..*")) }
-            .map { line ->
-                val desc = line
-                    .removePrefix("- ")
-                    .removePrefix("* ")
-                    .replace(Regex("^\\d+\\.\\s*"), "")
-                    .trim()
-                PlanStep(description = desc)
-            }
-            .ifEmpty {
-                // 如果没有解析到步骤，把整个响应作为一个步骤
-                listOf(PlanStep(description = response.take(200)))
-            }
-
-        return SimplePlan(goal = goal, steps = steps.toMutableList())
-    }
+    suspend fun buildPlanPublic(
+        context: AgentGraphContext,
+        state: String,
+        plan: SimplePlan?
+    ): SimplePlan = buildPlan(context, state, plan)
 }

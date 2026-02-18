@@ -41,6 +41,27 @@
         <activity
             android:name=".ToolConfigActivity"
             android:exported="false" />
+        <activity
+            android:name=".AgentStrategyActivity"
+            android:exported="false" />
+        <activity
+            android:name=".TraceConfigActivity"
+            android:exported="false" />
+        <activity
+            android:name=".PlannerConfigActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SnapshotConfigActivity"
+            android:exported="false" />
+        <activity
+            android:name=".CheckpointManagerActivity"
+            android:exported="false" />
+        <activity
+            android:name=".EventHandlerConfigActivity"
+            android:exported="false" />
+        <activity
+            android:name=".CompressionConfigActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

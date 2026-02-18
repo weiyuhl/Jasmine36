@@ -1,5 +1,9 @@
 package com.lhzkml.jasmine.core.agent.tools.snapshot
 
+import android.util.Log
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
 /**
  * 持久化存储提供者接口
  * 完整移植 koog 的 PersistenceStorageProvider，定义检查点的存取操作。
@@ -23,38 +27,84 @@ interface PersistenceStorageProvider<Filter> {
 
     /** 删除指定 Agent 的所有检查点 */
     suspend fun deleteCheckpoints(agentId: String)
+
+    /** 删除指定检查点 */
+    suspend fun deleteCheckpoint(agentId: String, checkpointId: String)
 }
 
 /**
  * 空持久化提供者 — 不保存任何检查点
- * 参考 koog 的 NoPersistencyStorageProvider
+ * 完整移植 koog 的 NoPersistencyStorageProvider
  */
-class NoPersistenceStorageProvider<Filter> : PersistenceStorageProvider<Filter> {
-    override suspend fun getCheckpoints(agentId: String, filter: Filter?): List<AgentCheckpoint> = emptyList()
-    override suspend fun saveCheckpoint(agentId: String, checkpoint: AgentCheckpoint) {}
-    override suspend fun getLatestCheckpoint(agentId: String, filter: Filter?): AgentCheckpoint? = null
+class NoPersistenceStorageProvider : PersistenceStorageProvider<Unit> {
+    override suspend fun getCheckpoints(agentId: String, filter: Unit?): List<AgentCheckpoint> =
+        emptyList()
+
+    override suspend fun saveCheckpoint(agentId: String, checkpoint: AgentCheckpoint) {
+        Log.i("Persistence", "Snapshot feature is not enabled. Snapshot will not be saved: ${checkpoint.checkpointId}")
+    }
+
+    override suspend fun getLatestCheckpoint(agentId: String, filter: Unit?): AgentCheckpoint? =
+        null
+
     override suspend fun deleteCheckpoints(agentId: String) {}
+
+    override suspend fun deleteCheckpoint(agentId: String, checkpointId: String) {}
 }
 
 /**
  * 内存持久化提供者 — 检查点保存在内存中
- * 参考 koog 的 InMemoryPersistencyStorageProvider
+ * 完整移植 koog 的 InMemoryPersistencyStorageProvider，包含 Mutex 线程安全。
  */
-class InMemoryPersistenceStorageProvider<Filter> : PersistenceStorageProvider<Filter> {
-    private val store = mutableMapOf<String, MutableList<AgentCheckpoint>>()
+class InMemoryPersistenceStorageProvider :
+    PersistenceStorageProvider<AgentCheckpointPredicateFilter> {
 
-    override suspend fun getCheckpoints(agentId: String, filter: Filter?): List<AgentCheckpoint> =
-        store[agentId]?.toList() ?: emptyList()
+    private val mutex = Mutex()
+    private val snapshotMap = mutableMapOf<String, List<AgentCheckpoint>>()
 
-    override suspend fun saveCheckpoint(agentId: String, checkpoint: AgentCheckpoint) {
-        store.getOrPut(agentId) { mutableListOf() }.add(checkpoint)
+    override suspend fun getCheckpoints(
+        agentId: String,
+        filter: AgentCheckpointPredicateFilter?
+    ): List<AgentCheckpoint> {
+        mutex.withLock {
+            val allCheckpoints = snapshotMap[agentId] ?: emptyList()
+            if (filter != null) {
+                return allCheckpoints.filter { filter.check(it) }
+            }
+            return allCheckpoints
+        }
     }
 
-    override suspend fun getLatestCheckpoint(agentId: String, filter: Filter?): AgentCheckpoint? =
-        store[agentId]?.maxByOrNull { it.createdAt }
+    override suspend fun saveCheckpoint(agentId: String, checkpoint: AgentCheckpoint) {
+        mutex.withLock {
+            snapshotMap[agentId] = (snapshotMap[agentId] ?: emptyList()) + checkpoint
+        }
+    }
+
+    override suspend fun getLatestCheckpoint(
+        agentId: String,
+        filter: AgentCheckpointPredicateFilter?
+    ): AgentCheckpoint? {
+        mutex.withLock {
+            if (filter != null) {
+                return snapshotMap[agentId]?.filter { filter.check(it) }
+                    ?.maxByOrNull { it.createdAt }
+            }
+            return snapshotMap[agentId]?.maxByOrNull { it.version }
+        }
+    }
 
     override suspend fun deleteCheckpoints(agentId: String) {
-        store.remove(agentId)
+        mutex.withLock {
+            snapshotMap.remove(agentId)
+        }
+    }
+
+    override suspend fun deleteCheckpoint(agentId: String, checkpointId: String) {
+        mutex.withLock {
+            snapshotMap[agentId] = (snapshotMap[agentId] ?: emptyList())
+                .filter { it.checkpointId != checkpointId }
+        }
     }
 }
 
@@ -66,9 +116,9 @@ class InMemoryPersistenceStorageProvider<Filter> : PersistenceStorageProvider<Fi
  *
  * @param baseDir 基础目录路径
  */
-class FilePersistenceStorageProvider<Filter>(
+class FilePersistenceStorageProvider(
     private val baseDir: java.io.File
-) : PersistenceStorageProvider<Filter> {
+) : PersistenceStorageProvider<AgentCheckpointPredicateFilter> {
 
     init {
         baseDir.mkdirs()
@@ -77,7 +127,7 @@ class FilePersistenceStorageProvider<Filter>(
     private fun agentDir(agentId: String): java.io.File =
         java.io.File(baseDir, agentId).also { it.mkdirs() }
 
-    override suspend fun getCheckpoints(agentId: String, filter: Filter?): List<AgentCheckpoint> {
+    override suspend fun getCheckpoints(agentId: String, filter: AgentCheckpointPredicateFilter?): List<AgentCheckpoint> {
         val dir = agentDir(agentId)
         return dir.listFiles()?.filter { it.extension == "json" }?.mapNotNull { file ->
             try {
@@ -85,6 +135,9 @@ class FilePersistenceStorageProvider<Filter>(
             } catch (e: Exception) {
                 null
             }
+        }?.let { checkpoints ->
+            if (filter != null) checkpoints.filter { filter.check(it) }
+            else checkpoints
         }?.sortedBy { it.createdAt } ?: emptyList()
     }
 
@@ -93,11 +146,18 @@ class FilePersistenceStorageProvider<Filter>(
         file.writeText(serializeCheckpoint(checkpoint))
     }
 
-    override suspend fun getLatestCheckpoint(agentId: String, filter: Filter?): AgentCheckpoint? =
-        getCheckpoints(agentId, filter).maxByOrNull { it.createdAt }
+    override suspend fun getLatestCheckpoint(agentId: String, filter: AgentCheckpointPredicateFilter?): AgentCheckpoint? {
+        val checkpoints = getCheckpoints(agentId, filter)
+        return checkpoints.maxByOrNull { it.createdAt }
+    }
 
     override suspend fun deleteCheckpoints(agentId: String) {
         agentDir(agentId).deleteRecursively()
+    }
+
+    override suspend fun deleteCheckpoint(agentId: String, checkpointId: String) {
+        val file = java.io.File(agentDir(agentId), "${checkpointId}.json")
+        if (file.exists()) file.delete()
     }
 
     // 简单的 JSON 序列化（不依赖 kotlinx.serialization，保持轻量）
