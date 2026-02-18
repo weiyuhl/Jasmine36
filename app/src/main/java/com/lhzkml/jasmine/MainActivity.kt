@@ -470,8 +470,9 @@ class MainActivity : AppCompatActivity() {
 
         btnSend.setOnClickListener {
             if (isGenerating) {
-                // 停止当前生成
+                // 停止当前生成：取消协程，已渲染文字保留，按钮立即切回发送
                 currentJob?.cancel()
+                updateSendButtonState(ButtonState.IDLE)
             } else {
                 val msg = etInput.text.toString().trim()
                 if (msg.isNotEmpty()) sendMessage(msg)
@@ -951,10 +952,7 @@ class MainActivity : AppCompatActivity() {
                     tryCompressHistory(client, config.model)
                 }
             } catch (e: CancellationException) {
-                withContext(Dispatchers.Main) {
-                    tvOutput.append("\n[⏹ 已停止生成]\n\n")
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                }
+                // 用户主动停止，已渲染文字保留，不追加任何内容
             } catch (e: ChatClientException) {
                 withContext(Dispatchers.Main) {
                     val errorMsg = when (e.errorType) {
@@ -975,7 +973,7 @@ class MainActivity : AppCompatActivity() {
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             } finally {
-                withContext(Dispatchers.Main) {
+                withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
                     updateSendButtonState(ButtonState.IDLE)
                     currentJob = null
                 }

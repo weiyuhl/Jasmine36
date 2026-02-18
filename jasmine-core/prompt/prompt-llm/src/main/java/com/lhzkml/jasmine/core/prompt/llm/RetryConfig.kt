@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.math.pow
@@ -37,6 +38,9 @@ suspend fun <T> executeWithRetry(
     repeat(config.maxRetries + 1) { attempt ->
         try {
             return block()
+        } catch (e: CancellationException) {
+            // 协程取消不重试，直接传播
+            throw e
         } catch (e: ChatClientException) {
             lastException = e
             

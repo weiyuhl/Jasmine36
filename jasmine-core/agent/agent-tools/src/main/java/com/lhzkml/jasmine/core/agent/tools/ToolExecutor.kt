@@ -14,6 +14,8 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.prompt.model.prompt
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 /**
  * Agent 执行过程事件监听器
@@ -120,6 +122,7 @@ class ToolExecutor(
         var iterations = 0
 
         while (iterations < maxIterations) {
+            coroutineContext.ensureActive()
             iterations++
 
             // 自动压缩检查
@@ -163,6 +166,7 @@ class ToolExecutor(
 
             // 通知工具调用并执行
             for (call in result.toolCalls) {
+                coroutineContext.ensureActive()
                 eventListener?.onToolCallStart(call.name, call.arguments)
 
                 tracing?.emit(TraceEvent.ToolCallStarting(
@@ -214,6 +218,7 @@ class ToolExecutor(
         }
 
         while (iterations < maxIterations) {
+            coroutineContext.ensureActive()
             iterations++
 
             // 自动压缩检查
@@ -270,6 +275,7 @@ class ToolExecutor(
 
             // 通知工具调用并执行
             for (call in result.toolCalls) {
+                coroutineContext.ensureActive()
                 eventListener?.onToolCallStart(call.name, call.arguments)
 
                 tracing?.emit(TraceEvent.ToolCallStarting(

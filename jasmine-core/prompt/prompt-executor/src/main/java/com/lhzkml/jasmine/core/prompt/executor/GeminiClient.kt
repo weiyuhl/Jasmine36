@@ -33,6 +33,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
@@ -42,6 +43,7 @@ import kotlinx.serialization.json.put
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import kotlin.coroutines.coroutineContext
 
 /**
  * Google Gemini 客户端
@@ -239,6 +241,8 @@ open class GeminiClient(
                 )
             } catch (e: ChatClientException) {
                 throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: UnknownHostException) {
                 throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e)
             } catch (e: ConnectException) {
@@ -305,6 +309,7 @@ open class GeminiClient(
                     val channel: ByteReadChannel = response.bodyAsChannel()
 
                     while (!channel.isClosedForRead) {
+                        coroutineContext.ensureActive()
                         val line = try {
                             channel.readUTF8Line()
                         } catch (_: Exception) {
@@ -358,6 +363,8 @@ open class GeminiClient(
                     toolCalls = toolCalls
                 )
             } catch (e: ChatClientException) {
+                throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: UnknownHostException) {
                 throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e)

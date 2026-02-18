@@ -33,6 +33,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
@@ -43,6 +44,7 @@ import kotlinx.serialization.json.put
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import kotlin.coroutines.coroutineContext
 import java.security.KeyFactory
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
@@ -240,6 +242,7 @@ class VertexAIClient(
                 }
                 ChatResult(content = content, usage = usage, finishReason = firstCandidate?.finishReason, toolCalls = toolCalls)
             } catch (e: ChatClientException) { throw e }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
             catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
             catch (e: SocketTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
@@ -290,6 +293,7 @@ class VertexAIClient(
                     }
                     val channel: ByteReadChannel = response.bodyAsChannel()
                     while (!channel.isClosedForRead) {
+                        coroutineContext.ensureActive()
                         val line = try { channel.readUTF8Line() } catch (_: Exception) { break } ?: break
                         if (line.startsWith("data: ")) {
                             val data = line.removePrefix("data: ").trim()
@@ -314,6 +318,7 @@ class VertexAIClient(
                 }
                 StreamResult(content = fullContent.toString(), usage = lastUsage, finishReason = lastFinishReason, toolCalls = toolCalls)
             } catch (e: ChatClientException) { throw e }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
             catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
             catch (e: SocketTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
