@@ -57,6 +57,9 @@
             android:name=".CheckpointManagerActivity"
             android:exported="false" />
         <activity
+            android:name=".CheckpointDetailActivity"
+            android:exported="false" />
+        <activity
             android:name=".EventHandlerConfigActivity"
             android:exported="false" />
         <activity

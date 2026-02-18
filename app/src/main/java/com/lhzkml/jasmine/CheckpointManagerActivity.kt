@@ -8,14 +8,13 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.lhzkml.jasmine.core.agent.tools.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider
-import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
-import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,6 +31,17 @@ class CheckpointManagerActivity : AppCompatActivity() {
     private lateinit var adapter: CheckpointListAdapter
     private var provider: FilePersistenceStorageProvider? = null
 
+    private val detailLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // 详情页删除或恢复后刷新列表
+        if (result.resultCode == CheckpointDetailActivity.RESULT_DELETED) {
+            loadCheckpoints()
+        } else if (result.resultCode == CheckpointDetailActivity.RESULT_RESTORED) {
+            finish()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_checkpoint_manager)
@@ -44,14 +54,20 @@ class CheckpointManagerActivity : AppCompatActivity() {
         rvCheckpoints = findViewById(R.id.rvCheckpoints)
 
         adapter = CheckpointListAdapter(
-            onRestoreClick = { agentId, cp -> confirmRestore(agentId, cp) },
-            onDeleteClick = { agentId, cp -> confirmDelete(agentId, cp) },
+            onItemClick = { agentId, cp -> openDetail(agentId, cp) },
             onDeleteSessionClick = { agentId -> confirmDeleteSession(agentId) }
         )
         rvCheckpoints.layoutManager = LinearLayoutManager(this)
         rvCheckpoints.adapter = adapter
 
         loadCheckpoints()
+    }
+
+    private fun openDetail(agentId: String, checkpoint: AgentCheckpoint) {
+        val intent = Intent(this, CheckpointDetailActivity::class.java)
+        intent.putExtra(CheckpointDetailActivity.EXTRA_AGENT_ID, agentId)
+        intent.putExtra(CheckpointDetailActivity.EXTRA_CHECKPOINT_ID, checkpoint.checkpointId)
+        detailLauncher.launch(intent)
     }
 
     private fun loadCheckpoints() {
@@ -82,7 +98,6 @@ class CheckpointManagerActivity : AppCompatActivity() {
                 val completed = checkpoints.any { it.isTombstone() }
                 items.add(ListItem.SessionHeader(agentId, nonTombstone.size, completed))
 
-                // 按时间倒序
                 for (cp in checkpoints.sortedByDescending { it.createdAt }) {
                     items.add(ListItem.CheckpointItem(agentId, cp))
                 }
@@ -106,84 +121,6 @@ class CheckpointManagerActivity : AppCompatActivity() {
         rvCheckpoints.visibility = View.GONE
         tvStats.text = "暂无检查点"
         adapter.submitList(emptyList())
-    }
-
-    private fun confirmRestore(agentId: String, checkpoint: AgentCheckpoint) {
-        val timeFormat = SimpleDateFormat("MM/dd HH:mm:ss", Locale.getDefault())
-        val time = timeFormat.format(Date(checkpoint.createdAt))
-        val inputPreview = checkpoint.lastInput?.take(50) ?: "无"
-
-        AlertDialog.Builder(this)
-            .setTitle("恢复到对话")
-            .setMessage(
-                "节点: ${checkpoint.nodePath}\n" +
-                "时间: $time\n" +
-                "消息: ${checkpoint.messageHistory.size} 条\n" +
-                "输入: $inputPreview\n\n" +
-                "将创建新对话并加载此检查点的消息历史。"
-            )
-            .setPositiveButton("恢复") { _, _ -> doRestore(agentId, checkpoint) }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun doRestore(agentId: String, checkpoint: AgentCheckpoint) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val repo = ConversationRepository(this@CheckpointManagerActivity)
-                val timeFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
-                val timeStr = timeFormat.format(Date(checkpoint.createdAt))
-
-                val config = ProviderManager.getActiveConfig(this@CheckpointManagerActivity)
-                val title = "[恢复] ${checkpoint.nodePath} $timeStr"
-                val systemPrompt = ProviderManager.getDefaultSystemPrompt(this@CheckpointManagerActivity)
-                val conversationId = repo.createConversation(
-                    title = title,
-                    providerId = config?.providerId ?: "unknown",
-                    model = config?.model ?: "unknown",
-                    systemPrompt = systemPrompt
-                )
-
-                for (msg in checkpoint.messageHistory) {
-                    repo.addMessage(conversationId, msg)
-                }
-
-                val restoreNote = ChatMessage(
-                    "agent_log",
-                    "[Snapshot] 从检查点恢复 [节点: ${checkpoint.nodePath}, 时间: $timeStr, 消息: ${checkpoint.messageHistory.size} 条]\n"
-                )
-                repo.addMessage(conversationId, restoreNote)
-
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@CheckpointManagerActivity, "已恢复到新对话", Toast.LENGTH_SHORT).show()
-                    val intent = Intent(this@CheckpointManagerActivity, MainActivity::class.java)
-                    intent.putExtra(MainActivity.EXTRA_CONVERSATION_ID, conversationId)
-                    intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    startActivity(intent)
-                    finish()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@CheckpointManagerActivity, "恢复失败: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
-
-    private fun confirmDelete(agentId: String, checkpoint: AgentCheckpoint) {
-        AlertDialog.Builder(this)
-            .setMessage("删除此检查点？\n${checkpoint.nodePath}")
-            .setPositiveButton("删除") { _, _ ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    provider?.deleteCheckpoint(agentId, checkpoint.checkpointId)
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@CheckpointManagerActivity, "已删除", Toast.LENGTH_SHORT).show()
-                        loadCheckpoints()
-                    }
-                }
-            }
-            .setNegativeButton("取消", null)
-            .show()
     }
 
     private fun confirmDeleteSession(agentId: String) {
@@ -238,8 +175,7 @@ class CheckpointManagerActivity : AppCompatActivity() {
     // ========== RecyclerView Adapter ==========
 
     class CheckpointListAdapter(
-        private val onRestoreClick: (String, AgentCheckpoint) -> Unit,
-        private val onDeleteClick: (String, AgentCheckpoint) -> Unit,
+        private val onItemClick: (String, AgentCheckpoint) -> Unit,
         private val onDeleteSessionClick: (String) -> Unit
     ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
@@ -249,11 +185,9 @@ class CheckpointManagerActivity : AppCompatActivity() {
         }
 
         private var items = listOf<ListItem>()
-        private var expandedPosition = -1
 
         fun submitList(list: List<ListItem>) {
             items = list
-            expandedPosition = -1
             notifyDataSetChanged()
         }
 
@@ -303,41 +237,27 @@ class CheckpointManagerActivity : AppCompatActivity() {
                     cp.lastInput?.take(40)?.let { metaParts.add("输入: $it") }
                     vh.tvMeta.text = metaParts.joinToString(" | ")
 
-                    // 展开/收起
-                    val isExpanded = position == expandedPosition
-                    vh.layoutActions.visibility = if (isExpanded) View.VISIBLE else View.GONE
-                    vh.tvPreview.visibility = if (isExpanded && cp.messageHistory.isNotEmpty()) View.VISIBLE else View.GONE
-
-                    if (isExpanded && cp.messageHistory.isNotEmpty()) {
-                        val lastMsgs = cp.messageHistory.takeLast(3)
-                        val preview = lastMsgs.joinToString("\n") { msg ->
-                            val role = when (msg.role) {
-                                "user" -> "[User]"
-                                "assistant" -> "[AI]"
-                                "system" -> "[Sys]"
-                                "tool" -> "[Tool]"
-                                else -> "[${msg.role}]"
-                            }
-                            "$role ${msg.content.take(50)}"
+                    // 消息预览（始终显示最后一条消息摘要）
+                    if (cp.messageHistory.isNotEmpty()) {
+                        val lastMsg = cp.messageHistory.last()
+                        val role = when (lastMsg.role) {
+                            "user" -> "[User]"
+                            "assistant" -> "[AI]"
+                            "system" -> "[Sys]"
+                            else -> "[${lastMsg.role}]"
                         }
-                        vh.tvPreview.text = preview
+                        vh.tvPreview.text = "$role ${lastMsg.content.take(60)}"
+                        vh.tvPreview.visibility = View.VISIBLE
+                    } else {
+                        vh.tvPreview.visibility = View.GONE
                     }
 
-                    // 墓碑检查点不能恢复
-                    vh.btnRestore.visibility = if (isTombstone) View.GONE else View.VISIBLE
+                    // 隐藏操作按钮行（操作移到详情页）
+                    vh.layoutActions.visibility = View.GONE
 
+                    // 点击打开详情页
                     vh.itemView.setOnClickListener {
-                        val prev = expandedPosition
-                        expandedPosition = if (isExpanded) -1 else position
-                        if (prev >= 0) notifyItemChanged(prev)
-                        notifyItemChanged(position)
-                    }
-
-                    vh.btnRestore.setOnClickListener {
-                        onRestoreClick(item.agentId, cp)
-                    }
-                    vh.btnDelete.setOnClickListener {
-                        onDeleteClick(item.agentId, cp)
+                        onItemClick(item.agentId, cp)
                     }
                 }
             }
@@ -355,8 +275,6 @@ class CheckpointManagerActivity : AppCompatActivity() {
             val tvMeta: TextView = view.findViewById(R.id.tvMeta)
             val tvPreview: TextView = view.findViewById(R.id.tvPreview)
             val layoutActions: LinearLayout = view.findViewById(R.id.layoutActions)
-            val btnRestore: TextView = view.findViewById(R.id.btnRestore)
-            val btnDelete: TextView = view.findViewById(R.id.btnDelete)
         }
     }
 }
