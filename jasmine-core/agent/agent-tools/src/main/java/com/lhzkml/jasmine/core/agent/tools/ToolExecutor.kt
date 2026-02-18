@@ -1,5 +1,8 @@
 package com.lhzkml.jasmine.core.agent.tools
 
+import com.lhzkml.jasmine.core.agent.tools.trace.TraceError
+import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
+import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
 import com.lhzkml.jasmine.core.prompt.llm.LLMSession
@@ -44,7 +47,8 @@ class ToolExecutor(
     private val registry: ToolRegistry,
     private val maxIterations: Int = 10,
     private val compressionStrategy: HistoryCompressionStrategy.TokenBudget? = null,
-    private val eventListener: AgentEventListener? = null
+    private val eventListener: AgentEventListener? = null,
+    private val tracing: Tracing? = null
 ) {
     // ========== Prompt + LLMSession 方式 ==========
 
@@ -53,8 +57,29 @@ class ToolExecutor(
      * LLMSession 自动管理提示词累积
      */
     suspend fun execute(prompt: Prompt, model: String): ChatResult {
+        val runId = tracing?.newRunId() ?: ""
         val session = LLMSession(client, model, prompt, registry.descriptors())
-        return session.use { executeLoop(it) }
+
+        tracing?.emit(TraceEvent.AgentStarting(
+            eventId = tracing.newEventId(), runId = runId,
+            agentId = prompt.id, model = model, toolCount = registry.descriptors().size
+        ))
+
+        return try {
+            val result = session.use { executeLoop(it, runId) }
+            tracing?.emit(TraceEvent.AgentCompleted(
+                eventId = tracing.newEventId(), runId = runId,
+                agentId = prompt.id, result = result.content.take(100),
+                totalIterations = result.usage?.totalTokens ?: 0
+            ))
+            result
+        } catch (e: Exception) {
+            tracing?.emit(TraceEvent.AgentFailed(
+                eventId = tracing.newEventId(), runId = runId,
+                agentId = prompt.id, error = TraceError.from(e)
+            ))
+            throw e
+        }
     }
 
     /**
@@ -65,11 +90,32 @@ class ToolExecutor(
         model: String,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
+        val runId = tracing?.newRunId() ?: ""
         val session = LLMSession(client, model, prompt, registry.descriptors())
-        return session.use { executeStreamLoop(it, onChunk) }
+
+        tracing?.emit(TraceEvent.AgentStarting(
+            eventId = tracing.newEventId(), runId = runId,
+            agentId = prompt.id, model = model, toolCount = registry.descriptors().size
+        ))
+
+        return try {
+            val result = session.use { executeStreamLoop(it, onChunk, runId) }
+            tracing?.emit(TraceEvent.AgentCompleted(
+                eventId = tracing.newEventId(), runId = runId,
+                agentId = prompt.id, result = result.content.take(100),
+                totalIterations = result.usage?.totalTokens ?: 0
+            ))
+            result
+        } catch (e: Exception) {
+            tracing?.emit(TraceEvent.AgentFailed(
+                eventId = tracing.newEventId(), runId = runId,
+                agentId = prompt.id, error = TraceError.from(e)
+            ))
+            throw e
+        }
     }
 
-    private suspend fun executeLoop(session: LLMSession): ChatResult {
+    private suspend fun executeLoop(session: LLMSession, runId: String = ""): ChatResult {
         var totalUsage = Usage(0, 0, 0)
         var iterations = 0
 
@@ -77,10 +123,38 @@ class ToolExecutor(
             iterations++
 
             // 自动压缩检查
-            compressionStrategy?.let { session.compressIfNeeded(it) }
+            compressionStrategy?.let {
+                if (it.shouldCompress(session.prompt.messages)) {
+                    tracing?.emit(TraceEvent.CompressionStarting(
+                        eventId = tracing.newEventId(), runId = runId,
+                        strategyName = "TokenBudget", originalMessageCount = session.prompt.messages.size
+                    ))
+                    session.compressIfNeeded(it)
+                    tracing?.emit(TraceEvent.CompressionCompleted(
+                        eventId = tracing.newEventId(), runId = runId,
+                        strategyName = "TokenBudget", compressedMessageCount = session.prompt.messages.size
+                    ))
+                }
+            }
+
+            // LLM 调用追踪
+            tracing?.emit(TraceEvent.LLMCallStarting(
+                eventId = tracing.newEventId(), runId = runId,
+                model = session.model, messageCount = session.prompt.messages.size,
+                tools = session.tools.map { it.name }
+            ))
 
             val result = session.requestLLM()
             totalUsage = totalUsage.add(result.usage)
+
+            tracing?.emit(TraceEvent.LLMCallCompleted(
+                eventId = tracing.newEventId(), runId = runId,
+                model = session.model, responsePreview = result.content.take(100),
+                hasToolCalls = result.hasToolCalls, toolCallCount = result.toolCalls.size,
+                promptTokens = result.usage?.promptTokens ?: 0,
+                completionTokens = result.usage?.completionTokens ?: 0,
+                totalTokens = result.usage?.totalTokens ?: 0
+            ))
 
             // 通知思考内容
             result.thinking?.let { eventListener?.onThinking(it) }
@@ -90,9 +164,31 @@ class ToolExecutor(
             // 通知工具调用并执行
             for (call in result.toolCalls) {
                 eventListener?.onToolCallStart(call.name, call.arguments)
-                val toolResult = registry.execute(call)
-                eventListener?.onToolCallResult(call.name, toolResult.content)
-                session.appendPrompt { message(ChatMessage.toolResult(toolResult)) }
+
+                tracing?.emit(TraceEvent.ToolCallStarting(
+                    eventId = tracing.newEventId(), runId = runId,
+                    toolCallId = call.id, toolName = call.name, toolArgs = call.arguments
+                ))
+
+                try {
+                    val toolResult = registry.execute(call)
+                    eventListener?.onToolCallResult(call.name, toolResult.content)
+
+                    tracing?.emit(TraceEvent.ToolCallCompleted(
+                        eventId = tracing.newEventId(), runId = runId,
+                        toolCallId = call.id, toolName = call.name,
+                        toolArgs = call.arguments, result = toolResult.content.take(200)
+                    ))
+
+                    session.appendPrompt { message(ChatMessage.toolResult(toolResult)) }
+                } catch (e: Exception) {
+                    tracing?.emit(TraceEvent.ToolCallFailed(
+                        eventId = tracing.newEventId(), runId = runId,
+                        toolCallId = call.id, toolName = call.name,
+                        toolArgs = call.arguments, error = TraceError.from(e)
+                    ))
+                    throw e
+                }
             }
         }
 
@@ -104,7 +200,8 @@ class ToolExecutor(
 
     private suspend fun executeStreamLoop(
         session: LLMSession,
-        onChunk: suspend (String) -> Unit
+        onChunk: suspend (String) -> Unit,
+        runId: String = ""
     ): StreamResult {
         var totalUsage = Usage(0, 0, 0)
         var iterations = 0
@@ -120,19 +217,85 @@ class ToolExecutor(
             iterations++
 
             // 自动压缩检查
-            compressionStrategy?.let { session.compressIfNeeded(it) }
+            compressionStrategy?.let {
+                if (it.shouldCompress(session.prompt.messages)) {
+                    tracing?.emit(TraceEvent.CompressionStarting(
+                        eventId = tracing.newEventId(), runId = runId,
+                        strategyName = "TokenBudget", originalMessageCount = session.prompt.messages.size
+                    ))
+                    session.compressIfNeeded(it)
+                    tracing?.emit(TraceEvent.CompressionCompleted(
+                        eventId = tracing.newEventId(), runId = runId,
+                        strategyName = "TokenBudget", compressedMessageCount = session.prompt.messages.size
+                    ))
+                }
+            }
 
-            val result = session.requestLLMStream(onChunk, onThinking)
+            // LLM 流式调用追踪
+            tracing?.emit(TraceEvent.LLMStreamStarting(
+                eventId = tracing.newEventId(), runId = runId,
+                model = session.model, messageCount = session.prompt.messages.size,
+                tools = session.tools.map { it.name }
+            ))
+
+            val tracingOnChunk: suspend (String) -> Unit = { chunk ->
+                onChunk(chunk)
+                tracing?.emit(TraceEvent.LLMStreamFrame(
+                    eventId = tracing.newEventId(), runId = runId, chunk = chunk
+                ))
+            }
+
+            val result = try {
+                session.requestLLMStream(tracingOnChunk, onThinking)
+            } catch (e: Exception) {
+                tracing?.emit(TraceEvent.LLMStreamFailed(
+                    eventId = tracing.newEventId(), runId = runId,
+                    model = session.model, error = TraceError.from(e)
+                ))
+                throw e
+            }
+
             totalUsage = totalUsage.add(result.usage)
+
+            tracing?.emit(TraceEvent.LLMStreamCompleted(
+                eventId = tracing.newEventId(), runId = runId,
+                model = session.model, responsePreview = result.content.take(100),
+                hasToolCalls = result.hasToolCalls, toolCallCount = result.toolCalls.size,
+                promptTokens = result.usage?.promptTokens ?: 0,
+                completionTokens = result.usage?.completionTokens ?: 0,
+                totalTokens = result.usage?.totalTokens ?: 0
+            ))
 
             if (!result.hasToolCalls) return result.copy(usage = totalUsage)
 
             // 通知工具调用并执行
             for (call in result.toolCalls) {
                 eventListener?.onToolCallStart(call.name, call.arguments)
-                val toolResult = registry.execute(call)
-                eventListener?.onToolCallResult(call.name, toolResult.content)
-                session.appendPrompt { message(ChatMessage.toolResult(toolResult)) }
+
+                tracing?.emit(TraceEvent.ToolCallStarting(
+                    eventId = tracing.newEventId(), runId = runId,
+                    toolCallId = call.id, toolName = call.name, toolArgs = call.arguments
+                ))
+
+                try {
+                    val toolResult = registry.execute(call)
+                    eventListener?.onToolCallResult(call.name, toolResult.content)
+
+                    tracing?.emit(TraceEvent.ToolCallCompleted(
+                        eventId = tracing.newEventId(), runId = runId,
+                        toolCallId = call.id, toolName = call.name,
+                        toolArgs = call.arguments, result = toolResult.content.take(200)
+                    ))
+
+                    session.appendPrompt { message(ChatMessage.toolResult(toolResult)) }
+                } catch (e: Exception) {
+                    tracing?.emit(TraceEvent.ToolCallFailed(
+                        eventId = tracing.newEventId(), runId = runId,
+                        toolCallId = call.id, toolName = call.name,
+                        toolArgs = call.arguments, error = TraceError.from(e)
+                    ))
+                    throw e
+                }
             }
         }
 
