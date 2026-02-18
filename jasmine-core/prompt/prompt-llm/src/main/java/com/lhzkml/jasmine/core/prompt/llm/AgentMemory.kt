@@ -14,15 +14,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * Agent 记忆系统
- * 参考 koog 的 AgentMemory，提供从对话历史中提取事实并持久化存储的能力。
+ * Memory implementation for AI agents that provides persistent storage and retrieval of facts.
+ * 完整移植 koog 的 AgentMemory
  *
  * 核心功能：
  * - saveFactsFromHistory: 从对话历史中提取指定概念的事实并保存
- * - saveAutoDetectedFacts: 自动检测并提取对话中的所有重要事实
  * - loadFactsToAgent: 从记忆中加载指定概念的事实并注入到 LLM 上下文
  * - loadAllFactsToAgent: 从记忆中加载所有事实并注入到 LLM 上下文
- * - save/load/loadAll: 直接操作记忆存储
+ * - save/load/loadAll/loadByDescription: 直接操作记忆存储
  *
  * @param provider 记忆存储提供者
  * @param scopesProfile 作用域配置文件，维护 MemoryScopeType → 名称 的映射
@@ -32,21 +31,14 @@ class AgentMemory(
     val scopesProfile: MemoryScopesProfile = MemoryScopesProfile()
 ) {
     /**
-     * 从对话历史中提取事实并保存到记忆
-     *
-     * 流程：
-     * 1. 把当前对话历史包装成 XML 格式
-     * 2. 用提取提示词让 LLM 从历史中提取事实
-     * 3. 解析 LLM 回复为 Fact 对象
-     * 4. 保存到记忆存储
-     * 5. 恢复原始 prompt
+     * Extracts and saves facts from the LLM chat history based on the provided concept.
      *
      * @param session 当前 LLM 会话
      * @param concept 要提取的概念
      * @param subject 记忆主题
      * @param scope 记忆作用域
-     * @param retrievalModel 用于事实提取的模型名称（可选，默认使用当前 session 的模型）
-     * @param retrievalClient 用于事实提取的 ChatClient（可选，默认使用当前 session 的 client）
+     * @param retrievalModel 用于事实提取的模型名称（可选）
+     * @param retrievalClient 用于事实提取的 ChatClient（可选）
      */
     suspend fun saveFactsFromHistory(
         session: LLMSession,
@@ -57,7 +49,6 @@ class AgentMemory(
         retrievalClient: ChatClient? = null
     ) {
         if (retrievalModel != null || retrievalClient != null) {
-            // 使用指定的模型/客户端创建临时 session 进行提取
             val tempSession = LLMSession(
                 client = retrievalClient ?: session.currentClient,
                 model = retrievalModel ?: session.model,
@@ -72,64 +63,7 @@ class AgentMemory(
     }
 
     /**
-     * 自动检测并提取对话中的所有重要事实
-     * 参考 koog 的 nodeSaveToMemoryAutoDetectFacts
-     *
-     * 流程：
-     * 1. 让 LLM 分析对话历史，自动识别重要事实
-     * 2. 解析 LLM 回复为 subject + fact 列表
-     * 3. 保存到指定作用域
-     * 4. 恢复原始 prompt
-     *
-     * @param session 当前 LLM 会话
-     * @param scopes 要保存到的作用域类型列表
-     * @param subjects 要检测的主题列表
-     * @param retrievalModel 用于事实提取的模型名称（可选）
-     * @param retrievalClient 用于事实提取的 ChatClient（可选）
-     */
-    suspend fun saveAutoDetectedFacts(
-        session: LLMSession,
-        scopes: List<MemoryScopeType> = listOf(MemoryScopeType.AGENT),
-        subjects: List<MemorySubject> = MemorySubject.registeredSubjects,
-        retrievalModel: String? = null,
-        retrievalClient: ChatClient? = null
-    ) {
-        val initialPrompt = session.prompt.copy()
-
-        // 如果指定了 retrievalModel，创建临时 session
-        val workSession = if (retrievalModel != null || retrievalClient != null) {
-            LLMSession(
-                client = retrievalClient ?: session.currentClient,
-                model = retrievalModel ?: session.model,
-                initialPrompt = initialPrompt.copy()
-            )
-        } else {
-            session
-        }
-
-        workSession.appendPrompt {
-            user(MemoryPrompts.autoDetectFactsPrompt(subjects, HISTORY_WRAPPER_TAG))
-        }
-
-        val response = workSession.requestLLMWithoutTools()
-
-        // 解析并保存
-        scopes.mapNotNull(scopesProfile::getScope).forEach { scope ->
-            val facts = parseFactsFromResponse(response.content)
-            facts.forEach { (subject, fact) ->
-                provider.save(fact, subject, scope)
-            }
-        }
-
-        // 恢复原始 prompt（只恢复原始 session）
-        session.rewritePrompt { initialPrompt }
-    }
-
-    /**
-     * 从记忆中加载指定概念的事实并注入到 LLM 会话上下文
-     *
-     * 按 subject 优先级排序，SingleFact 只保留最高优先级的。
-     * 加载的事实以 user 消息形式追加到 session.prompt。
+     * Loads facts about a specific concept from memory and adds them to the LLM chat history.
      *
      * @param session 当前 LLM 会话
      * @param concept 要加载的概念
@@ -148,8 +82,7 @@ class AgentMemory(
     }
 
     /**
-     * 从记忆中加载所有事实并注入到 LLM 会话上下文
-     * 参考 koog 的 loadAllFactsToAgent
+     * Loads all available facts from memory and adds them to the LLM chat history.
      *
      * @param session 当前 LLM 会话
      * @param scopes 要搜索的作用域类型列表
@@ -164,8 +97,7 @@ class AgentMemory(
     }
 
     /**
-     * 加载事实的内部实现
-     * 参考 koog 的 loadFactsToAgentImpl
+     * Implementation method for loading facts from memory and adding them to the LLM chat history.
      *
      * 处理逻辑：
      * 1. 按 subject 优先级排序
@@ -252,61 +184,75 @@ class AgentMemory(
     suspend fun loadByDescription(description: String, subject: MemorySubject, scope: MemoryScope): List<Fact> {
         return provider.loadByDescription(description, subject, scope)
     }
-
-    companion object {
-        /** 历史包装 XML 标签 */
-        const val HISTORY_WRAPPER_TAG = "conversation_to_extract_facts"
-    }
 }
+
 
 // ========== 事实提取 ==========
 
 /**
- * 从对话历史中提取事实
- * 参考 koog 的 retrieveFactsFromHistory
+ * Extracts facts about a specific concept from the LLM chat history.
+ * 完整移植 koog 的 retrieveFactsFromHistory
  *
  * 流程：
  * 1. 保存原始 prompt
- * 2. 把历史消息包装成 XML
- * 3. 用提取提示词重写 prompt
- * 4. 请求 LLM（不带工具）
- * 5. 解析回复为 Fact
- * 6. 恢复原始 prompt
+ * 2. 删除末尾工具调用
+ * 3. 把历史消息包装成 XML
+ * 4. 用提取提示词重写 prompt
+ * 5. 请求 LLM（不带工具）
+ * 6. 解析回复为 Fact
+ * 7. 恢复原始 prompt
  */
 suspend fun retrieveFactsFromHistory(
     session: LLMSession,
     concept: Concept
 ): Fact {
-    val tag = AgentMemory.HISTORY_WRAPPER_TAG
-    val oldPrompt = session.prompt
-
-    // 去掉末尾工具调用
-    session.dropTrailingToolCalls()
-
-    // 把历史包装成 XML
-    val combinedMessage = buildHistoryXml(oldPrompt.messages)
-
-    // 构建提取提示词
-    val extractionPrompt = when (concept.factType) {
-        FactType.SINGLE -> MemoryPrompts.singleFactPrompt(concept, tag)
-        FactType.MULTIPLE -> MemoryPrompts.multipleFactsPrompt(concept, tag)
+    val promptForCompression = when (concept.factType) {
+        FactType.SINGLE -> MemoryPrompts.singleFactPrompt(concept)
+        FactType.MULTIPLE -> MemoryPrompts.multipleFactsPrompt(concept)
     }
 
-    // 重写 prompt 为提取模式
-    session.rewritePrompt { prompt ->
-        com.lhzkml.jasmine.core.prompt.model.Prompt.build(prompt.id) {
-            system(extractionPrompt)
+    // remove trailing tool calls as we didn't provide any result for them
+    session.dropTrailingToolCalls()
+
+    val oldPrompt = session.prompt
+
+    session.rewritePrompt {
+        // Combine all history into one message with XML tags
+        // to prevent LLM from continuing answering in a tool_call -> tool_result pattern
+        val combinedMessage = buildString {
+            append("<${MemoryPrompts.historyWrapperTag}>\n")
+            oldPrompt.messages.forEach { message ->
+                when {
+                    message.role == "system" -> append("<system>\n${message.content}\n</system>\n")
+                    message.role == "user" -> append("<user>\n${message.content}\n</user>\n")
+                    message.role == "assistant" && message.toolCalls != null -> {
+                        if (message.content.isNotBlank()) {
+                            append("<assistant>\n${message.content}\n</assistant>\n")
+                        }
+                        val calls = message.toolCalls ?: emptyList()
+                        calls.forEach { call ->
+                            append("<tool_call tool=${call.name}>\n${call.arguments}\n</tool_call>\n")
+                        }
+                    }
+                    message.role == "assistant" -> append("<assistant>\n${message.content}\n</assistant>\n")
+                    message.role == "tool" -> append("<tool_result tool=${message.toolName}>\n${message.content}\n</tool_result>\n")
+                }
+            }
+            append("</${MemoryPrompts.historyWrapperTag}>\n")
+        }
+
+        // Put compression prompt as a System instruction
+        com.lhzkml.jasmine.core.prompt.model.Prompt.build(oldPrompt.id) {
+            system(promptForCompression)
             user(combinedMessage)
         }
     }
 
     val timestamp = System.currentTimeMillis()
 
-    // 请求 LLM 提取事实
     val result = session.requestLLMWithoutTools()
     val responseText = result.content.trim()
 
-    // 解析回复
     val fact: Fact = when (concept.factType) {
         FactType.SINGLE -> SingleFact(
             concept = concept,
@@ -325,90 +271,120 @@ suspend fun retrieveFactsFromHistory(
         }
     }
 
-    // 恢复原始 prompt
+    // Restore the original prompt
     session.rewritePrompt { oldPrompt }
 
     return fact
 }
 
+// ========== 自动检测事实（移植自 koog MemoryNodes） ==========
+
+@Serializable
+internal data class SubjectWithFact(
+    val subject: MemorySubject,
+    val keyword: String,
+    val description: String,
+    val value: String
+)
+
 /**
- * 解析自动检测事实的 LLM 回复
- * 参考 koog 的 parseFactsFromResponse
+ * Parsing facts from response.
+ * 完整移植 koog 的 parseFactsFromResponse（MemoryNodes.kt）
  *
- * 支持两种格式：
- * 1. JSON 格式（koog 原始格式）
- * 2. 管道分隔格式（subject|keyword|description|value）
+ * 只支持 JSON 格式（与 koog 一致）。
  */
 fun parseFactsFromResponse(content: String): List<Pair<MemorySubject, Fact>> {
     val timestamp = System.currentTimeMillis()
+    val parsedFacts = Json.decodeFromString<List<SubjectWithFact>>(content)
+    val groupedFacts = parsedFacts.groupBy { it.subject to it.keyword }
 
-    // 尝试 JSON 格式
-    try {
-        @Serializable
-        data class FactEntry(
-            val subject: String,
-            val keyword: String,
-            val description: String,
-            val value: String
-        )
-
-        val json = Json { ignoreUnknownKeys = true }
-        val entries = json.decodeFromString<List<FactEntry>>(content)
-        val grouped = entries.groupBy { it.subject to it.keyword }
-
-        return grouped.map { (key, facts) ->
-            val subject = MemorySubject.findByName(key.first)
-                ?: MemorySubject.Everything
-
-            if (facts.size == 1) {
-                val entry = facts.single()
-                subject to SingleFact(
-                    concept = Concept(entry.keyword, entry.description, FactType.SINGLE),
-                    timestamp = timestamp,
-                    value = entry.value
+    return groupedFacts.map { (subjectWithKeyword, facts) ->
+        when (facts.size) {
+            1 -> {
+                val singleFact = facts.single()
+                subjectWithKeyword.first to SingleFact(
+                    concept = Concept(
+                        keyword = singleFact.keyword,
+                        description = singleFact.description,
+                        factType = FactType.SINGLE
+                    ),
+                    value = singleFact.value,
+                    timestamp = timestamp
                 )
-            } else {
-                subject to MultipleFacts(
-                    concept = Concept(key.second, facts.first().description, FactType.MULTIPLE),
-                    timestamp = timestamp,
-                    values = facts.map { it.value }
+            }
+            else -> {
+                subjectWithKeyword.first to MultipleFacts(
+                    concept = Concept(
+                        keyword = subjectWithKeyword.second,
+                        description = facts.first().description,
+                        factType = FactType.MULTIPLE
+                    ),
+                    values = facts.map { it.value },
+                    timestamp = timestamp
                 )
             }
         }
-    } catch (_: Exception) {
-        // JSON 解析失败，尝试管道分隔格式
+    }
+}
+
+/**
+ * 自动检测并保存对话中的事实
+ * 完整移植 koog 的 nodeSaveToMemoryAutoDetectFacts 逻辑
+ *
+ * @param session 当前 LLM 会话
+ * @param memory AgentMemory 实例
+ * @param scopes 要保存到的作用域类型列表
+ * @param subjects 要检测的主题列表
+ * @param retrievalModel 用于事实提取的模型名称（可选）
+ * @param retrievalClient 用于事实提取的 ChatClient（可选）
+ */
+suspend fun saveToMemoryAutoDetectFacts(
+    session: LLMSession,
+    memory: AgentMemory,
+    scopes: List<MemoryScopeType> = listOf(MemoryScopeType.AGENT),
+    subjects: List<MemorySubject> = MemorySubject.registeredSubjects,
+    retrievalModel: String? = null,
+    retrievalClient: ChatClient? = null
+) {
+    val initialPrompt = session.prompt.copy()
+
+    val workSession = if (retrievalModel != null || retrievalClient != null) {
+        LLMSession(
+            client = retrievalClient ?: session.currentClient,
+            model = retrievalModel ?: session.model,
+            initialPrompt = initialPrompt.copy()
+        )
+    } else {
+        session
     }
 
-    // 管道分隔格式: subject|keyword|description|value
-    return content.lines()
-        .filter { it.contains('|') }
-        .mapNotNull { line ->
-            val parts = line.split('|').map { it.trim() }
-            if (parts.size < 4) return@mapNotNull null
+    workSession.appendPrompt {
+        user(MemoryPrompts.autoDetectFacts(subjects))
+    }
 
-            val subject = MemorySubject.findByName(parts[0])
-                ?: MemorySubject.Everything
+    val response = workSession.requestLLMWithoutTools()
 
-            subject to SingleFact(
-                concept = Concept(parts[1], parts[2], FactType.SINGLE),
-                timestamp = timestamp,
-                value = parts[3]
-            )
+    scopes.mapNotNull(memory.scopesProfile::getScope).forEach { scope ->
+        val facts = parseFactsFromResponse(response.content)
+        facts.forEach { (subject, fact) ->
+            memory.provider.save(fact, subject, scope)
         }
+    }
+
+    // Revert the prompt to the original one
+    session.rewritePrompt { initialPrompt }
 }
 
 // ========== 内部辅助 ==========
 
 /**
  * 把消息列表包装成 XML 格式
- * 参考 koog 的 retrieveFactsFromHistory 中的 XML 包装逻辑
- *
- * 完整处理所有消息类型，包括 assistant 的工具调用。
+ * 用于 buildHistoryXml 的独立辅助函数（供测试使用）
  */
 internal fun buildHistoryXml(
-    messages: List<com.lhzkml.jasmine.core.prompt.model.ChatMessage>
+    messages: List<ChatMessage>
 ): String {
-    val tag = AgentMemory.HISTORY_WRAPPER_TAG
+    val tag = MemoryPrompts.historyWrapperTag
     return buildString {
         appendLine("<$tag>")
         messages.forEach { msg ->
@@ -416,7 +392,6 @@ internal fun buildHistoryXml(
                 msg.role == "system" -> appendLine("<system>\n${msg.content}\n</system>")
                 msg.role == "user" -> appendLine("<user>\n${msg.content}\n</user>")
                 msg.role == "assistant" && msg.toolCalls != null -> {
-                    // assistant 消息带工具调用
                     if (msg.content.isNotBlank()) {
                         appendLine("<assistant>\n${msg.content}\n</assistant>")
                     }
@@ -433,5 +408,5 @@ internal fun buildHistoryXml(
     }
 }
 
-/** 截断字符串用于显示 */
+/** Utility function to shorten a string for display purposes. */
 private fun String.shortened() = lines().first().take(100) + "..."

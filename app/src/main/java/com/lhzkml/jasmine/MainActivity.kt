@@ -61,6 +61,7 @@ import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMPlanner
 import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
 import com.lhzkml.jasmine.core.prompt.llm.AgentMemory
 import com.lhzkml.jasmine.core.prompt.llm.LocalFileMemoryProvider
+import com.lhzkml.jasmine.core.prompt.llm.saveToMemoryAutoDetectFacts
 import com.lhzkml.jasmine.core.prompt.model.MemoryScope
 import com.lhzkml.jasmine.core.prompt.model.MemoryScopeType
 import com.lhzkml.jasmine.core.prompt.model.MemoryScopesProfile
@@ -930,8 +931,9 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                         val memSession = LLMSession(client, config.model, memPrompt)
-                        memory.saveAutoDetectedFacts(
+                        saveToMemoryAutoDetectFacts(
                             session = memSession,
+                            memory = memory,
                             scopes = listOf(MemoryScopeType.AGENT)
                         )
                         memSession.close()

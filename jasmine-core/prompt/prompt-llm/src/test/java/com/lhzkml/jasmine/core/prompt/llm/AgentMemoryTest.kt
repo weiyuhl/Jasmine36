@@ -112,7 +112,6 @@ class AgentMemoryTest {
         val session = LLMSession(mockClient, "test-model", initialPrompt)
         memory.saveFactsFromHistory(session, buildConcept, MemorySubject.Project, scope)
 
-        // 验证事实已保存
         val loaded = memory.load(buildConcept, MemorySubject.Project, scope)
         assertEquals(1, loaded.size)
         assertTrue(loaded[0] is SingleFact)
@@ -284,17 +283,6 @@ class AgentMemoryTest {
         assertEquals("project", subject.name)
         assertTrue(fact is MultipleFacts)
         assertEquals(2, (fact as MultipleFacts).values.size)
-    }
-
-    @Test
-    fun `parseFactsFromResponse parses pipe-separated format`() {
-        val text = """user|preferred-language|User's preferred language|Kotlin
-project|build-system|Project build system|Gradle 8.0"""
-
-        val facts = parseFactsFromResponse(text)
-        assertEquals(2, facts.size)
-        assertEquals("Kotlin", (facts[0].second as SingleFact).value)
-        assertEquals("Gradle 8.0", (facts[1].second as SingleFact).value)
     }
 
     // ========== NoMemory 测试 ==========
