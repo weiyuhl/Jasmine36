@@ -32,6 +32,9 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvToolCount: TextView
     private lateinit var tvCompressionInfo: TextView
     private lateinit var tvMemoryInfo: TextView
+    private lateinit var tvMcpInfo: TextView
+    private lateinit var switchMcp: SwitchCompat
+    private lateinit var layoutMcpConfig: LinearLayout
     private lateinit var tvMaxTokens: TextView
     private lateinit var tvSystemPrompt: TextView
     private lateinit var tvPromptTokens: TextView
@@ -88,6 +91,22 @@ class SettingsActivity : AppCompatActivity() {
 
         layoutToolConfig.setOnClickListener {
             showToolConfigDialog()
+        }
+
+        // MCP 服务器开关
+        switchMcp = findViewById(R.id.switchMcp)
+        layoutMcpConfig = findViewById(R.id.layoutMcpConfig)
+        tvMcpInfo = findViewById(R.id.tvMcpInfo)
+
+        switchMcp.isChecked = ProviderManager.isMcpEnabled(this)
+        layoutMcpConfig.visibility = if (switchMcp.isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        switchMcp.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setMcpEnabled(this, isChecked)
+            layoutMcpConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
+        layoutMcpConfig.setOnClickListener {
+            showMcpServerListDialog()
         }
 
         // 智能上下文压缩开关
@@ -167,6 +186,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshToolCount()
         refreshCompressionInfo()
         refreshMemoryInfo()
+        refreshMcpInfo()
     }
 
     private fun refreshTopKVisibility() {
@@ -548,6 +568,123 @@ class SettingsActivity : AppCompatActivity() {
                 refreshCompressionInfo()
             }
         }
+    }
+
+    private fun refreshMcpInfo() {
+        val servers = ProviderManager.getMcpServers(this)
+        val enabledCount = servers.count { it.enabled }
+        tvMcpInfo.text = if (servers.isEmpty()) "未配置服务器" else "已配置 ${servers.size} 个 · 启用 $enabledCount 个"
+    }
+
+    private fun showMcpServerListDialog() {
+        val servers = ProviderManager.getMcpServers(this)
+
+        if (servers.isEmpty()) {
+            showMcpServerEditDialog(-1, null)
+            return
+        }
+
+        val names = servers.mapIndexed { i, s ->
+            val status = if (s.enabled) "✅" else "⏸️"
+            "$status ${s.name} — ${s.url}"
+        }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("MCP 服务器")
+            .setItems(names) { _, which ->
+                showMcpServerActionDialog(which, servers[which])
+            }
+            .setPositiveButton("添加服务器") { _, _ ->
+                showMcpServerEditDialog(-1, null)
+            }
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    private fun showMcpServerActionDialog(index: Int, server: ProviderManager.McpServerConfig) {
+        val actions = arrayOf(
+            "编辑",
+            if (server.enabled) "禁用" else "启用",
+            "删除"
+        )
+        AlertDialog.Builder(this)
+            .setTitle(server.name)
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> showMcpServerEditDialog(index, server)
+                    1 -> {
+                        ProviderManager.updateMcpServer(this, index, server.copy(enabled = !server.enabled))
+                        refreshMcpInfo()
+                    }
+                    2 -> {
+                        AlertDialog.Builder(this)
+                            .setMessage("确定删除 ${server.name}？")
+                            .setPositiveButton("删除") { _, _ ->
+                                ProviderManager.removeMcpServer(this, index)
+                                refreshMcpInfo()
+                            }
+                            .setNegativeButton("取消", null)
+                            .show()
+                    }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showMcpServerEditDialog(index: Int, server: ProviderManager.McpServerConfig?) {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 16)
+        }
+
+        layout.addView(TextView(this).apply { text = "名称"; textSize = 14f })
+        val etName = EditText(this).apply {
+            hint = "如：My MCP Server"
+            server?.name?.let { setText(it) }
+        }
+        layout.addView(etName)
+
+        layout.addView(TextView(this).apply { text = "\nURL"; textSize = 14f })
+        val etUrl = EditText(this).apply {
+            hint = "http://localhost:8080/mcp"
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+            server?.url?.let { setText(it) }
+        }
+        layout.addView(etUrl)
+
+        layout.addView(TextView(this).apply { text = "\n请求头（每行一个 key=value）"; textSize = 14f })
+        val etHeaders = EditText(this).apply {
+            hint = "Authorization=Bearer xxx"
+            minLines = 2
+            maxLines = 4
+            server?.headers?.let { setText(it) }
+        }
+        layout.addView(etHeaders)
+
+        AlertDialog.Builder(this)
+            .setTitle(if (index < 0) "添加 MCP 服务器" else "编辑 MCP 服务器")
+            .setView(layout)
+            .setPositiveButton("保存") { _, _ ->
+                val name = etName.text.toString().trim().ifEmpty { "MCP Server" }
+                val url = etUrl.text.toString().trim()
+                if (url.isEmpty()) {
+                    android.widget.Toast.makeText(this, "URL 不能为空", android.widget.Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val headers = etHeaders.text.toString().trim()
+                val config = ProviderManager.McpServerConfig(
+                    name = name, url = url, headers = headers, enabled = server?.enabled ?: true
+                )
+                if (index < 0) {
+                    ProviderManager.addMcpServer(this, config)
+                } else {
+                    ProviderManager.updateMcpServer(this, index, config)
+                }
+                refreshMcpInfo()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun refreshMemoryInfo() {

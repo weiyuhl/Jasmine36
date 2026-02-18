@@ -319,6 +319,84 @@ object ProviderManager {
         prefs(ctx).edit().putString("brightdata_api_key", key).apply()
     }
 
+    // ========== MCP 服务器设置 ==========
+
+    /** 是否启用 MCP 工具 */
+    fun isMcpEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("mcp_enabled", false)
+
+    fun setMcpEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("mcp_enabled", enabled).apply()
+    }
+
+    /**
+     * MCP 服务器配置
+     * @param name 显示名称
+     * @param url 服务器 URL
+     * @param headers 自定义请求头（key=value 格式，换行分隔）
+     * @param enabled 是否启用
+     */
+    data class McpServerConfig(
+        val name: String,
+        val url: String,
+        val headers: String = "",
+        val enabled: Boolean = true
+    )
+
+    /**
+     * 获取所有 MCP 服务器配置
+     * 存储格式：JSON 数组字符串
+     */
+    fun getMcpServers(ctx: Context): List<McpServerConfig> {
+        val raw = prefs(ctx).getString("mcp_servers", null) ?: return emptyList()
+        return try {
+            raw.split("|||").filter { it.isNotBlank() }.map { entry ->
+                val parts = entry.split(":::")
+                McpServerConfig(
+                    name = parts.getOrElse(0) { "" },
+                    url = parts.getOrElse(1) { "" },
+                    headers = parts.getOrElse(2) { "" },
+                    enabled = parts.getOrElse(3) { "true" }.toBooleanStrictOrNull() ?: true
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 保存所有 MCP 服务器配置 */
+    fun setMcpServers(ctx: Context, servers: List<McpServerConfig>) {
+        val raw = servers.joinToString("|||") { server ->
+            "${server.name}:::${server.url}:::${server.headers}:::${server.enabled}"
+        }
+        prefs(ctx).edit().putString("mcp_servers", raw).apply()
+    }
+
+    /** 添加 MCP 服务器 */
+    fun addMcpServer(ctx: Context, server: McpServerConfig) {
+        val servers = getMcpServers(ctx).toMutableList()
+        servers.add(server)
+        setMcpServers(ctx, servers)
+    }
+
+    /** 删除 MCP 服务器 */
+    fun removeMcpServer(ctx: Context, index: Int) {
+        val servers = getMcpServers(ctx).toMutableList()
+        if (index in servers.indices) {
+            servers.removeAt(index)
+            setMcpServers(ctx, servers)
+        }
+    }
+
+    /** 更新 MCP 服务器 */
+    fun updateMcpServer(ctx: Context, index: Int, server: McpServerConfig) {
+        val servers = getMcpServers(ctx).toMutableList()
+        if (index in servers.indices) {
+            servers[index] = server
+            setMcpServers(ctx, servers)
+        }
+    }
+
     // ========== 跨对话记忆设置 ==========
 
     /** 是否启用跨对话记忆 */

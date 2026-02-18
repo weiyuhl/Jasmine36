@@ -47,6 +47,10 @@ import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.conversation.storage.TimedMessage
 import com.lhzkml.jasmine.core.agent.tools.*
+import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
+import com.lhzkml.jasmine.core.agent.tools.mcp.McpClient
+import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolAdapter
+import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolRegistryProvider
 import com.lhzkml.jasmine.core.agent.tools.trace.CallbackTraceWriter
 import com.lhzkml.jasmine.core.agent.tools.trace.LogTraceWriter
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
@@ -99,6 +103,7 @@ class MainActivity : AppCompatActivity() {
     private var isGenerating = false
     private var agentMemory: AgentMemory? = null
     private var tracing: Tracing? = null
+    private var mcpClients: MutableList<McpClient> = mutableListOf()
 
     /**
      * 根据设置构建工具注册表
@@ -154,6 +159,51 @@ class MainActivity : AppCompatActivity() {
                 webSearchTool = wst
                 if (isEnabled("web_search")) register(wst.search)
                 if (isEnabled("web_scrape")) register(wst.scrape)
+            }
+        }
+    }
+
+    /**
+     * 加载 MCP 工具到注册表
+     */
+    private suspend fun loadMcpToolsInto(registry: ToolRegistry) {
+        if (!ProviderManager.isMcpEnabled(this)) return
+
+        // 关闭旧的 MCP 客户端
+        mcpClients.forEach { try { it.close() } catch (_: Exception) {} }
+        mcpClients.clear()
+
+        val servers = ProviderManager.getMcpServers(this).filter { it.enabled && it.url.isNotBlank() }
+        if (servers.isEmpty()) return
+
+        for (server in servers) {
+            try {
+                val headers = server.headers.lines()
+                    .filter { it.contains('=') }
+                    .associate { line ->
+                        val idx = line.indexOf('=')
+                        line.substring(0, idx).trim() to line.substring(idx + 1).trim()
+                    }
+
+                val client = HttpMcpClient(server.url, headers)
+                client.connect()
+                mcpClients.add(client)
+
+                val mcpRegistry = McpToolRegistryProvider.fromClient(client)
+                for (descriptor in mcpRegistry.descriptors()) {
+                    val mcpTool = mcpRegistry.findTool(descriptor.name) ?: continue
+                    registry.register(McpToolAdapter(mcpTool))
+                }
+
+                withContext(Dispatchers.Main) {
+                    tvOutput.append("🔌 MCP: ${server.name} 已连接 (${mcpRegistry.size} 个工具)\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    tvOutput.append("🔌 MCP: ${server.name} 连接失败: ${e.message}\n")
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
             }
         }
     }
@@ -326,6 +376,7 @@ class MainActivity : AppCompatActivity() {
         clientRouter.close()
         webSearchTool?.close()
         tracing?.close()
+        mcpClients.forEach { try { it.close() } catch (_: Exception) {} }
     }
 
     @Suppress("DEPRECATION")
@@ -580,6 +631,7 @@ class MainActivity : AppCompatActivity() {
                 if (toolsEnabled) {
                     // Agent 模式：使用 ToolExecutor 自动循环
                     val registry = buildToolRegistry()
+                    loadMcpToolsInto(registry)
                     val listener = object : AgentEventListener {
                         override suspend fun onToolCallStart(toolName: String, arguments: String) {
                             withContext(Dispatchers.Main) {

@@ -16,12 +16,11 @@
 - 未集成原因：纯开发者 API，终端用户无需直接操作。
 - 后续方向：可作为插件系统的基础，允许用户安装预定义的事件处理插件。
 
-## 3. MCP（Model Context Protocol）
+## 3. MCP（Model Context Protocol）✅ 已集成
 
 - 路径：`jasmine-core/agent/agent-tools/src/main/java/.../mcp/`
 - 说明：MCP 工具注册提供者，支持从 MCP 服务器动态加载工具。
-- 未集成原因：需要外部 MCP 服务器，当前 Android 端没有可连接的 MCP 服务器。
-- 后续方向：添加 MCP 服务器地址配置 UI，支持连接远程 MCP 服务器动态加载工具。
+- 状态：已集成到应用层。支持配置多个 MCP 服务器（HTTP JSON-RPC），Agent 模式下自动连接并加载远程工具。
 
 ## 4. A2A（Agent-to-Agent 协议）
 
