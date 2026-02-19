@@ -751,6 +751,12 @@ class MainActivity : AppCompatActivity() {
                 tvOutput.text = sb.toString()
                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
             }
+
+            // 启动恢复：检查是否有未完成的检查点（非墓碑），提示用户恢复
+            if (ProviderManager.isSnapshotEnabled(this@MainActivity)
+                && ProviderManager.getSnapshotStorage(this@MainActivity) == ProviderManager.SnapshotStorage.FILE) {
+                tryOfferStartupRecovery(conversationId)
+            }
         }
     }
 
@@ -919,6 +925,9 @@ class MainActivity : AppCompatActivity() {
 
                 val toolsEnabled = ProviderManager.isToolsEnabled(this@MainActivity)
 
+                // 构建快照/持久化（所有模式通用，每轮对话结束后创建检查点）
+                persistence = buildPersistence()
+
                 if (toolsEnabled) {
                     // Agent 模式：使用 ToolExecutor 自动循环
                     val registry = buildToolRegistry()
@@ -947,13 +956,6 @@ class MainActivity : AppCompatActivity() {
                                 agentLogBuilder.append(line)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
-                            // 工具调用完成后创建检查点（细粒度恢复）
-                            persistence?.onNodeCompleted(
-                                agentId = currentConversationId ?: "unknown",
-                                nodePath = "tool:$toolName",
-                                lastInput = result.take(200),
-                                messageHistory = messageHistory.toList()
-                            )
                         }
                         override suspend fun onThinking(content: String) {
                             withContext(Dispatchers.Main) {
@@ -972,9 +974,6 @@ class MainActivity : AppCompatActivity() {
 
                     // 构建事件处理器
                     eventHandler = buildEventHandler()
-
-                    // 构建快照/持久化
-                    persistence = buildPersistence()
 
                     // 触发 Agent 开始事件
                     val agentRunId = tracing?.newRunId() ?: java.util.UUID.randomUUID().toString()
@@ -1032,13 +1031,7 @@ class MainActivity : AppCompatActivity() {
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
 
-                            // 快照：规划完成后创建检查点
-                            persistence?.onNodeCompleted(
-                                agentId = currentConversationId ?: "unknown",
-                                nodePath = "planner",
-                                lastInput = message,
-                                messageHistory = messageHistory.toList()
-                            )
+                            // 快照：规划完成后不再单独创建检查点，统一在对话轮次结束后创建
                         } catch (e: Exception) {
                             // 规划失败不影响正常执行
                             withContext(Dispatchers.Main) {
@@ -1245,16 +1238,6 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-                    // 快照：Agent 执行完成后创建检查点
-                    persistence?.onNodeCompleted(
-                        agentId = currentConversationId ?: "unknown",
-                        nodePath = "agent_execution",
-                        lastInput = message,
-                        messageHistory = messageHistory.toList()
-                    )
-                    // 标记执行完成（墓碑检查点），防止下次误恢复
-                    persistence?.markCompleted(currentConversationId ?: "unknown")
-
                     // 触发 Agent 完成事件
                     eventHandler?.fireAgentCompleted(AgentCompletedContext(
                         runId = agentRunId,
@@ -1325,6 +1308,15 @@ class MainActivity : AppCompatActivity() {
                 val assistantMsg = ChatMessage.assistant(result)
                 messageHistory.add(assistantMsg)
 
+                // 快照：每轮完整对话（user + assistant）结束后创建检查点
+                // 一个检查点 = 当轮的对话交互（user + assistant），恢复时拼接之前所有检查点重建历史
+                persistence?.createCheckpoint(
+                    agentId = currentConversationId ?: "unknown",
+                    nodePath = "turn:${messageHistory.count { it.role == "user" }}",
+                    lastInput = message,
+                    messageHistory = listOf(userMsg, assistantMsg)
+                )
+
                 // 保存中间过程日志（thinking, tool calls, trace, events, graph flow 等）
                 val logContent = agentLogBuilder.toString()
                 if (logContent.isNotBlank()) {
@@ -1362,6 +1354,12 @@ class MainActivity : AppCompatActivity() {
                     ErrorType.SERVER_ERROR -> "服务器错误: ${e.message}\n请稍后重试"
                     else -> "错误: ${e.message}"
                 }
+                // 触发 Agent 失败事件
+                eventHandler?.fireAgentExecutionFailed(AgentExecutionFailedContext(
+                    runId = tracing?.newRunId() ?: "",
+                    agentId = currentConversationId ?: "unknown",
+                    throwable = e
+                ))
                 withContext(Dispatchers.Main) {
                     tvOutput.append("\n$errorMsg\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -1369,6 +1367,12 @@ class MainActivity : AppCompatActivity() {
                 // 快照恢复：检查是否有可用检查点
                 tryOfferCheckpointRecovery(e, message)
             } catch (e: Exception) {
+                // 触发 Agent 失败事件
+                eventHandler?.fireAgentExecutionFailed(AgentExecutionFailedContext(
+                    runId = tracing?.newRunId() ?: "",
+                    agentId = currentConversationId ?: "unknown",
+                    throwable = e
+                ))
                 withContext(Dispatchers.Main) {
                     tvOutput.append("\n未知错误: ${e.message}\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -1385,89 +1389,83 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 快照恢复：Agent 执行失败时，检查是否有可用检查点，弹窗询问用户是否恢复。
-     * 根据配置的回滚策略执行不同的恢复行为：
-     * - RESTART_FROM_NODE: 恢复消息历史并重新执行（从头开始）
-     * - SKIP_NODE: 恢复消息历史，不重新执行（仅恢复上下文）
-     * - USE_DEFAULT_OUTPUT: 恢复消息历史并添加默认回复
+     * 快照恢复：执行失败时，检查是否有可用检查点，弹窗询问用户恢复到某一轮对话。
+     * 每个检查点只保存当轮的 user + assistant，恢复时拼接 system prompt + 所有检查点到选中轮次。
      */
     private suspend fun tryOfferCheckpointRecovery(error: Exception, originalMessage: String) {
         val p = persistence ?: return
         val agentId = currentConversationId ?: return
 
-        // 获取所有非墓碑检查点
-        val allCheckpoints = p.getCheckpoints(agentId).filter { !it.isTombstone() }
+        val allCheckpoints = p.getCheckpoints(agentId)
         if (allCheckpoints.isEmpty()) return
-
-        val latest = allCheckpoints.maxByOrNull { it.createdAt } ?: return
 
         val rollbackStrategy = ProviderManager.getSnapshotRollbackStrategy(this@MainActivity)
         val strategyName = when (rollbackStrategy) {
-            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> "从节点重启"
-            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> "跳过节点 (仅恢复上下文)"
+            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> "重新执行"
+            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> "仅恢复上下文"
             ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT -> "使用默认输出"
         }
 
-        // 构建检查点选择列表
         val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-        val checkpointLabels = allCheckpoints.sortedByDescending { it.createdAt }.map { cp ->
+        val sortedCps = allCheckpoints.sortedBy { it.createdAt }
+        val sortedCpsDesc = sortedCps.reversed()
+        val checkpointLabels = sortedCpsDesc.map { cp ->
             val time = timeFormat.format(java.util.Date(cp.createdAt))
-            "[$time] ${cp.nodePath} (${cp.messageHistory.size} 条消息)"
+            val userMsg = cp.messageHistory.firstOrNull { it.role == "user" }?.content?.take(30) ?: ""
+            "[$time] ${cp.nodePath} - $userMsg"
         }.toTypedArray()
 
-        // 在主线程弹窗，让用户选择恢复到哪个检查点
-        val deferred = CompletableDeferred<AgentCheckpoint?>()
+        val deferred = CompletableDeferred<Int?>()
         withContext(Dispatchers.Main) {
-            val sortedCps = allCheckpoints.sortedByDescending { it.createdAt }
             AlertDialog.Builder(this@MainActivity)
-                .setTitle("检查点恢复 [$strategyName]")
-                .setMessage("Agent 执行失败: ${error.message?.take(100)}\n\n选择要恢复的检查点:")
+                .setTitle("恢复到历史对话轮次 [$strategyName]")
+                .setMessage("执行失败: ${error.message?.take(100)}\n\n选择要恢复到的对话轮次:")
                 .setItems(checkpointLabels) { _, which ->
-                    deferred.complete(sortedCps[which])
+                    deferred.complete(which)
                 }
                 .setNegativeButton("取消") { _, _ -> deferred.complete(null) }
                 .setCancelable(false)
                 .show()
         }
 
-        val selectedCheckpoint = deferred.await() ?: return
+        val selectedIndex = deferred.await() ?: return
+        val selectedCheckpoint = sortedCpsDesc[selectedIndex]
 
-        // 恢复消息历史到检查点状态
+        // 重建消息历史：system prompt + 所有检查点到选中轮次的消息
+        val selectedIndexInAsc = sortedCps.indexOf(selectedCheckpoint)
+        val rebuiltHistory = rebuildHistoryFromCheckpoints(sortedCps.take(selectedIndexInAsc + 1))
+
         messageHistory.clear()
-        messageHistory.addAll(selectedCheckpoint.messageHistory)
+        messageHistory.addAll(rebuiltHistory)
 
-        val line = "[Snapshot] 从检查点恢复 [策略: $strategyName, 节点: ${selectedCheckpoint.nodePath}, 消息: ${selectedCheckpoint.messageHistory.size}]\n"
+        val totalMsgs = rebuiltHistory.size
+        val line = "[Snapshot] 恢复到 ${selectedCheckpoint.nodePath} [$totalMsgs 条消息]\n"
         agentLogBuilder.append(line)
         withContext(Dispatchers.Main) {
             tvOutput.append(line)
             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
         }
 
-        // 根据回滚策略执行不同行为
         when (rollbackStrategy) {
             ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> {
-                // 恢复消息历史后重新发送消息
                 withContext(Dispatchers.Main) {
                     sendMessage(originalMessage)
                 }
             }
             ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> {
-                // 仅恢复上下文，不重新执行
-                val skipLine = "[Snapshot] 已恢复到检查点状态，跳过失败节点。可继续发送新消息。\n"
+                val skipLine = "[Snapshot] 已恢复到该轮对话状态，可继续发送新消息。\n"
                 agentLogBuilder.append(skipLine)
                 withContext(Dispatchers.Main) {
                     tvOutput.append(skipLine)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
-                // 保存恢复日志到对话
                 val logContent = agentLogBuilder.toString()
                 if (logContent.isNotBlank() && currentConversationId != null) {
                     conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
                 }
             }
             ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT -> {
-                // 恢复上下文并添加默认回复
-                val defaultReply = "抱歉，之前的处理过程中遇到了问题。已从检查点 [${selectedCheckpoint.nodePath}] 恢复。请重新描述您的需求，我会重新处理。"
+                val defaultReply = "抱歉，之前的处理过程中遇到了问题。已恢复到 [${selectedCheckpoint.nodePath}]。请重新描述您的需求。"
                 val assistantMsg = ChatMessage.assistant(defaultReply)
                 messageHistory.add(assistantMsg)
 
@@ -1478,7 +1476,6 @@ class MainActivity : AppCompatActivity() {
                     tvOutput.append("AI: $defaultReply\n${formatTime(System.currentTimeMillis())}\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
-                // 保存到对话
                 if (currentConversationId != null) {
                     val logContent = agentLogBuilder.toString()
                     if (logContent.isNotBlank()) {
@@ -1487,6 +1484,75 @@ class MainActivity : AppCompatActivity() {
                     conversationRepo.addMessage(currentConversationId!!, assistantMsg)
                 }
             }
+        }
+    }
+
+    /**
+     * 从检查点列表重建完整消息历史。
+     * 取当前对话的 system prompt + 按顺序拼接每个检查点的 user/assistant 消息。
+     */
+    private fun rebuildHistoryFromCheckpoints(checkpoints: List<AgentCheckpoint>): List<ChatMessage> {
+        val rebuilt = mutableListOf<ChatMessage>()
+        // 加入 system prompt
+        val systemPrompt = ProviderManager.getDefaultSystemPrompt(this)
+        rebuilt.add(ChatMessage.system(systemPrompt))
+        // 按时间顺序拼接每轮对话
+        for (cp in checkpoints) {
+            rebuilt.addAll(cp.messageHistory)
+        }
+        return rebuilt
+    }
+
+    /**
+     * 启动恢复：加载对话时检查是否有检查点，提示用户可以恢复到某一轮对话。
+     * 每个检查点只保存当轮 user + assistant，恢复时拼接重建完整历史。
+     */
+    private suspend fun tryOfferStartupRecovery(conversationId: String) {
+        val snapshotDir = getExternalFilesDir("snapshots") ?: return
+        val fp = com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider(snapshotDir)
+
+        val allCheckpoints = fp.getCheckpoints(conversationId)
+        if (allCheckpoints.isEmpty()) return
+
+        // 检查点总轮数 vs 当前对话轮数
+        val totalTurns = allCheckpoints.size
+        val currentTurns = messageHistory.count { it.role == "user" }
+        if (totalTurns <= currentTurns) return
+
+        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        val latest = allCheckpoints.maxByOrNull { it.createdAt } ?: return
+        val timeStr = timeFormat.format(java.util.Date(latest.createdAt))
+
+        val deferred = CompletableDeferred<Boolean>()
+        withContext(Dispatchers.Main) {
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("检测到可恢复的对话状态")
+                .setMessage(
+                    "此对话有更完整的检查点记录:\n\n" +
+                    "共 $totalTurns 轮对话检查点\n" +
+                    "最后轮次: ${latest.nodePath}\n" +
+                    "时间: $timeStr\n\n" +
+                    "是否从检查点恢复完整对话？"
+                )
+                .setPositiveButton("恢复") { _, _ -> deferred.complete(true) }
+                .setNegativeButton("忽略") { _, _ -> deferred.complete(false) }
+                .setCancelable(true)
+                .setOnCancelListener { deferred.complete(false) }
+                .show()
+        }
+
+        if (!deferred.await()) return
+
+        val sortedCps = allCheckpoints.sortedBy { it.createdAt }
+        val rebuilt = rebuildHistoryFromCheckpoints(sortedCps)
+
+        withContext(Dispatchers.Main) {
+            messageHistory.clear()
+            messageHistory.addAll(rebuilt)
+
+            val line = "[Snapshot] 启动恢复: 从 $totalTurns 个检查点重建对话历史 [${rebuilt.size} 条消息]\n\n"
+            tvOutput.append(line)
+            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
         }
     }
 

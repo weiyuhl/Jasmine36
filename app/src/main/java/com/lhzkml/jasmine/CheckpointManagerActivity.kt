@@ -92,11 +92,10 @@ class CheckpointManagerActivity : AppCompatActivity() {
                 if (checkpoints.isEmpty()) continue
 
                 totalSessions++
-                val nonTombstone = checkpoints.filter { !it.isTombstone() }
-                totalCheckpoints += nonTombstone.size
+                val checkpointCount = checkpoints.size
+                totalCheckpoints += checkpointCount
 
-                val completed = checkpoints.any { it.isTombstone() }
-                items.add(ListItem.SessionHeader(agentId, nonTombstone.size, completed))
+                items.add(ListItem.SessionHeader(agentId, checkpointCount, false))
 
                 for (cp in checkpoints.sortedByDescending { it.createdAt }) {
                     items.add(ListItem.CheckpointItem(agentId, cp))
@@ -109,7 +108,7 @@ class CheckpointManagerActivity : AppCompatActivity() {
                 } else {
                     tvEmpty.visibility = View.GONE
                     rvCheckpoints.visibility = View.VISIBLE
-                    tvStats.text = "$totalSessions 个会话, $totalCheckpoints 个检查点"
+                    tvStats.text = "$totalSessions 个会话, $totalCheckpoints 轮对话检查点"
                     adapter.submitList(items)
                 }
             }
@@ -215,10 +214,7 @@ class CheckpointManagerActivity : AppCompatActivity() {
                     val displayId = if (item.agentId.length > 24)
                         item.agentId.take(24) + "..." else item.agentId
                     vh.tvSessionId.text = "会话: $displayId"
-                    vh.tvSessionStatus.text = if (item.completed)
-                        "[已完成] ${item.checkpointCount} 个检查点"
-                    else
-                        "[进行中] ${item.checkpointCount} 个检查点"
+                    vh.tvSessionStatus.text = "${item.checkpointCount} 轮对话检查点"
                     vh.btnDeleteSession.setOnClickListener {
                         onDeleteSessionClick(item.agentId)
                     }
@@ -226,9 +222,8 @@ class CheckpointManagerActivity : AppCompatActivity() {
                 is ListItem.CheckpointItem -> {
                     val vh = holder as CheckpointVH
                     val cp = item.checkpoint
-                    val isTombstone = cp.isTombstone()
 
-                    vh.tvNodePath.text = if (isTombstone) "[墓碑] ${cp.nodePath}" else cp.nodePath
+                    vh.tvNodePath.text = cp.nodePath
                     vh.tvTime.text = timeFormat.format(Date(cp.createdAt))
 
                     val metaParts = mutableListOf<String>()
@@ -237,16 +232,16 @@ class CheckpointManagerActivity : AppCompatActivity() {
                     cp.lastInput?.take(40)?.let { metaParts.add("输入: $it") }
                     vh.tvMeta.text = metaParts.joinToString(" | ")
 
-                    // 消息预览（始终显示最后一条消息摘要）
-                    if (cp.messageHistory.isNotEmpty()) {
-                        val lastMsg = cp.messageHistory.last()
-                        val role = when (lastMsg.role) {
-                            "user" -> "[User]"
-                            "assistant" -> "[AI]"
-                            "system" -> "[Sys]"
-                            else -> "[${lastMsg.role}]"
+                    // 消息预览 — 显示最后一条用户消息和助手回复摘要
+                    val lastUser = cp.messageHistory.lastOrNull { it.role == "user" }
+                    val lastAssistant = cp.messageHistory.lastOrNull { it.role == "assistant" }
+                    if (lastUser != null || lastAssistant != null) {
+                        val preview = buildString {
+                            lastUser?.let { append("[User] ${it.content.take(40)}") }
+                            if (lastUser != null && lastAssistant != null) append("\n")
+                            lastAssistant?.let { append("[AI] ${it.content.take(40)}") }
                         }
-                        vh.tvPreview.text = "$role ${lastMsg.content.take(60)}"
+                        vh.tvPreview.text = preview
                         vh.tvPreview.visibility = View.VISIBLE
                     } else {
                         vh.tvPreview.visibility = View.GONE

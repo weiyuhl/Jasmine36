@@ -160,28 +160,27 @@ class FilePersistenceStorageProvider(
         if (file.exists()) file.delete()
     }
 
-    // 简单的 JSON 序列化（不依赖 kotlinx.serialization，保持轻量）
+    // JSON 序列化 — 正确处理所有特殊字符
     private fun serializeCheckpoint(cp: AgentCheckpoint): String {
         val sb = StringBuilder()
         sb.append("{")
-        sb.append("\"checkpointId\":\"${cp.checkpointId}\",")
+        sb.append("\"checkpointId\":\"${jsonEscape(cp.checkpointId)}\",")
         sb.append("\"createdAt\":${cp.createdAt},")
-        sb.append("\"nodePath\":\"${cp.nodePath}\",")
-        sb.append("\"lastInput\":${cp.lastInput?.let { "\"${it.replace("\"", "\\\"")}\"" } ?: "null"},")
+        sb.append("\"nodePath\":\"${jsonEscape(cp.nodePath)}\",")
+        sb.append("\"lastInput\":${cp.lastInput?.let { "\"${jsonEscape(it)}\"" } ?: "null"},")
         sb.append("\"version\":${cp.version},")
         sb.append("\"messageCount\":${cp.messageHistory.size}")
-        // 消息历史序列化为简化格式
         sb.append(",\"messages\":[")
         cp.messageHistory.forEachIndexed { i, msg ->
             if (i > 0) sb.append(",")
-            sb.append("{\"role\":\"${msg.role}\",\"content\":\"${msg.content.replace("\"", "\\\"")}\"}")
+            sb.append("{\"role\":\"${jsonEscape(msg.role)}\",\"content\":\"${jsonEscape(msg.content)}\"}")
         }
         sb.append("]")
         cp.properties?.let { props ->
             sb.append(",\"properties\":{")
             props.entries.forEachIndexed { i, (k, v) ->
                 if (i > 0) sb.append(",")
-                sb.append("\"$k\":\"$v\"")
+                sb.append("\"${jsonEscape(k)}\":\"${jsonEscape(v)}\"")
             }
             sb.append("}")
         }
@@ -197,17 +196,29 @@ class FilePersistenceStorageProvider(
         val version = extractLong(json, "version")
 
         val messages = mutableListOf<com.lhzkml.jasmine.core.prompt.model.ChatMessage>()
-        val messagesStart = json.indexOf("\"messages\":[")
+        // 手动解析 messages 数组，正确处理转义字符
+        val messagesKey = "\"messages\":["
+        val messagesStart = json.indexOf(messagesKey)
         if (messagesStart >= 0) {
-            val arrayStart = json.indexOf("[", messagesStart)
-            val arrayEnd = json.indexOf("]", arrayStart)
-            if (arrayStart >= 0 && arrayEnd >= 0) {
-                val arrayContent = json.substring(arrayStart + 1, arrayEnd)
-                val msgPattern = Regex("\\{\"role\":\"([^\"]+)\",\"content\":\"([^\"]*)\"\\}")
-                msgPattern.findAll(arrayContent).forEach { match ->
-                    val role = match.groupValues[1]
-                    val content = match.groupValues[2].replace("\\\"", "\"")
-                    messages.add(com.lhzkml.jasmine.core.prompt.model.ChatMessage(role = role, content = content))
+            val arrayStart = messagesStart + messagesKey.length
+            // 找到匹配的 ] — 需要跳过字符串内的 ]
+            val arrayEnd = findMatchingBracket(json, arrayStart - 1)
+            if (arrayEnd > arrayStart) {
+                val arrayContent = json.substring(arrayStart, arrayEnd)
+                // 逐个解析 message 对象
+                var pos = 0
+                while (pos < arrayContent.length) {
+                    val objStart = arrayContent.indexOf('{', pos)
+                    if (objStart < 0) break
+                    val objEnd = findMatchingBrace(arrayContent, objStart)
+                    if (objEnd < 0) break
+                    val objStr = arrayContent.substring(objStart, objEnd + 1)
+                    val role = extractJsonStringValue(objStr, "role")
+                    val content = extractJsonStringValue(objStr, "content")
+                    if (role.isNotEmpty()) {
+                        messages.add(com.lhzkml.jasmine.core.prompt.model.ChatMessage(role = role, content = content))
+                    }
+                    pos = objEnd + 1
                 }
             }
         }
@@ -222,15 +233,107 @@ class FilePersistenceStorageProvider(
         )
     }
 
+    /** JSON 字符串转义 */
+    private fun jsonEscape(s: String): String = s
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+
+    /** JSON 字符串反转义 */
+    private fun jsonUnescape(s: String): String {
+        val sb = StringBuilder()
+        var i = 0
+        while (i < s.length) {
+            if (s[i] == '\\' && i + 1 < s.length) {
+                when (s[i + 1]) {
+                    '\\' -> { sb.append('\\'); i += 2 }
+                    '"' -> { sb.append('"'); i += 2 }
+                    'n' -> { sb.append('\n'); i += 2 }
+                    'r' -> { sb.append('\r'); i += 2 }
+                    't' -> { sb.append('\t'); i += 2 }
+                    else -> { sb.append(s[i]); i++ }
+                }
+            } else {
+                sb.append(s[i]); i++
+            }
+        }
+        return sb.toString()
+    }
+
+    /** 从 JSON 对象字符串中提取指定 key 的字符串值，正确处理转义 */
+    private fun extractJsonStringValue(json: String, key: String): String {
+        val keyPattern = "\"$key\":\""
+        val keyStart = json.indexOf(keyPattern)
+        if (keyStart < 0) return ""
+        val valueStart = keyStart + keyPattern.length
+        // 找到未转义的结束引号
+        var i = valueStart
+        while (i < json.length) {
+            if (json[i] == '"' && (i == 0 || json[i - 1] != '\\')) {
+                return jsonUnescape(json.substring(valueStart, i))
+            }
+            // 处理连续反斜杠：\\" 中 \\ 是转义的反斜杠，" 是结束引号
+            if (json[i] == '"' && i >= 2 && json[i - 1] == '\\' && json[i - 2] == '\\') {
+                return jsonUnescape(json.substring(valueStart, i))
+            }
+            i++
+        }
+        return ""
+    }
+
+    /** 找到匹配的 ] 位置，跳过字符串内的 ] */
+    private fun findMatchingBracket(json: String, openPos: Int): Int {
+        var depth = 0
+        var inString = false
+        var i = openPos
+        while (i < json.length) {
+            val c = json[i]
+            if (inString) {
+                if (c == '"' && json[i - 1] != '\\') inString = false
+            } else {
+                when (c) {
+                    '"' -> inString = true
+                    '[' -> depth++
+                    ']' -> { depth--; if (depth == 0) return i }
+                }
+            }
+            i++
+        }
+        return -1
+    }
+
+    /** 找到匹配的 } 位置，跳过字符串内的 } */
+    private fun findMatchingBrace(json: String, openPos: Int): Int {
+        var depth = 0
+        var inString = false
+        var i = openPos
+        while (i < json.length) {
+            val c = json[i]
+            if (inString) {
+                if (c == '"' && json[i - 1] != '\\') inString = false
+            } else {
+                when (c) {
+                    '"' -> inString = true
+                    '{' -> depth++
+                    '}' -> { depth--; if (depth == 0) return i }
+                }
+            }
+            i++
+        }
+        return -1
+    }
+
     private fun extractString(json: String, key: String): String {
-        val pattern = Regex("\"$key\":\"([^\"]+)\"")
-        return pattern.find(json)?.groupValues?.get(1) ?: ""
+        return extractJsonStringValue(json, key)
     }
 
     private fun extractNullableString(json: String, key: String): String? {
         val nullPattern = Regex("\"$key\":null")
         if (nullPattern.containsMatchIn(json)) return null
-        return extractString(json, key).ifEmpty { null }
+        val value = extractJsonStringValue(json, key)
+        return value.ifEmpty { null }
     }
 
     private fun extractLong(json: String, key: String): Long {

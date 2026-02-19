@@ -92,9 +92,6 @@ class CheckpointDetailActivity : AppCompatActivity() {
         if (cp.lastInput != null) {
             sb.append("\n最后输入: ${cp.lastInput}")
         }
-        if (cp.isTombstone()) {
-            sb.append("\n\n[墓碑检查点 — 标记会话已结束]")
-        }
         findViewById<TextView>(R.id.tvInfo).text = sb.toString()
     }
 
@@ -208,10 +205,6 @@ class CheckpointDetailActivity : AppCompatActivity() {
         val btnRestore = findViewById<View>(R.id.btnRestore)
         val btnDelete = findViewById<View>(R.id.btnDelete)
 
-        if (cp.isTombstone()) {
-            btnRestore.visibility = View.GONE
-        }
-
         btnRestore.setOnClickListener { confirmRestore(cp) }
         btnDelete.setOnClickListener { confirmDelete(cp) }
     }
@@ -248,15 +241,20 @@ class CheckpointDetailActivity : AppCompatActivity() {
                     systemPrompt = systemPrompt
                 )
 
-                for (msg in cp.messageHistory) {
-                    repo.addMessage(conversationId, msg)
-                }
+                // 重建完整历史：system prompt + 所有检查点到当前轮次的消息
+                val allCheckpoints = provider?.getCheckpoints(agentId)
+                    ?.sortedBy { it.createdAt } ?: emptyList()
+                val cpIndex = allCheckpoints.indexOfFirst { it.checkpointId == cp.checkpointId }
+                val relevantCps = if (cpIndex >= 0) allCheckpoints.take(cpIndex + 1) else listOf(cp)
 
-                val restoreNote = ChatMessage(
-                    "agent_log",
-                    "[Snapshot] 从检查点恢复 [节点: ${cp.nodePath}, 时间: $timeStr, 消息: ${cp.messageHistory.size} 条]\n"
-                )
-                repo.addMessage(conversationId, restoreNote)
+                // 写入 system prompt
+                repo.addMessage(conversationId, ChatMessage.system(systemPrompt))
+                // 按顺序写入每轮对话
+                for (turnCp in relevantCps) {
+                    for (msg in turnCp.messageHistory) {
+                        repo.addMessage(conversationId, msg)
+                    }
+                }
 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@CheckpointDetailActivity, "已恢复到新对话", Toast.LENGTH_SHORT).show()
