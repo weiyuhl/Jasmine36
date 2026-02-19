@@ -110,7 +110,7 @@
                         android:id="@+id/tvSimpleLoopCheck"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="[v]"
+                        android:text="*"
                         android:textSize="18sp"
                         android:textColor="#FF2196F3"
                         android:visibility="gone" />
@@ -257,7 +257,7 @@
                         android:id="@+id/tvGraphCheck"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="[v]"
+                        android:text="*"
                         android:textSize="18sp"
                         android:textColor="#FF2196F3"
                         android:visibility="gone" />

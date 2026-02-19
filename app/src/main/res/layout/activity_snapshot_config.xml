@@ -101,7 +101,7 @@
                     android:id="@+id/tvMemoryCheck"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="[v]"
+                    android:text="*"
                     android:textSize="16sp"
                     android:textColor="#FF2196F3"
                     android:visibility="gone" />
@@ -144,7 +144,7 @@
                     android:id="@+id/tvFileCheck"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="[v]"
+                    android:text="*"
                     android:textSize="16sp"
                     android:textColor="#FF2196F3"
                     android:visibility="gone" />
@@ -239,7 +239,7 @@
                     android:id="@+id/tvRestartCheck"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="[v]"
+                    android:text="*"
                     android:textSize="16sp"
                     android:textColor="#FF2196F3"
                     android:visibility="gone" />
@@ -280,7 +280,7 @@
                     android:id="@+id/tvSkipCheck"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="[v]"
+                    android:text="*"
                     android:textSize="16sp"
                     android:textColor="#FF2196F3"
                     android:visibility="gone" />
@@ -321,7 +321,7 @@
                     android:id="@+id/tvDefaultCheck"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="[v]"
+                    android:text="*"
                     android:textSize="16sp"
                     android:textColor="#FF2196F3"
                     android:visibility="gone" />
