@@ -73,7 +73,10 @@ class ToolConfigActivity : AppCompatActivity() {
         "apk_get_resource" to "获取资源文件内容",
         "apk_modify_resource" to "修改资源文件",
         "apk_search_arsc_strings" to "搜索 ARSC 字符串",
-        "apk_search_arsc_resources" to "搜索 ARSC 资源"
+        "apk_search_arsc_resources" to "搜索 ARSC 资源",
+        "apk_parse_manifest_cpp" to "解析二进制 Manifest（结构化）",
+        "apk_search_manifest_cpp" to "搜索二进制 Manifest 属性",
+        "apk_parse_arsc_cpp" to "解析 resources.arsc 概要"
     )
 
     private lateinit var cbSelectAll: CheckBox

@@ -53,7 +53,11 @@ object DexToolRegistry {
         ApkModifyResourceTool,
         // ARSC 搜索
         ApkSearchArscStringsTool,
-        ApkSearchArscResourcesTool
+        ApkSearchArscResourcesTool,
+        // 二进制解析（移植自 C++ 工具，纯 Kotlin 实现）
+        ApkParseManifestTool,
+        ApkSearchManifestTool,
+        ApkParseArscTool
     )
 
     /**
