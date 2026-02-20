@@ -12,6 +12,7 @@
 /app/build
 **/build
 /koog-0.6.2
+/AetherLink-main
 /captures
 .externalNativeBuild
 .cxx

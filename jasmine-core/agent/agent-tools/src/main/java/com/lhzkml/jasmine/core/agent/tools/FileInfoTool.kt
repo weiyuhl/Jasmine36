@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -59,6 +60,7 @@ class FileInfoTool(
                 } else {
                     appendLine("Extension: ${file.extension.ifEmpty { "(none)" }}")
                     appendLine("Lines: ${file.readLines().size}")
+                    appendLine("Hash(MD5): ${computeMD5(file)}")
                 }
             }.trimEnd()
         } catch (e: Exception) {
@@ -78,6 +80,17 @@ class FileInfoTool(
 
     private fun dirSize(dir: File): Long {
         return dir.listFiles()?.sumOf { if (it.isDirectory) dirSize(it) else it.length() } ?: 0
+    }
+
+    private fun computeMD5(file: File): String {
+        return try {
+            val md = MessageDigest.getInstance("MD5")
+            val bytes = file.readBytes()
+            val digest = md.digest(bytes)
+            digest.joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            "(error: ${e.message})"
+        }
     }
 
     private fun resolveFile(path: String): File? {

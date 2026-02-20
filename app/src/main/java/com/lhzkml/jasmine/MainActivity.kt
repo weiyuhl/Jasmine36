@@ -218,6 +218,10 @@ class MainActivity : AppCompatActivity() {
             if (isEnabled("file_info")) register(FileInfoTool(basePath))
             if (isEnabled("create_directory")) register(CreateDirectoryTool(basePath))
             if (isEnabled("compress_files")) register(CompressFilesTool(basePath))
+            if (isEnabled("insert_content")) register(InsertContentTool(basePath))
+            if (isEnabled("rename_file")) register(RenameFileTool(basePath))
+            if (isEnabled("replace_in_file")) register(ReplaceInFileTool(basePath))
+            if (isEnabled("create_file")) register(CreateFileTool(basePath))
 
             // Shell 命令（根据策略决定确认方式）
             if (isEnabled("execute_shell_command")) {

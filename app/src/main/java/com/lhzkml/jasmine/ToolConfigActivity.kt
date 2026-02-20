@@ -23,12 +23,23 @@ class ToolConfigActivity : AppCompatActivity() {
         "read_file" to "读取文件",
         "write_file" to "写入文件",
         "edit_file" to "编辑文件",
+        "append_file" to "追加文件内容",
+        "create_file" to "创建文件（覆盖保护）",
+        "insert_content" to "插入内容到指定行",
+        "replace_in_file" to "查找替换文件内容",
+        "delete_file" to "删除文件",
+        "move_file" to "移动文件",
+        "copy_file" to "复制文件",
+        "rename_file" to "重命名文件",
+        "file_info" to "文件信息",
         "list_directory" to "列出目录",
+        "find_files" to "按名称搜索文件",
         "search_by_regex" to "正则搜索",
+        "create_directory" to "创建目录",
+        "compress_files" to "文件压缩（ZIP）",
         "execute_shell_command" to "执行命令",
         "web_search" to "网络搜索",
-        "web_scrape" to "网页抓取",
-        "compress_files" to "文件压缩（ZIP）"
+        "web_scrape" to "网页抓取"
     )
 
     private lateinit var cbSelectAll: CheckBox
