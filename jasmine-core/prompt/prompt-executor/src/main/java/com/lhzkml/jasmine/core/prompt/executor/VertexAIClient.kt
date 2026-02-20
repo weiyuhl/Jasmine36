@@ -208,47 +208,16 @@ class VertexAIClient(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>
     ): ChatResult {
-        return com.lhzkml.jasmine.core.prompt.llm.executeWithRetry(retryConfig) {
-            try {
-                val token = getAccessToken()
-                val (systemInstruction, contents) = convertMessages(messages)
-                val request = GeminiRequest(
-                    contents = contents, systemInstruction = systemInstruction,
-                    generationConfig = GeminiGenerationConfig(
-                        temperature = samplingParams?.temperature, topP = samplingParams?.topP,
-                        topK = samplingParams?.topK, maxOutputTokens = maxTokens
-                    ),
-                    tools = convertTools(tools)
-                )
-                val response: HttpResponse = client.post(buildUrl(model, false)) {
-                    contentType(ContentType.Application.Json)
-                    header("Authorization", "Bearer $token")
-                    setBody(request)
-                }
-                if (!response.status.isSuccess()) {
-                    val body = try { response.bodyAsText() } catch (_: Exception) { null }
-                    throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
-                }
-                val geminiResponse: GeminiResponse = response.body()
-                val firstCandidate = geminiResponse.candidates?.firstOrNull()
-                val toolCalls = firstCandidate?.content?.parts?.mapNotNull { part ->
-                    part.functionCall?.let { fc ->
-                        ToolCall(id = "vertex_${fc.name}_${System.nanoTime()}", name = fc.name, arguments = fc.args?.toString() ?: "{}")
-                    }
-                } ?: emptyList()
-                val content = firstCandidate?.content?.parts?.mapNotNull { it.text }?.joinToString("") ?: ""
-                val usage = geminiResponse.usageMetadata?.let {
-                    Usage(promptTokens = it.promptTokenCount, completionTokens = it.candidatesTokenCount, totalTokens = it.totalTokenCount)
-                }
-                ChatResult(content = content, usage = usage, finishReason = firstCandidate?.finishReason, toolCalls = toolCalls)
-            } catch (e: ChatClientException) { throw e }
-            catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
-            catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
-            catch (e: SocketTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
-            catch (e: HttpRequestTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
-            catch (e: Exception) { throw ChatClientException(provider.name, "请求失败: ${e.message}", ErrorType.UNKNOWN, cause = e) }
+        val content = StringBuilder()
+        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
+            content.append(chunk)
         }
+        return ChatResult(
+            content = content.toString(),
+            usage = streamResult.usage,
+            finishReason = streamResult.finishReason,
+            toolCalls = streamResult.toolCalls
+        )
     }
 
     override fun chatStream(

@@ -37,26 +37,24 @@ class OpenAICompatibleClientTest {
         )
     }
 
-    // ========== chat() 非流式测试 ==========
+    // ========== chat() 测试 ==========
 
     @Test
     fun `chat returns assistant content`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello!\"}}]}")
+            appendLine()
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
         val mockHttp = createMockClient { request ->
             assertEquals("Bearer test-key", request.headers["Authorization"])
             assertTrue(request.url.toString().endsWith("/v1/chat/completions"))
 
             respond(
-                content = """
-                {
-                    "id": "1",
-                    "choices": [{
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "Hello!"},
-                        "finish_reason": "stop"
-                    }]
-                }
-                """.trimIndent(),
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
             )
         }
 
@@ -67,40 +65,43 @@ class OpenAICompatibleClientTest {
     }
 
     @Test
-    fun `chat throws on empty choices`() = runTest {
+    fun `chat throws on empty stream`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
         val mockHttp = createMockClient {
             respond(
-                content = """{"id": "1", "choices": []}""",
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
             )
         }
 
         val client = createDeepSeekClient(mockHttp)
-        try {
-            client.chat(listOf(ChatMessage.user("hi")), "model")
-            fail("Should have thrown")
-        } catch (e: ChatClientException) {
-            assertTrue(e.message!!.contains("响应中没有有效内容"))
-        }
+        val result = client.chat(listOf(ChatMessage.user("hi")), "model")
+        assertEquals("", result)
         client.close()
     }
 
     @Test
     fun `chat sends correct request body`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}]}")
+            appendLine()
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
         val mockHttp = createMockClient { request ->
             val body = request.body.toByteArray().decodeToString()
             assertTrue(body.contains("\"model\":\"test-model\""))
-            assertTrue(body.contains("\"stream\":false"))
+            assertTrue(body.contains("\"stream\":true"))
             assertTrue(body.contains("\"role\":\"user\""))
 
             respond(
-                content = """
-                {
-                    "id": "1",
-                    "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}}]
-                }
-                """.trimIndent(),
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
             )
         }
 
@@ -285,16 +286,19 @@ class OpenAICompatibleClientTest {
 
     @Test
     fun `chatWithUsage returns content and usage`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hi!\"}}]}")
+            appendLine()
+            appendLine("data: {\"id\":\"1\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}")
+            appendLine()
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
         val mockHttp = createMockClient {
             respond(
-                content = """
-                {
-                    "id": "1",
-                    "choices": [{"index": 0, "message": {"role": "assistant", "content": "Hi!"}}],
-                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-                }
-                """.trimIndent(),
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
             )
         }
 
@@ -310,15 +314,17 @@ class OpenAICompatibleClientTest {
 
     @Test
     fun `chatWithUsage handles null usage`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}]}")
+            appendLine()
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
         val mockHttp = createMockClient {
             respond(
-                content = """
-                {
-                    "id": "1",
-                    "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}}]
-                }
-                """.trimIndent(),
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
             )
         }
 

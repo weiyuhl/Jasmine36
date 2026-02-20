@@ -21,7 +21,6 @@ import kotlinx.coroutines.withContext
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var tvActiveProvider: TextView
-    private lateinit var switchStream: SwitchCompat
     private lateinit var switchTools: SwitchCompat
     private lateinit var layoutToolConfig: LinearLayout
     private lateinit var layoutAgentStrategy: LinearLayout
@@ -57,7 +56,6 @@ class SettingsActivity : AppCompatActivity() {
         conversationRepo = ConversationRepository(this)
 
         tvActiveProvider = findViewById(R.id.tvActiveProvider)
-        switchStream = findViewById(R.id.switchStream)
         tvMaxTokens = findViewById(R.id.tvMaxTokens)
         tvSystemPrompt = findViewById(R.id.tvSystemPrompt)
         tvPromptTokens = findViewById(R.id.tvPromptTokens)
@@ -68,12 +66,6 @@ class SettingsActivity : AppCompatActivity() {
 
         findViewById<LinearLayout>(R.id.layoutProviders).setOnClickListener {
             startActivity(Intent(this, ProviderListActivity::class.java))
-        }
-
-        // 流式输出开关
-        switchStream.isChecked = ProviderManager.isStreamEnabled(this)
-        switchStream.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setStreamEnabled(this, isChecked)
         }
 
         // 工具调用开关

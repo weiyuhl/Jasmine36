@@ -82,7 +82,6 @@ class LauncherActivity : AppCompatActivity() {
             // 设置 Agent 模式 + 工作区
             ProviderManager.setAgentMode(this, true)
             ProviderManager.setToolsEnabled(this, true)
-            ProviderManager.setStreamEnabled(this, true)
             ProviderManager.setTraceEnabled(this, true)
             ProviderManager.setEventHandlerEnabled(this, true)
             ProviderManager.setWorkspacePath(this, displayPath)

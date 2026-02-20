@@ -238,15 +238,6 @@ object ProviderManager {
         prefs(ctx).edit().putString("${id}_vertex_sa_json", json).apply()
     }
 
-    /** 是否启用流式输出 */
-    fun isStreamEnabled(ctx: Context): Boolean =
-        prefs(ctx).getBoolean("stream_enabled", true)
-
-    /** 设置流式输出开关 */
-    fun setStreamEnabled(ctx: Context, enabled: Boolean) {
-        prefs(ctx).edit().putBoolean("stream_enabled", enabled).apply()
-    }
-
     /** 获取默认系统提示词 */
     fun getDefaultSystemPrompt(ctx: Context): String =
         prefs(ctx).getString("default_system_prompt", null) ?: "You are a helpful assistant."

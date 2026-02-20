@@ -128,50 +128,18 @@ abstract class OpenAICompatibleClient(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>
     ): ChatResult {
-        return executeWithRetry(retryConfig) {
-            try {
-                val request = ChatRequest(
-                    model = model,
-                    messages = convertMessages(messages),
-                    temperature = samplingParams?.temperature,
-                    topP = samplingParams?.topP,
-                    maxTokens = maxTokens,
-                    tools = convertTools(tools)
-                )
-                val response: HttpResponse = httpClient.post("${baseUrl}${chatPath}") {
-                    contentType(ContentType.Application.Json)
-                    header("Authorization", "Bearer $apiKey")
-                    setBody(request)
-                }
-
-                if (!response.status.isSuccess()) {
-                    val body = try { response.bodyAsText() } catch (_: Exception) { null }
-                    throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
-                }
-
-                val chatResponse: ChatResponse = response.body()
-                val firstChoice = chatResponse.choices.firstOrNull()
-                    ?: throw ChatClientException(provider.name, "响应中没有有效内容", ErrorType.PARSE_ERROR)
-
-                val toolCalls = firstChoice.message.toolCalls?.map {
-                    ToolCall(id = it.id, name = it.function.name, arguments = it.function.arguments)
-                } ?: emptyList()
-
-                ChatResult(
-                    content = firstChoice.message.content ?: "",
-                    usage = chatResponse.usage,
-                    finishReason = firstChoice.finishReason,
-                    toolCalls = toolCalls,
-                    thinking = firstChoice.message.reasoningContent
-                )
-            } catch (e: ChatClientException) { throw e }
-            catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (e: UnknownHostException) { throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e) }
-            catch (e: ConnectException) { throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e) }
-            catch (e: SocketTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
-            catch (e: HttpRequestTimeoutException) { throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e) }
-            catch (e: Exception) { throw ChatClientException(provider.name, "请求失败: ${e.message}", ErrorType.UNKNOWN, cause = e) }
+        // 通过流式实现非流式：收集所有 chunk 拼接为完整结果
+        val content = StringBuilder()
+        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
+            content.append(chunk)
         }
+        return ChatResult(
+            content = content.toString(),
+            usage = streamResult.usage,
+            finishReason = streamResult.finishReason,
+            toolCalls = streamResult.toolCalls,
+            thinking = streamResult.thinking
+        )
     }
 
     override fun chatStream(

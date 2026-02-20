@@ -1097,7 +1097,6 @@ class MainActivity : AppCompatActivity() {
                 // 上下文窗口裁剪，避免超出模型 token 限制
                 val trimmedMessages = contextManager.trimMessages(messageHistory.toList())
 
-                val useStream = ProviderManager.isStreamEnabled(this@MainActivity)
                 val maxTokensVal = ProviderManager.getMaxTokens(this@MainActivity)
                 val maxTokens = if (maxTokensVal > 0) maxTokensVal else 8192
 
@@ -1242,53 +1241,29 @@ class MainActivity : AppCompatActivity() {
 
                     when (agentStrategy) {
                         ProviderManager.AgentStrategyType.SIMPLE_LOOP -> {
-                            // 简单循环模式：使用 ToolExecutor
-                            if (useStream) {
+                            // 简单循环模式：使用 ToolExecutor（流式）
+                            withContext(Dispatchers.Main) {
+                                appendRendered("AI: ")
+                            }
+                            val streamResult = executor.executeStream(
+                                trimmedMessages, config.model, maxTokens, samplingParams
+                            ) { chunk ->
                                 withContext(Dispatchers.Main) {
-                                    appendRendered("AI: ")
-                                }
-                                val streamResult = executor.executeStream(
-                                    trimmedMessages, config.model, maxTokens, samplingParams
-                                ) { chunk ->
-                                    withContext(Dispatchers.Main) {
-                                        tvOutput.append(chunk)
-                                        autoScrollToBottom()
-                                    }
-                                }
-                                result = streamResult.content
-                                usage = streamResult.usage
-                                withContext(Dispatchers.Main) {
-                                    appendRendered(formatUsageLine(usage))
+                                    tvOutput.append(chunk)
                                     autoScrollToBottom()
                                 }
-                            } else {
-                                val chatResult = executor.execute(
-                                    trimmedMessages, config.model, maxTokens, samplingParams
-                                )
-                                result = chatResult.content
-                                usage = chatResult.usage
-
-                                val thinkingLine = chatResult.thinking?.let { thinking ->
-                                    val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
-                                    val line = "\n[Think] 思考: $preview\n"
-                                    agentLogBuilder.append(line)
-                                    line
-                                } ?: ""
-
-                                withContext(Dispatchers.Main) {
-                                    appendRendered("AI: $result$thinkingLine${formatUsageLine(usage)}")
-                                    autoScrollToBottom()
-                                }
+                            }
+                            result = streamResult.content
+                            usage = streamResult.usage
+                            withContext(Dispatchers.Main) {
+                                appendRendered(formatUsageLine(usage))
+                                autoScrollToBottom()
                             }
                         }
 
                         ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH -> {
-                            // 图策略模式：使用 GraphAgent + PredefinedStrategies
-                            val strategy = if (useStream) {
-                                PredefinedStrategies.singleRunStreamStrategy()
-                            } else {
-                                PredefinedStrategies.singleRunStrategy()
-                            }
+                            // 图策略模式：使用 GraphAgent + PredefinedStrategies（流式）
+                            val strategy = PredefinedStrategies.singleRunStreamStrategy()
 
                             val graphAgent = GraphAgent(
                                 client = client,
@@ -1318,37 +1293,31 @@ class MainActivity : AppCompatActivity() {
                                 autoScrollToBottom()
                             }
 
-                            if (useStream) {
+                            withContext(Dispatchers.Main) {
+                                appendRendered("└─────────────────────────\n\nAI: ")
+                                agentLogBuilder.append("└─────────────────────────\n")
+                            }
+
+                            val chunkCallback: (suspend (String) -> Unit)? = { chunk: String ->
                                 withContext(Dispatchers.Main) {
-                                    appendRendered("└─────────────────────────\n\nAI: ")
-                                    agentLogBuilder.append("└─────────────────────────\n")
+                                    tvOutput.append(chunk)
+                                    autoScrollToBottom()
                                 }
                             }
 
-                            val chunkCallback: (suspend (String) -> Unit)? = if (useStream) {
-                                { chunk: String ->
-                                    withContext(Dispatchers.Main) {
-                                        tvOutput.append(chunk)
-                                        autoScrollToBottom()
-                                    }
-                                }
-                            } else null
-
                             var graphThinkingStarted = false
-                            val thinkingCallback: (suspend (String) -> Unit)? = if (useStream) {
-                                { text: String ->
-                                    withContext(Dispatchers.Main) {
-                                        if (!graphThinkingStarted) {
-                                            appendRendered("[Think] ")
-                                            agentLogBuilder.append("[Think] ")
-                                            graphThinkingStarted = true
-                                        }
-                                        tvOutput.append(text)
-                                        agentLogBuilder.append(text)
-                                        autoScrollToBottom()
+                            val thinkingCallback: (suspend (String) -> Unit)? = { text: String ->
+                                withContext(Dispatchers.Main) {
+                                    if (!graphThinkingStarted) {
+                                        appendRendered("[Think] ")
+                                        agentLogBuilder.append("[Think] ")
+                                        graphThinkingStarted = true
                                     }
+                                    tvOutput.append(text)
+                                    agentLogBuilder.append(text)
+                                    autoScrollToBottom()
                                 }
-                            } else null
+                            }
 
                             // 节点生命周期回调 — 在聊天中渲染可视化节点卡片
                             val nodeEnterCallback: suspend (String) -> Unit = { nodeName ->
@@ -1416,19 +1385,9 @@ class MainActivity : AppCompatActivity() {
 
                             result = graphResult ?: ""
 
-                            if (!useStream) {
-                                withContext(Dispatchers.Main) {
-                                    val footer = "│ [x] Finish\n└─────────────────────────\n\n"
-                                    appendRendered(footer)
-                                    agentLogBuilder.append(footer)
-                                    appendRendered("AI: $result${formatUsageLine(null)}")
-                                    autoScrollToBottom()
-                                }
-                            } else {
-                                withContext(Dispatchers.Main) {
-                                    appendRendered(formatUsageLine(null))
-                                    autoScrollToBottom()
-                                }
+                            withContext(Dispatchers.Main) {
+                                appendRendered(formatUsageLine(null))
+                                autoScrollToBottom()
                             }
                         }
                     }
@@ -1440,7 +1399,7 @@ class MainActivity : AppCompatActivity() {
                         result = result.take(200),
                         totalIterations = 0
                     ))
-                } else if (useStream) {
+                } else {
                     // 普通流式输出（支持超时续传）
                     withContext(Dispatchers.Main) {
                         appendRendered("AI: ")
@@ -1521,23 +1480,6 @@ class MainActivity : AppCompatActivity() {
 
                     withContext(Dispatchers.Main) {
                         appendRendered(formatUsageLine(usage))
-                        autoScrollToBottom()
-                    }
-                } else {
-                    // 普通非流式
-                    val chatResult = client.chatWithUsage(trimmedMessages, config.model, maxTokens, samplingParams)
-                    result = chatResult.content
-                    usage = chatResult.usage
-
-                    val thinkingLine = chatResult.thinking?.let { thinking ->
-                        val preview = if (thinking.length > 500) thinking.take(500) + "…" else thinking
-                        val line = "\n[Think] 思考: $preview\n"
-                        agentLogBuilder.append(line)
-                        line
-                    } ?: ""
-
-                    withContext(Dispatchers.Main) {
-                        appendRendered("AI: $result$thinkingLine${formatUsageLine(usage)}")
                         autoScrollToBottom()
                     }
                 }

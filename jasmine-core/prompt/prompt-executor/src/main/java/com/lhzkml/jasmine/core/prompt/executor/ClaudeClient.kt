@@ -156,89 +156,17 @@ open class ClaudeClient(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>
     ): ChatResult {
-        return executeWithRetry(retryConfig) {
-            try {
-                val (systemPrompt, claudeMessages) = convertMessages(messages)
-                val request = ClaudeRequest(
-                    model = model,
-                    messages = claudeMessages,
-                    maxTokens = maxTokens ?: 4096,
-                    system = systemPrompt,
-                    temperature = samplingParams?.temperature,
-                    topP = samplingParams?.topP,
-                    topK = samplingParams?.topK,
-                    tools = convertTools(tools)
-                )
-
-                val response: HttpResponse = httpClient.post("${baseUrl}/v1/messages") {
-                    contentType(ContentType.Application.Json)
-                    header("x-api-key", apiKey)
-                    header("anthropic-version", ANTHROPIC_VERSION)
-                    setBody(request)
-                }
-
-                if (!response.status.isSuccess()) {
-                    val body = try { response.bodyAsText() } catch (_: Exception) { null }
-                    throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
-                }
-
-                val claudeResponse: ClaudeResponse = response.body()
-
-                // 提取文本内容
-                val textContent = claudeResponse.content
-                    .filter { it.type == "text" }
-                    .mapNotNull { it.text }
-                    .joinToString("")
-
-                // 提取 thinking 内容
-                val thinkingContent = claudeResponse.content
-                    .filter { it.type == "thinking" }
-                    .mapNotNull { it.text }
-                    .joinToString("")
-                    .ifEmpty { null }
-
-                // 提取 tool_use 块 → ToolCall
-                val toolCalls = claudeResponse.content
-                    .filter { it.type == "tool_use" }
-                    .map { block ->
-                        ToolCall(
-                            id = block.id ?: "",
-                            name = block.name ?: "",
-                            arguments = block.input?.toString() ?: "{}"
-                        )
-                    }
-
-                val usage = claudeResponse.usage?.let {
-                    Usage(
-                        promptTokens = it.inputTokens,
-                        completionTokens = it.outputTokens,
-                        totalTokens = it.inputTokens + it.outputTokens
-                    )
-                }
-
-                ChatResult(
-                    content = textContent,
-                    usage = usage,
-                    finishReason = claudeResponse.stopReason,
-                    toolCalls = toolCalls,
-                    thinking = thinkingContent
-                )
-            } catch (e: ChatClientException) {
-                throw e
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: UnknownHostException) {
-                throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e)
-            } catch (e: ConnectException) {
-                throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e)
-            } catch (e: SocketTimeoutException) {
-                throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e)
-            } catch (e: HttpRequestTimeoutException) {
-                throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e)
-            } catch (e: Exception) {
-                throw ChatClientException(provider.name, "请求失败: ${e.message}", ErrorType.UNKNOWN, cause = e)
-            }
+        val content = StringBuilder()
+        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
+            content.append(chunk)
         }
+        return ChatResult(
+            content = content.toString(),
+            usage = streamResult.usage,
+            finishReason = streamResult.finishReason,
+            toolCalls = streamResult.toolCalls,
+            thinking = streamResult.thinking
+        )
     }
 
     override fun chatStream(

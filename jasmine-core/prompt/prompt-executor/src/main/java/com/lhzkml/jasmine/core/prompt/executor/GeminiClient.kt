@@ -186,75 +186,16 @@ open class GeminiClient(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>
     ): ChatResult {
-        return executeWithRetry(retryConfig) {
-            try {
-                val (systemInstruction, contents) = convertMessages(messages)
-                val request = GeminiRequest(
-                    contents = contents,
-                    systemInstruction = systemInstruction,
-                    generationConfig = GeminiGenerationConfig(
-                        temperature = samplingParams?.temperature,
-                        topP = samplingParams?.topP,
-                        topK = samplingParams?.topK,
-                        maxOutputTokens = maxTokens
-                    ),
-                    tools = convertTools(tools)
-                )
-
-                val response: HttpResponse = httpClient.post(
-                    "${baseUrl}${generatePath.replace("{model}", model)}"
-                ) {
-                    contentType(ContentType.Application.Json)
-                    parameter("key", apiKey)
-                    setBody(request)
-                }
-
-                if (!response.status.isSuccess()) {
-                    val body = try { response.bodyAsText() } catch (_: Exception) { null }
-                    throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
-                }
-
-                val geminiResponse: GeminiResponse = response.body()
-                val firstCandidate = geminiResponse.candidates?.firstOrNull()
-
-                // 提取 tool calls
-                val toolCalls = extractToolCalls(geminiResponse)
-
-                // 提取文本内容
-                val content = firstCandidate?.content?.parts
-                    ?.mapNotNull { it.text }
-                    ?.joinToString("") ?: ""
-
-                val usage = geminiResponse.usageMetadata?.let {
-                    Usage(
-                        promptTokens = it.promptTokenCount,
-                        completionTokens = it.candidatesTokenCount,
-                        totalTokens = it.totalTokenCount
-                    )
-                }
-
-                ChatResult(
-                    content = content,
-                    usage = usage,
-                    finishReason = firstCandidate?.finishReason,
-                    toolCalls = toolCalls
-                )
-            } catch (e: ChatClientException) {
-                throw e
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: UnknownHostException) {
-                throw ChatClientException(provider.name, "无法连接到服务器，请检查网络", ErrorType.NETWORK, cause = e)
-            } catch (e: ConnectException) {
-                throw ChatClientException(provider.name, "连接失败，请检查网络", ErrorType.NETWORK, cause = e)
-            } catch (e: SocketTimeoutException) {
-                throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e)
-            } catch (e: HttpRequestTimeoutException) {
-                throw ChatClientException(provider.name, "请求超时，请稍后重试", ErrorType.NETWORK, cause = e)
-            } catch (e: Exception) {
-                throw ChatClientException(provider.name, "请求失败: ${e.message}", ErrorType.UNKNOWN, cause = e)
-            }
+        val content = StringBuilder()
+        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
+            content.append(chunk)
         }
+        return ChatResult(
+            content = content.toString(),
+            usage = streamResult.usage,
+            finishReason = streamResult.finishReason,
+            toolCalls = streamResult.toolCalls
+        )
     }
 
     override fun chatStream(
