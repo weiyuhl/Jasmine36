@@ -3,13 +3,17 @@ package com.lhzkml.jasmine
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.View
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 
 class PlannerConfigActivity : AppCompatActivity() {
 
+    private lateinit var switchEnabled: SwitchCompat
+    private lateinit var layoutConfigContent: LinearLayout
     private lateinit var etMaxIterations: EditText
     private lateinit var switchCritic: SwitchCompat
     private lateinit var tvSummary: TextView
@@ -19,6 +23,17 @@ class PlannerConfigActivity : AppCompatActivity() {
         setContentView(R.layout.activity_planner_config)
 
         findViewById<android.view.View>(R.id.btnBack).setOnClickListener { save(); finish() }
+
+        switchEnabled = findViewById(R.id.switchEnabled)
+        layoutConfigContent = findViewById(R.id.layoutConfigContent)
+
+        switchEnabled.isChecked = ProviderManager.isPlannerEnabled(this)
+        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
+        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setPlannerEnabled(this, isChecked)
+            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+
         etMaxIterations = findViewById(R.id.etMaxIterations)
         switchCritic = findViewById(R.id.switchCritic)
         tvSummary = findViewById(R.id.tvSummary)

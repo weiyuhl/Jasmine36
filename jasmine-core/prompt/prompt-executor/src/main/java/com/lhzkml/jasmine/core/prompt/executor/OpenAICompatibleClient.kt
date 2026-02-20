@@ -70,9 +70,9 @@ abstract class OpenAICompatibleClient(
             json(this@OpenAICompatibleClient.json)
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = this@OpenAICompatibleClient.retryConfig.requestTimeoutMs
+            requestTimeoutMillis = 300000  // 流式输出可能持续较长时间
             connectTimeoutMillis = 30000
-            socketTimeoutMillis = 60000
+            socketTimeoutMillis = 120000   // 单次读取超时
         }
     }
 
@@ -223,9 +223,11 @@ abstract class OpenAICompatibleClient(
                     }
 
                     val channel: ByteReadChannel = response.bodyAsChannel()
+                    val lineBuffer = StringBuilder()
                     while (!channel.isClosedForRead) {
                         coroutineContext.ensureActive()
                         val line = try { channel.readUTF8Line() } catch (_: Exception) { break } ?: break
+                        if (line.isEmpty()) continue
                         if (line.startsWith("data: ")) {
                             val data = line.removePrefix("data: ").trim()
                             if (data == "[DONE]") return@execute
@@ -261,7 +263,9 @@ abstract class OpenAICompatibleClient(
                                             }
                                         }
                                     }
-                                } catch (_: Exception) { }
+                                } catch (_: Exception) {
+                                    // 单个 chunk 解析失败，跳过继续读取下一个
+                                }
                             }
                         }
                     }

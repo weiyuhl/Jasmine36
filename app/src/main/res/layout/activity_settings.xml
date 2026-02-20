@@ -255,16 +255,17 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
 
-        <!-- 智能上下文压缩开关 -->
-
-        <!-- MCP 服务器开关 -->
+        <!-- MCP 工具入口 -->
         <LinearLayout
+            android:id="@+id/layoutMcpEntry"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:gravity="center_vertical"
-            android:paddingHorizontal="20dp">
+            android:paddingHorizontal="20dp"
+            android:clickable="true"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -276,46 +277,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="MCP 工具"
-                    android:textSize="15sp"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="从 MCP 服务器加载远程工具"
-                    android:textSize="12sp"
-                    android:textColor="@color/text_secondary" />
-            </LinearLayout>
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switchMcp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- MCP 服务器配置入口 -->
-        <LinearLayout
-            android:id="@+id/layoutMcpConfig"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_card"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="MCP 服务器管理"
                     android:textSize="15sp"
                     android:textColor="@color/text_primary" />
 
@@ -336,14 +297,17 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
 
-        <!-- 智能上下文压缩开关 -->
+        <!-- 智能上下文压缩入口 -->
         <LinearLayout
+            android:id="@+id/layoutCompressionEntry"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:gravity="center_vertical"
-            android:paddingHorizontal="20dp">
+            android:paddingHorizontal="20dp"
+            android:clickable="true"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -359,50 +323,10 @@
                     android:textColor="@color/text_primary" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="对话过长时自动压缩历史"
-                    android:textSize="12sp"
-                    android:textColor="@color/text_secondary" />
-            </LinearLayout>
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switchCompression"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- 压缩配置入口 -->
-        <LinearLayout
-            android:id="@+id/layoutCompressionConfig"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_card"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="压缩策略配置"
-                    android:textSize="15sp"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
                     android:id="@+id/tvCompressionInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Token 预算 · 阈值 75%"
+                    android:text="已关闭"
                     android:textSize="12sp"
                     android:textColor="@color/text_secondary" />
             </LinearLayout>
@@ -415,14 +339,17 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
 
-        <!-- 执行追踪开关 -->
+        <!-- 执行追踪入口 -->
         <LinearLayout
+            android:id="@+id/layoutTraceEntry"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:gravity="center_vertical"
-            android:paddingHorizontal="20dp">
+            android:paddingHorizontal="20dp"
+            android:clickable="true"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -438,50 +365,10 @@
                     android:textColor="@color/text_primary" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="记录 Agent 工具调用和 LLM 请求"
-                    android:textSize="12sp"
-                    android:textColor="@color/text_secondary" />
-            </LinearLayout>
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switchTrace"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- 追踪配置入口 -->
-        <LinearLayout
-            android:id="@+id/layoutTraceConfig"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_card"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="追踪配置"
-                    android:textSize="15sp"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
                     android:id="@+id/tvTraceInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="内联显示 · 全部事件"
+                    android:text="已关闭"
                     android:textSize="12sp"
                     android:textColor="@color/text_secondary" />
             </LinearLayout>
@@ -494,14 +381,17 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
 
-        <!-- 任务规划开关 -->
+        <!-- 任务规划入口 -->
         <LinearLayout
+            android:id="@+id/layoutPlannerEntry"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:gravity="center_vertical"
-            android:paddingHorizontal="20dp">
+            android:paddingHorizontal="20dp"
+            android:clickable="true"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -517,50 +407,10 @@
                     android:textColor="@color/text_primary" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Agent 模式下先规划再执行"
-                    android:textSize="12sp"
-                    android:textColor="@color/text_secondary" />
-            </LinearLayout>
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switchPlanner"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- 规划配置入口 -->
-        <LinearLayout
-            android:id="@+id/layoutPlannerConfig"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_card"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="规划配置"
-                    android:textSize="15sp"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
                     android:id="@+id/tvPlannerInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="迭代 1 次 · 无 Critic"
+                    android:text="已关闭"
                     android:textSize="12sp"
                     android:textColor="@color/text_secondary" />
             </LinearLayout>
@@ -573,14 +423,17 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
 
-        <!-- 快照/检查点开关 -->
+        <!-- 执行快照入口 -->
         <LinearLayout
+            android:id="@+id/layoutSnapshotEntry"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:gravity="center_vertical"
-            android:paddingHorizontal="20dp">
+            android:paddingHorizontal="20dp"
+            android:clickable="true"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -596,50 +449,10 @@
                     android:textColor="@color/text_primary" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Agent 执行过程中自动创建检查点"
-                    android:textSize="12sp"
-                    android:textColor="@color/text_secondary" />
-            </LinearLayout>
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switchSnapshot"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- 快照配置入口 -->
-        <LinearLayout
-            android:id="@+id/layoutSnapshotConfig"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_card"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="快照配置"
-                    android:textSize="15sp"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
                     android:id="@+id/tvSnapshotInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="内存存储 · 自动检查点 · 从节点重启"
+                    android:text="已关闭"
                     android:textSize="12sp"
                     android:textColor="@color/text_secondary" />
             </LinearLayout>
@@ -652,14 +465,17 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
 
-        <!-- 事件处理器开关 -->
+        <!-- 事件处理器入口 -->
         <LinearLayout
+            android:id="@+id/layoutEventHandlerEntry"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:gravity="center_vertical"
-            android:paddingHorizontal="20dp">
+            android:paddingHorizontal="20dp"
+            android:clickable="true"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -675,50 +491,10 @@
                     android:textColor="@color/text_primary" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Agent 生命周期事件回调"
-                    android:textSize="12sp"
-                    android:textColor="@color/text_secondary" />
-            </LinearLayout>
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switchEventHandler"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- 事件处理器配置入口 -->
-        <LinearLayout
-            android:id="@+id/layoutEventHandlerConfig"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_card"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="事件配置"
-                    android:textSize="15sp"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
                     android:id="@+id/tvEventHandlerInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="全部事件"
+                    android:text="已关闭"
                     android:textSize="12sp"
                     android:textColor="@color/text_secondary" />
             </LinearLayout>

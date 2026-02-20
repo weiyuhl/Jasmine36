@@ -34,6 +34,8 @@ class McpServerActivity : AppCompatActivity() {
 
     private lateinit var rvServers: RecyclerView
     private lateinit var tvEmpty: TextView
+    private lateinit var switchEnabled: androidx.appcompat.widget.SwitchCompat
+    private lateinit var layoutConfigContent: LinearLayout
     private val adapter = McpServerAdapter()
 
     /**
@@ -57,6 +59,15 @@ class McpServerActivity : AppCompatActivity() {
 
         rvServers = findViewById(R.id.rvServers)
         tvEmpty = findViewById(R.id.tvEmpty)
+        switchEnabled = findViewById(R.id.switchEnabled)
+        layoutConfigContent = findViewById(R.id.layoutConfigContent)
+
+        switchEnabled.isChecked = ProviderManager.isMcpEnabled(this)
+        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
+        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setMcpEnabled(this, isChecked)
+            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.btnAdd).setOnClickListener {

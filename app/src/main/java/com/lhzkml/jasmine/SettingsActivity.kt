@@ -22,28 +22,16 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvActiveProvider: TextView
     private lateinit var switchStream: SwitchCompat
     private lateinit var switchTools: SwitchCompat
-    private lateinit var switchCompression: SwitchCompat
-    private lateinit var switchTrace: SwitchCompat
-    private lateinit var switchPlanner: SwitchCompat
-    private lateinit var switchSnapshot: SwitchCompat
-    private lateinit var switchEventHandler: SwitchCompat
-    private lateinit var layoutTraceConfig: LinearLayout
-    private lateinit var layoutPlannerConfig: LinearLayout
-    private lateinit var layoutSnapshotConfig: LinearLayout
-    private lateinit var layoutEventHandlerConfig: LinearLayout
-    private lateinit var tvTraceInfo: TextView
-    private lateinit var tvPlannerInfo: TextView
-    private lateinit var tvSnapshotInfo: TextView
-    private lateinit var tvEventHandlerInfo: TextView
     private lateinit var layoutToolConfig: LinearLayout
-    private lateinit var layoutCompressionConfig: LinearLayout
     private lateinit var layoutAgentStrategy: LinearLayout
     private lateinit var tvAgentStrategy: TextView
     private lateinit var tvToolCount: TextView
     private lateinit var tvCompressionInfo: TextView
+    private lateinit var tvTraceInfo: TextView
+    private lateinit var tvPlannerInfo: TextView
+    private lateinit var tvSnapshotInfo: TextView
+    private lateinit var tvEventHandlerInfo: TextView
     private lateinit var tvMcpInfo: TextView
-    private lateinit var switchMcp: SwitchCompat
-    private lateinit var layoutMcpConfig: LinearLayout
     private lateinit var tvMaxTokens: TextView
     private lateinit var tvSystemPrompt: TextView
     private lateinit var tvPromptTokens: TextView
@@ -111,92 +99,40 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, AgentStrategyActivity::class.java))
         }
 
-        // MCP 服务器开关
-        switchMcp = findViewById(R.id.switchMcp)
-        layoutMcpConfig = findViewById(R.id.layoutMcpConfig)
+        // MCP 工具入口
         tvMcpInfo = findViewById(R.id.tvMcpInfo)
-
-        switchMcp.isChecked = ProviderManager.isMcpEnabled(this)
-        layoutMcpConfig.visibility = if (switchMcp.isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        switchMcp.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setMcpEnabled(this, isChecked)
-            layoutMcpConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        }
-
-        layoutMcpConfig.setOnClickListener {
+        findViewById<LinearLayout>(R.id.layoutMcpEntry).setOnClickListener {
             startActivity(Intent(this, McpServerActivity::class.java))
         }
 
-        // 智能上下文压缩开关
-        switchCompression = findViewById(R.id.switchCompression)
-        layoutCompressionConfig = findViewById(R.id.layoutCompressionConfig)
+        // 智能上下文压缩入口
         tvCompressionInfo = findViewById(R.id.tvCompressionInfo)
-
-        switchCompression.isChecked = ProviderManager.isCompressionEnabled(this)
-        layoutCompressionConfig.visibility = if (switchCompression.isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        switchCompression.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setCompressionEnabled(this, isChecked)
-            layoutCompressionConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        findViewById<LinearLayout>(R.id.layoutCompressionEntry).setOnClickListener {
+            startActivity(Intent(this, CompressionConfigActivity::class.java))
         }
 
-        layoutCompressionConfig.setOnClickListener {
-            startActivity(android.content.Intent(this, CompressionConfigActivity::class.java))
-        }
-
-        // 执行追踪开关
-        switchTrace = findViewById(R.id.switchTrace)
-        switchTrace.isChecked = ProviderManager.isTraceEnabled(this)
-        layoutTraceConfig = findViewById(R.id.layoutTraceConfig)
+        // 执行追踪入口
         tvTraceInfo = findViewById(R.id.tvTraceInfo)
-        layoutTraceConfig.visibility = if (switchTrace.isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        switchTrace.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setTraceEnabled(this, isChecked)
-            layoutTraceConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        }
-        layoutTraceConfig.setOnClickListener {
-            startActivity(android.content.Intent(this, TraceConfigActivity::class.java))
+        findViewById<LinearLayout>(R.id.layoutTraceEntry).setOnClickListener {
+            startActivity(Intent(this, TraceConfigActivity::class.java))
         }
 
-        // 任务规划开关
-        switchPlanner = findViewById(R.id.switchPlanner)
-        switchPlanner.isChecked = ProviderManager.isPlannerEnabled(this)
-        layoutPlannerConfig = findViewById(R.id.layoutPlannerConfig)
+        // 任务规划入口
         tvPlannerInfo = findViewById(R.id.tvPlannerInfo)
-        layoutPlannerConfig.visibility = if (switchPlanner.isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        switchPlanner.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setPlannerEnabled(this, isChecked)
-            layoutPlannerConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        }
-        layoutPlannerConfig.setOnClickListener {
-            startActivity(android.content.Intent(this, PlannerConfigActivity::class.java))
+        findViewById<LinearLayout>(R.id.layoutPlannerEntry).setOnClickListener {
+            startActivity(Intent(this, PlannerConfigActivity::class.java))
         }
 
-        // 快照/检查点开关
-        switchSnapshot = findViewById(R.id.switchSnapshot)
-        switchSnapshot.isChecked = ProviderManager.isSnapshotEnabled(this)
-        layoutSnapshotConfig = findViewById(R.id.layoutSnapshotConfig)
+        // 执行快照入口
         tvSnapshotInfo = findViewById(R.id.tvSnapshotInfo)
-        layoutSnapshotConfig.visibility = if (switchSnapshot.isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        switchSnapshot.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setSnapshotEnabled(this, isChecked)
-            layoutSnapshotConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        }
-        layoutSnapshotConfig.setOnClickListener {
-            startActivity(android.content.Intent(this, SnapshotConfigActivity::class.java))
+        findViewById<LinearLayout>(R.id.layoutSnapshotEntry).setOnClickListener {
+            startActivity(Intent(this, SnapshotConfigActivity::class.java))
         }
 
-        // 事件处理器开关
-        switchEventHandler = findViewById(R.id.switchEventHandler)
-        switchEventHandler.isChecked = ProviderManager.isEventHandlerEnabled(this)
-        layoutEventHandlerConfig = findViewById(R.id.layoutEventHandlerConfig)
+        // 事件处理器入口
         tvEventHandlerInfo = findViewById(R.id.tvEventHandlerInfo)
-        layoutEventHandlerConfig.visibility = if (switchEventHandler.isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        switchEventHandler.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setEventHandlerEnabled(this, isChecked)
-            layoutEventHandlerConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        }
-        layoutEventHandlerConfig.setOnClickListener {
-            startActivity(android.content.Intent(this, EventHandlerConfigActivity::class.java))
+        findViewById<LinearLayout>(R.id.layoutEventHandlerEntry).setOnClickListener {
+            startActivity(Intent(this, EventHandlerConfigActivity::class.java))
         }
 
         // 系统提示词编辑
@@ -425,6 +361,10 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshCompressionInfo() {
+        if (!ProviderManager.isCompressionEnabled(this)) {
+            tvCompressionInfo.text = "已关闭"
+            return
+        }
         val strategy = ProviderManager.getCompressionStrategy(this)
         val info = when (strategy) {
             ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
@@ -447,14 +387,22 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshMcpInfo() {
+        if (!ProviderManager.isMcpEnabled(this)) {
+            tvMcpInfo.text = "已关闭"
+            return
+        }
         val servers = ProviderManager.getMcpServers(this)
         val enabledCount = servers.count { it.enabled }
-        tvMcpInfo.text = if (servers.isEmpty()) "未配置服务器" else "已配置 ${servers.size} 个 · 启用 $enabledCount 个"
+        tvMcpInfo.text = if (servers.isEmpty()) "已开启 · 未配置服务器" else "已配置 ${servers.size} 个 · 启用 $enabledCount 个"
     }
 
     // ========== 追踪配置 ==========
 
     private fun refreshTraceInfo() {
+        if (!ProviderManager.isTraceEnabled(this)) {
+            tvTraceInfo.text = "已关闭"
+            return
+        }
         val file = ProviderManager.isTraceFileEnabled(this)
         val filter = ProviderManager.getTraceEventFilter(this)
         val outputParts = mutableListOf<String>()
@@ -467,6 +415,10 @@ class SettingsActivity : AppCompatActivity() {
     // ========== 规划配置 ==========
 
     private fun refreshPlannerInfo() {
+        if (!ProviderManager.isPlannerEnabled(this)) {
+            tvPlannerInfo.text = "已关闭"
+            return
+        }
         val maxIter = ProviderManager.getPlannerMaxIterations(this)
         val critic = ProviderManager.isPlannerCriticEnabled(this)
         val criticStr = if (critic) "Critic 评估" else "无 Critic"
@@ -476,6 +428,10 @@ class SettingsActivity : AppCompatActivity() {
     // ========== 快照配置 ==========
 
     private fun refreshSnapshotInfo() {
+        if (!ProviderManager.isSnapshotEnabled(this)) {
+            tvSnapshotInfo.text = "已关闭"
+            return
+        }
         val storage = ProviderManager.getSnapshotStorage(this)
         val auto = ProviderManager.isSnapshotAutoCheckpoint(this)
         val rollback = ProviderManager.getSnapshotRollbackStrategy(this)
@@ -495,6 +451,10 @@ class SettingsActivity : AppCompatActivity() {
     // ========== 事件处理器配置 ==========
 
     private fun refreshEventHandlerInfo() {
+        if (!ProviderManager.isEventHandlerEnabled(this)) {
+            tvEventHandlerInfo.text = "已关闭"
+            return
+        }
         val filter = ProviderManager.getEventHandlerFilter(this)
         tvEventHandlerInfo.text = if (filter.isEmpty()) "全部事件" else "${filter.size} 类事件"
     }

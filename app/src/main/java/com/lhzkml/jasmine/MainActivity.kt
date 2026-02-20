@@ -358,180 +358,49 @@ class MainActivity : AppCompatActivity() {
         val filter = ProviderManager.getEventHandlerFilter(this)
         fun isEnabled(cat: ProviderManager.EventCategory) = filter.isEmpty() || cat in filter
 
+        // 统一的事件输出方法
+        suspend fun emitEvent(line: String) {
+            agentLogBuilder.append(line)
+            withContext(Dispatchers.Main) {
+                appendRendered(line)
+                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+            }
+        }
+
         return EventHandler.build {
             if (isEnabled(ProviderManager.EventCategory.AGENT)) {
-                onAgentStarting { ctx ->
-                    val line = "[EVENT] Agent 开始 [${ctx.agentId}]\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onAgentCompleted { ctx ->
-                    val line = "[EVENT] Agent 完成 [${ctx.agentId}]\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onAgentExecutionFailed { ctx ->
-                    val line = "[EVENT] Agent 失败: ${ctx.throwable.message}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
+                onAgentStarting { ctx -> emitEvent("[EVENT] Agent 开始 [${ctx.agentId}]\n") }
+                onAgentCompleted { ctx -> emitEvent("[EVENT] Agent 完成 [${ctx.agentId}]\n") }
+                onAgentExecutionFailed { ctx -> emitEvent("[EVENT] Agent 失败: ${ctx.throwable.message}\n") }
             }
             if (isEnabled(ProviderManager.EventCategory.TOOL)) {
-                onToolCallStarting { ctx ->
-                    val line = "[EVENT] 工具调用: ${ctx.toolName}(${ctx.toolArgs.take(60)})\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onToolCallCompleted { ctx ->
-                    val line = "[EVENT] 工具完成: ${ctx.toolName} -> ${(ctx.result ?: "").take(100)}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onToolCallFailed { ctx ->
-                    val line = "[EVENT] 工具失败: ${ctx.toolName} - ${ctx.throwable.message}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onToolValidationFailed { ctx ->
-                    val line = "[EVENT] 工具验证失败: ${ctx.toolName} - ${ctx.validationError}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
+                onToolCallStarting { ctx -> emitEvent("[EVENT] 工具调用: ${ctx.toolName}(${ctx.toolArgs.take(60)})\n") }
+                onToolCallCompleted { ctx -> emitEvent("[EVENT] 工具完成: ${ctx.toolName} -> ${(ctx.result ?: "").take(100)}\n") }
+                onToolCallFailed { ctx -> emitEvent("[EVENT] 工具失败: ${ctx.toolName} - ${ctx.throwable.message}\n") }
+                onToolValidationFailed { ctx -> emitEvent("[EVENT] 工具验证失败: ${ctx.toolName} - ${ctx.validationError}\n") }
             }
             if (isEnabled(ProviderManager.EventCategory.LLM)) {
-                onLLMCallStarting { ctx ->
-                    val line = "[EVENT] LLM 请求 [消息: ${ctx.messageCount}, 工具: ${ctx.tools.size}]\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onLLMCallCompleted { ctx ->
-                    val line = "[EVENT] LLM 回复 [${ctx.totalTokens} tokens]\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
+                onLLMCallStarting { ctx -> emitEvent("[EVENT] LLM 请求 [消息: ${ctx.messageCount}, 工具: ${ctx.tools.size}]\n") }
+                onLLMCallCompleted { ctx -> emitEvent("[EVENT] LLM 回复 [${ctx.totalTokens} tokens]\n") }
             }
             if (isEnabled(ProviderManager.EventCategory.STRATEGY)) {
-                onStrategyStarting { ctx ->
-                    val line = "[EVENT] 策略开始: ${ctx.strategyName}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onStrategyCompleted { ctx ->
-                    val line = "[EVENT] 策略完成: ${ctx.strategyName} -> ${ctx.result?.take(80) ?: ""}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
+                onStrategyStarting { ctx -> emitEvent("[EVENT] 策略开始: ${ctx.strategyName}\n") }
+                onStrategyCompleted { ctx -> emitEvent("[EVENT] 策略完成: ${ctx.strategyName} -> ${ctx.result?.take(80) ?: ""}\n") }
             }
             if (isEnabled(ProviderManager.EventCategory.NODE)) {
-                onNodeExecutionStarting { ctx ->
-                    val line = "[EVENT] 节点开始: ${ctx.nodeName}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onNodeExecutionCompleted { ctx ->
-                    val line = "[EVENT] 节点完成: ${ctx.nodeName}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onNodeExecutionFailed { ctx ->
-                    val line = "[EVENT] 节点失败: ${ctx.nodeName} - ${ctx.throwable.message}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
+                onNodeExecutionStarting { ctx -> emitEvent("[EVENT] 节点开始: ${ctx.nodeName}\n") }
+                onNodeExecutionCompleted { ctx -> emitEvent("[EVENT] 节点完成: ${ctx.nodeName}\n") }
+                onNodeExecutionFailed { ctx -> emitEvent("[EVENT] 节点失败: ${ctx.nodeName} - ${ctx.throwable.message}\n") }
             }
             if (isEnabled(ProviderManager.EventCategory.SUBGRAPH)) {
-                onSubgraphExecutionStarting { ctx ->
-                    val line = "[EVENT] 子图开始: ${ctx.subgraphName}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onSubgraphExecutionCompleted { ctx ->
-                    val line = "[EVENT] 子图完成: ${ctx.subgraphName}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onSubgraphExecutionFailed { ctx ->
-                    val line = "[EVENT] 子图失败: ${ctx.subgraphName} - ${ctx.throwable.message}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
+                onSubgraphExecutionStarting { ctx -> emitEvent("[EVENT] 子图开始: ${ctx.subgraphName}\n") }
+                onSubgraphExecutionCompleted { ctx -> emitEvent("[EVENT] 子图完成: ${ctx.subgraphName}\n") }
+                onSubgraphExecutionFailed { ctx -> emitEvent("[EVENT] 子图失败: ${ctx.subgraphName} - ${ctx.throwable.message}\n") }
             }
             if (isEnabled(ProviderManager.EventCategory.STREAMING)) {
-                onLLMStreamingStarting { ctx ->
-                    val line = "[EVENT] LLM 流式开始 [模型: ${ctx.model}]\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onLLMStreamingCompleted { ctx ->
-                    val line = "[EVENT] LLM 流式完成 [${ctx.totalTokens} tokens]\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
-                onLLMStreamingFailed { ctx ->
-                    val line = "[EVENT] LLM 流式失败: ${ctx.throwable.message}\n"
-                    agentLogBuilder.append(line)
-                    withContext(Dispatchers.Main) {
-                        tvOutput.append(line)
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    }
-                }
+                onLLMStreamingStarting { ctx -> emitEvent("[EVENT] LLM 流式开始 [模型: ${ctx.model}]\n") }
+                onLLMStreamingCompleted { ctx -> emitEvent("[EVENT] LLM 流式完成 [${ctx.totalTokens} tokens]\n") }
+                onLLMStreamingFailed { ctx -> emitEvent("[EVENT] LLM 流式失败: ${ctx.throwable.message}\n") }
             }
         }
     }
@@ -748,7 +617,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                tvOutput.text = sb.toString()
+                tvOutput.setText(sb.toString(), android.widget.TextView.BufferType.NORMAL)
                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
             }
 
@@ -906,7 +775,7 @@ class MainActivity : AppCompatActivity() {
 
                 val useStream = ProviderManager.isStreamEnabled(this@MainActivity)
                 val maxTokensVal = ProviderManager.getMaxTokens(this@MainActivity)
-                val maxTokens = if (maxTokensVal > 0) maxTokensVal else null
+                val maxTokens = if (maxTokensVal > 0) maxTokensVal else 8192
 
                 // 采样参数
                 val tempVal = ProviderManager.getTemperature(this@MainActivity)
@@ -943,7 +812,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 val argsPreview = if (arguments.length > 80) arguments.take(80) + "…" else arguments
                                 val line = "\n[Tool] 调用工具: $toolName($argsPreview)\n"
-                                tvOutput.append(line)
+                                appendRendered(line)
                                 agentLogBuilder.append(line)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
@@ -952,7 +821,7 @@ class MainActivity : AppCompatActivity() {
                             withContext(Dispatchers.Main) {
                                 val preview = if (result.length > 200) result.take(200) + "…" else result
                                 val line = "[Result] $toolName 结果: $preview\n\n"
-                                tvOutput.append(line)
+                                appendRendered(line)
                                 agentLogBuilder.append(line)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
@@ -960,7 +829,7 @@ class MainActivity : AppCompatActivity() {
                         override suspend fun onThinking(content: String) {
                             withContext(Dispatchers.Main) {
                                 if (!thinkingStarted) {
-                                    tvOutput.append("[Think] ")
+                                    appendRendered("[Think] ")
                                     agentLogBuilder.append("[Think] ")
                                     thinkingStarted = true
                                 }
@@ -1017,13 +886,13 @@ class MainActivity : AppCompatActivity() {
                             planSession.close()
 
                             withContext(Dispatchers.Main) {
-                                tvOutput.append("[Plan] 任务规划:\n")
-                                tvOutput.append("[Goal] 目标: ${plan.goal}\n")
+                                appendRendered("[Plan] 任务规划:\n")
+                                appendRendered("[Goal] 目标: ${plan.goal}\n")
                                 agentLogBuilder.append("[Plan] 任务规划:\n")
                                 agentLogBuilder.append("[Goal] 目标: ${plan.goal}\n")
                                 plan.steps.forEachIndexed { index, step ->
                                     val stepLine = "  ${index + 1}. ${step.description}\n"
-                                    tvOutput.append(stepLine)
+                                    appendRendered(stepLine)
                                     agentLogBuilder.append(stepLine)
                                 }
                                 tvOutput.append("\n")
@@ -1036,7 +905,7 @@ class MainActivity : AppCompatActivity() {
                             // 规划失败不影响正常执行
                             withContext(Dispatchers.Main) {
                                 val line = "[Plan] [规划跳过: ${e.message}]\n\n"
-                                tvOutput.append(line)
+                                appendRendered(line)
                                 agentLogBuilder.append(line)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
@@ -1050,7 +919,7 @@ class MainActivity : AppCompatActivity() {
                             // 简单循环模式：使用 ToolExecutor
                             if (useStream) {
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append("AI: ")
+                                    appendRendered("AI: ")
                                 }
                                 val streamResult = executor.executeStream(
                                     trimmedMessages, config.model, maxTokens, samplingParams
@@ -1063,7 +932,7 @@ class MainActivity : AppCompatActivity() {
                                 result = streamResult.content
                                 usage = streamResult.usage
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append(formatUsageLine(usage))
+                                    appendRendered(formatUsageLine(usage))
                                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                 }
                             } else {
@@ -1081,7 +950,7 @@ class MainActivity : AppCompatActivity() {
                                 } ?: ""
 
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append("AI: $result$thinkingLine${formatUsageLine(usage)}")
+                                    appendRendered("AI: $result$thinkingLine${formatUsageLine(usage)}")
                                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                 }
                             }
@@ -1118,14 +987,14 @@ class MainActivity : AppCompatActivity() {
                             // 显示图策略流程头
                             withContext(Dispatchers.Main) {
                                 val header = "┌─ [Graph] 图策略执行 ─────────────\n│ [>] Start\n"
-                                tvOutput.append(header)
+                                appendRendered(header)
                                 agentLogBuilder.append(header)
                                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                             }
 
                             if (useStream) {
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append("└─────────────────────────\n\nAI: ")
+                                    appendRendered("└─────────────────────────\n\nAI: ")
                                     agentLogBuilder.append("└─────────────────────────\n")
                                 }
                             }
@@ -1144,7 +1013,7 @@ class MainActivity : AppCompatActivity() {
                                 { text: String ->
                                     withContext(Dispatchers.Main) {
                                         if (!graphThinkingStarted) {
-                                            tvOutput.append("[Think] ")
+                                            appendRendered("[Think] ")
                                             agentLogBuilder.append("[Think] ")
                                             graphThinkingStarted = true
                                         }
@@ -1166,7 +1035,7 @@ class MainActivity : AppCompatActivity() {
                                 val line = "│ $icon $nodeName ...\n"
                                 agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append(line)
+                                    appendRendered(line)
                                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                 }
                             }
@@ -1176,7 +1045,7 @@ class MainActivity : AppCompatActivity() {
                                 val line = "│ $status $nodeName 完成\n"
                                 agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append(line)
+                                    appendRendered(line)
                                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                 }
                             }
@@ -1186,7 +1055,7 @@ class MainActivity : AppCompatActivity() {
                                 val line = "│  ↓ $from → $to$labelStr\n"
                                 agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append(line)
+                                    appendRendered(line)
                                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                 }
                             }
@@ -1201,7 +1070,7 @@ class MainActivity : AppCompatActivity() {
                                     val line = "│  [Tool] $toolName($argsPreview)\n"
                                     agentLogBuilder.append(line)
                                     withContext(Dispatchers.Main) {
-                                        tvOutput.append(line)
+                                        appendRendered(line)
                                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                     }
                                 },
@@ -1210,7 +1079,7 @@ class MainActivity : AppCompatActivity() {
                                     val line = "│  [Result] $toolName -> $preview\n"
                                     agentLogBuilder.append(line)
                                     withContext(Dispatchers.Main) {
-                                        tvOutput.append(line)
+                                        appendRendered(line)
                                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                     }
                                 },
@@ -1224,14 +1093,14 @@ class MainActivity : AppCompatActivity() {
                             if (!useStream) {
                                 withContext(Dispatchers.Main) {
                                     val footer = "│ [x] Finish\n└─────────────────────────\n\n"
-                                    tvOutput.append(footer)
+                                    appendRendered(footer)
                                     agentLogBuilder.append(footer)
-                                    tvOutput.append("AI: $result${formatUsageLine(null)}")
+                                    appendRendered("AI: $result${formatUsageLine(null)}")
                                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                 }
                             } else {
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append(formatUsageLine(null))
+                                    appendRendered(formatUsageLine(null))
                                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                                 }
                             }
@@ -1248,7 +1117,7 @@ class MainActivity : AppCompatActivity() {
                 } else if (useStream) {
                     // 普通流式输出
                     withContext(Dispatchers.Main) {
-                        tvOutput.append("AI: ")
+                        appendRendered("AI: ")
                     }
 
                     var thinkingStarted = false
@@ -1258,7 +1127,7 @@ class MainActivity : AppCompatActivity() {
                             withContext(Dispatchers.Main) {
                                 // 如果之前在显示思考内容，先换行再显示正文
                                 if (thinkingStarted) {
-                                    tvOutput.append("\n\nAI: ")
+                                    appendRendered("\n\nAI: ")
                                     thinkingStarted = false
                                 }
                                 tvOutput.append(chunk)
@@ -1268,7 +1137,7 @@ class MainActivity : AppCompatActivity() {
                         onThinking = { text ->
                             withContext(Dispatchers.Main) {
                                 if (!thinkingStarted) {
-                                    tvOutput.append("[Think] ")
+                                    appendRendered("[Think] ")
                                     agentLogBuilder.append("[Think] ")
                                     thinkingStarted = true
                                 }
@@ -1283,7 +1152,7 @@ class MainActivity : AppCompatActivity() {
                     usage = streamResult.usage
 
                     withContext(Dispatchers.Main) {
-                        tvOutput.append(formatUsageLine(usage))
+                        appendRendered(formatUsageLine(usage))
                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                     }
                 } else {
@@ -1300,7 +1169,7 @@ class MainActivity : AppCompatActivity() {
                     } ?: ""
 
                     withContext(Dispatchers.Main) {
-                        tvOutput.append("AI: $result$thinkingLine${formatUsageLine(usage)}")
+                        appendRendered("AI: $result$thinkingLine${formatUsageLine(usage)}")
                         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                     }
                 }
@@ -1361,7 +1230,7 @@ class MainActivity : AppCompatActivity() {
                     throwable = e
                 ))
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("\n$errorMsg\n\n")
+                    appendRendered("\n$errorMsg\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
                 // 快照恢复：检查是否有可用检查点
@@ -1374,7 +1243,7 @@ class MainActivity : AppCompatActivity() {
                     throwable = e
                 ))
                 withContext(Dispatchers.Main) {
-                    tvOutput.append("\n未知错误: ${e.message}\n\n")
+                    appendRendered("\n未知错误: ${e.message}\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
                 // 快照恢复：检查是否有可用检查点
@@ -1442,7 +1311,7 @@ class MainActivity : AppCompatActivity() {
         val line = "[Snapshot] 恢复到 ${selectedCheckpoint.nodePath} [$totalMsgs 条消息]\n"
         agentLogBuilder.append(line)
         withContext(Dispatchers.Main) {
-            tvOutput.append(line)
+            appendRendered(line)
             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
         }
 
@@ -1456,7 +1325,7 @@ class MainActivity : AppCompatActivity() {
                 val skipLine = "[Snapshot] 已恢复到该轮对话状态，可继续发送新消息。\n"
                 agentLogBuilder.append(skipLine)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append(skipLine)
+                    appendRendered(skipLine)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
                 val logContent = agentLogBuilder.toString()
@@ -1472,8 +1341,8 @@ class MainActivity : AppCompatActivity() {
                 val defaultLine = "[Snapshot] 使用默认输出恢复\n"
                 agentLogBuilder.append(defaultLine)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append(defaultLine)
-                    tvOutput.append("AI: $defaultReply\n${formatTime(System.currentTimeMillis())}\n\n")
+                    appendRendered(defaultLine)
+                    appendRendered("AI: $defaultReply\n${formatTime(System.currentTimeMillis())}\n\n")
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
                 if (currentConversationId != null) {
@@ -1551,7 +1420,7 @@ class MainActivity : AppCompatActivity() {
             messageHistory.addAll(rebuilt)
 
             val line = "[Snapshot] 启动恢复: 从 $totalTurns 个检查点重建对话历史 [${rebuilt.size} 条消息]\n\n"
-            tvOutput.append(line)
+            appendRendered(line)
             scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
         }
     }
@@ -1574,7 +1443,7 @@ class MainActivity : AppCompatActivity() {
                 val line = "[Compress] 开始压缩上下文 [策略: $strategyName, 原始消息: ${originalMessageCount} 条]\n"
                 agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append(line)
+                    appendRendered(line)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
@@ -1589,7 +1458,7 @@ class MainActivity : AppCompatActivity() {
                 val line = "\n[Block] 块 $blockIndex/$totalBlocks 压缩完成\n"
                 agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append(line)
+                    appendRendered(line)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
@@ -1597,7 +1466,7 @@ class MainActivity : AppCompatActivity() {
                 val line = "\n[OK] 上下文压缩完成 [压缩后: ${compressedMessageCount} 条消息]\n\n"
                 agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append(line)
+                    appendRendered(line)
                     scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
@@ -1627,7 +1496,7 @@ class MainActivity : AppCompatActivity() {
             val line = "\n[WARN] 压缩失败: ${e.message}]\n\n"
             agentLogBuilder.append(line)
             withContext(Dispatchers.Main) {
-                tvOutput.append(line)
+                appendRendered(line)
                 scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         } finally {
@@ -1661,6 +1530,11 @@ class MainActivity : AppCompatActivity() {
                 HistoryCompressionStrategy.Chunked(size)
             }
         }
+    }
+
+    /** 追加文本到聊天输出 */
+    private fun appendRendered(text: String) {
+        tvOutput.append(text)
     }
 
     private fun formatUsageLine(usage: Usage?): String {

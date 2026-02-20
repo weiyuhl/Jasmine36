@@ -6,9 +6,12 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 
 class CompressionConfigActivity : AppCompatActivity() {
 
+    private lateinit var switchEnabled: SwitchCompat
+    private lateinit var layoutConfigContent: LinearLayout
     private lateinit var cardTokenBudget: LinearLayout
     private lateinit var cardWholeHistory: LinearLayout
     private lateinit var cardLastN: LinearLayout
@@ -33,6 +36,16 @@ class CompressionConfigActivity : AppCompatActivity() {
         setContentView(R.layout.activity_compression_config)
 
         findViewById<View>(R.id.btnBack).setOnClickListener { save(); finish() }
+
+        switchEnabled = findViewById(R.id.switchEnabled)
+        layoutConfigContent = findViewById(R.id.layoutConfigContent)
+
+        switchEnabled.isChecked = ProviderManager.isCompressionEnabled(this)
+        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
+        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setCompressionEnabled(this, isChecked)
+            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
 
         cardTokenBudget = findViewById(R.id.cardTokenBudget)
         cardWholeHistory = findViewById(R.id.cardWholeHistory)

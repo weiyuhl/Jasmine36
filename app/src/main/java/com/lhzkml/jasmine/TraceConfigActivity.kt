@@ -1,6 +1,8 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
+import android.view.View
+import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import android.widget.TextView
@@ -12,6 +14,8 @@ import android.widget.TextView
  */
 class TraceConfigActivity : AppCompatActivity() {
 
+    private lateinit var switchEnabled: SwitchCompat
+    private lateinit var layoutConfigContent: LinearLayout
     private lateinit var switchFileOutput: SwitchCompat
     private lateinit var tvFileOutputPath: TextView
     private lateinit var tvConfigSummary: TextView
@@ -42,6 +46,16 @@ class TraceConfigActivity : AppCompatActivity() {
         setContentView(R.layout.activity_trace_config)
 
         findViewById<android.view.View>(R.id.btnBack).setOnClickListener { finish() }
+
+        switchEnabled = findViewById(R.id.switchEnabled)
+        layoutConfigContent = findViewById(R.id.layoutConfigContent)
+
+        switchEnabled.isChecked = ProviderManager.isTraceEnabled(this)
+        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
+        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setTraceEnabled(this, isChecked)
+            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
 
         switchFileOutput = findViewById(R.id.switchFileOutput)
         tvFileOutputPath = findViewById(R.id.tvFileOutputPath)

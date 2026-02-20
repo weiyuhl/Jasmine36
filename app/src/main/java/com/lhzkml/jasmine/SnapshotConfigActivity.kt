@@ -12,6 +12,8 @@ import androidx.appcompat.widget.SwitchCompat
 
 class SnapshotConfigActivity : AppCompatActivity() {
 
+    private lateinit var switchEnabled: SwitchCompat
+    private lateinit var layoutConfigContent: LinearLayout
     private lateinit var cardMemory: LinearLayout
     private lateinit var cardFile: LinearLayout
     private lateinit var tvMemoryCheck: TextView
@@ -30,6 +32,16 @@ class SnapshotConfigActivity : AppCompatActivity() {
         setContentView(R.layout.activity_snapshot_config)
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
+
+        switchEnabled = findViewById(R.id.switchEnabled)
+        layoutConfigContent = findViewById(R.id.layoutConfigContent)
+
+        switchEnabled.isChecked = ProviderManager.isSnapshotEnabled(this)
+        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
+        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
+            ProviderManager.setSnapshotEnabled(this, isChecked)
+            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
 
         cardMemory = findViewById(R.id.cardMemory)
         cardFile = findViewById(R.id.cardFile)
