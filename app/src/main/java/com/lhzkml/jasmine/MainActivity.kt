@@ -133,6 +133,7 @@ class MainActivity : AppCompatActivity() {
     private var contextManager = ContextManager()
     private var webSearchTool: WebSearchTool? = null
     private var currentJob: Job? = null
+    private var conversationObserverJob: Job? = null
     private var isGenerating = false
     private var tracing: Tracing? = null
     private var eventHandler: EventHandler? = null
@@ -626,13 +627,8 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
 
-        // 实时观察对话列表
-        CoroutineScope(Dispatchers.Main).launch {
-            conversationRepo.observeConversations().collectLatest { list ->
-                drawerAdapter.submitList(list)
-                tvDrawerEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-            }
-        }
+        // 实时观察对话列表（按工作区隔离）
+        subscribeConversations()
 
         btnSend.setOnClickListener {
             if (isGenerating) {
@@ -647,10 +643,17 @@ class MainActivity : AppCompatActivity() {
 
         intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
             ?: run {
-                // 恢复上次的会话
+                // 恢复上次的会话（仅当对话属于当前工作区时才恢复）
                 val lastId = ProviderManager.getLastConversationId(this)
                 if (lastId.isNotEmpty()) {
-                    loadConversation(lastId)
+                    val currentWs = if (ProviderManager.isAgentMode(this))
+                        ProviderManager.getWorkspacePath(this) else ""
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val info = conversationRepo.getConversation(lastId)
+                        if (info != null && info.workspacePath == currentWs) {
+                            withContext(Dispatchers.Main) { loadConversation(lastId) }
+                        }
+                    }
                 }
             }
 
@@ -696,6 +699,23 @@ class MainActivity : AppCompatActivity() {
 
     // ========== Agent 模式 ==========
 
+    /**
+     * 订阅对话列表（按工作区隔离）
+     * Agent 模式：只显示当前工作区的对话
+     * Chat 模式：只显示 workspacePath 为空的对话
+     */
+    private fun subscribeConversations() {
+        conversationObserverJob?.cancel()
+        val isAgent = ProviderManager.isAgentMode(this)
+        val workspacePath = if (isAgent) ProviderManager.getWorkspacePath(this) else ""
+        conversationObserverJob = CoroutineScope(Dispatchers.Main).launch {
+            conversationRepo.observeConversationsByWorkspace(workspacePath).collectLatest { list ->
+                drawerAdapter.submitList(list)
+                tvDrawerEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
     private fun refreshAgentModeUI() {
         val isAgent = ProviderManager.isAgentMode(this)
         if (isAgent) {
@@ -732,6 +752,18 @@ class MainActivity : AppCompatActivity() {
         if (isAgent) {
             drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, Gravity.START)
         }
+        // 工作区切换时：如果当前对话不属于新工作区，关闭当前会话界面
+        val currentWs = if (isAgent) ProviderManager.getWorkspacePath(this) else ""
+        if (currentConversationId != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val info = conversationRepo.getConversation(currentConversationId!!)
+                if (info == null || info.workspacePath != currentWs) {
+                    withContext(Dispatchers.Main) { startNewConversation() }
+                }
+            }
+        }
+        // 重新订阅对话列表（按当前工作区过滤）
+        subscribeConversations()
     }
 
     /**
@@ -827,8 +859,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun closeWorkspace() {
-        // Agent 模式：释放持久化的 URI 权限
+        // Agent 模式：先保存当前会话到当前工作区，再清空路径
         if (ProviderManager.isAgentMode(this)) {
+            ProviderManager.setLastConversationId(this, currentConversationId ?: "")
+
             val uriStr = ProviderManager.getWorkspaceUri(this)
             if (uriStr.isNotEmpty()) {
                 try {
@@ -1041,7 +1075,9 @@ class MainActivity : AppCompatActivity() {
                         title = title,
                         providerId = config.providerId,
                         model = config.model,
-                        systemPrompt = systemPrompt
+                        systemPrompt = systemPrompt,
+                        workspacePath = if (ProviderManager.isAgentMode(this@MainActivity))
+                            ProviderManager.getWorkspacePath(this@MainActivity) else ""
                     )
                     val systemMsg = ChatMessage.system(systemPrompt)
                     messageHistory.add(systemMsg)

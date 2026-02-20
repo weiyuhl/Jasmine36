@@ -16,7 +16,7 @@ import com.lhzkml.jasmine.core.conversation.storage.entity.UsageEntity
  */
 @Database(
     entities = [ConversationEntity::class, MessageEntity::class, UsageEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class JasmineDatabase : RoomDatabase() {
@@ -47,6 +47,13 @@ abstract class JasmineDatabase : RoomDatabase() {
             }
         }
 
+        /** v2 -> v3: conversations 表添加 workspacePath 列 */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE conversations ADD COLUMN workspacePath TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         /**
          * 获取数据库单例
          */
@@ -57,7 +64,7 @@ abstract class JasmineDatabase : RoomDatabase() {
                     JasmineDatabase::class.java,
                     "jasmine.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

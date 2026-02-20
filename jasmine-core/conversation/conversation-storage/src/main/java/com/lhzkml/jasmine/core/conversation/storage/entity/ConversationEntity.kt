@@ -18,6 +18,8 @@ data class ConversationEntity(
     val model: String,
     /** 该对话使用的系统提示词 */
     val systemPrompt: String = "You are a helpful assistant.",
+    /** 关联的工作区路径（Agent 模式），空字符串表示 Chat 模式 */
+    val workspacePath: String = "",
     /** 创建时间戳（毫秒） */
     val createdAt: Long,
     /** 最后更新时间戳（毫秒） */

@@ -20,6 +20,7 @@ data class ConversationInfo(
     val providerId: String,
     val model: String,
     val systemPrompt: String,
+    val workspacePath: String,
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -51,7 +52,8 @@ class ConversationRepository(context: Context) {
         title: String,
         providerId: String,
         model: String,
-        systemPrompt: String = "You are a helpful assistant."
+        systemPrompt: String = "You are a helpful assistant.",
+        workspacePath: String = ""
     ): String {
         val id = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
@@ -62,6 +64,7 @@ class ConversationRepository(context: Context) {
                 providerId = providerId,
                 model = model,
                 systemPrompt = systemPrompt,
+                workspacePath = workspacePath,
                 createdAt = now,
                 updatedAt = now
             )
@@ -72,6 +75,13 @@ class ConversationRepository(context: Context) {
     /** 获取所有对话列表（实时观察） */
     fun observeConversations(): Flow<List<ConversationInfo>> {
         return dao.getAllConversations().map { list ->
+            list.map { it.toInfo() }
+        }
+    }
+
+    /** 获取指定工作区的对话列表（实时观察） */
+    fun observeConversationsByWorkspace(workspacePath: String): Flow<List<ConversationInfo>> {
+        return dao.getConversationsByWorkspace(workspacePath).map { list ->
             list.map { it.toInfo() }
         }
     }
@@ -171,6 +181,7 @@ class ConversationRepository(context: Context) {
         providerId = providerId,
         model = model,
         systemPrompt = systemPrompt,
+        workspacePath = workspacePath,
         createdAt = createdAt,
         updatedAt = updatedAt
     )

@@ -30,6 +30,10 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
     fun getAllConversations(): Flow<List<ConversationEntity>>
 
+    /** 获取指定工作区的对话，按更新时间倒序 */
+    @Query("SELECT * FROM conversations WHERE workspacePath = :workspacePath ORDER BY updatedAt DESC")
+    fun getConversationsByWorkspace(workspacePath: String): Flow<List<ConversationEntity>>
+
     /** 根据 ID 获取对话 */
     @Query("SELECT * FROM conversations WHERE id = :id")
     suspend fun getConversation(id: String): ConversationEntity?

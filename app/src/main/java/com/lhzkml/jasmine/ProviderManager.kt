@@ -745,12 +745,17 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("has_last_session", active).apply()
     }
 
-    /** 上次打开的会话 ID */
-    fun getLastConversationId(ctx: Context): String =
-        prefs(ctx).getString("last_conversation_id", "") ?: ""
+    /** 上次打开的会话 ID（按工作区隔离存储） */
+    fun getLastConversationId(ctx: Context): String {
+        val ws = getWorkspacePath(ctx)
+        val key = if (ws.isEmpty()) "last_conversation_id" else "last_conversation_id_$ws"
+        return prefs(ctx).getString(key, "") ?: ""
+    }
 
     fun setLastConversationId(ctx: Context, id: String) {
-        prefs(ctx).edit().putString("last_conversation_id", id).apply()
+        val ws = getWorkspacePath(ctx)
+        val key = if (ws.isEmpty()) "last_conversation_id" else "last_conversation_id_$ws"
+        prefs(ctx).edit().putString(key, id).apply()
     }
 
     /** Agent 模式工作区路径（用户选择的本地文件夹） */
