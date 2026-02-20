@@ -9,13 +9,32 @@ class GetCurrentTimeToolTest {
     @Test
     fun `returns time with default timezone`() = runBlocking {
         val result = GetCurrentTimeTool.execute("{}")
-        assertTrue(result.matches(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} \\(.+\\)")))
+        assertTrue(result.contains("\"currentTime\""))
+        assertTrue(result.contains("\"format\": \"locale\""))
+        assertTrue(result.contains("\"year\""))
+        assertTrue(result.contains("\"weekday\""))
     }
 
     @Test
     fun `returns time for UTC`() = runBlocking {
         val result = GetCurrentTimeTool.execute("""{"timezone": "UTC"}""")
-        assertTrue(result.contains("(UTC)"))
+        assertTrue(result.contains("\"timezone\": \"UTC\""))
+    }
+
+    @Test
+    fun `iso format`() = runBlocking {
+        val result = GetCurrentTimeTool.execute("""{"format": "iso"}""")
+        assertTrue(result.contains("\"format\": \"iso\""))
+        // ISO 8601 contains T separator
+        assertTrue(result.contains("T"))
+    }
+
+    @Test
+    fun `timestamp format`() = runBlocking {
+        val result = GetCurrentTimeTool.execute("""{"format": "timestamp"}""")
+        assertTrue(result.contains("\"format\": \"timestamp\""))
+        assertTrue(result.contains("\"milliseconds\""))
+        assertTrue(result.contains("\"seconds\""))
     }
 
     @Test
@@ -26,7 +45,8 @@ class GetCurrentTimeToolTest {
     @Test
     fun `empty arguments uses default`() = runBlocking {
         val result = GetCurrentTimeTool.execute("")
-        assertTrue(result.matches(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} \\(.+\\)")))
+        assertTrue(result.contains("\"currentTime\""))
+        assertTrue(result.contains("\"format\": \"locale\""))
     }
 
     @Test
