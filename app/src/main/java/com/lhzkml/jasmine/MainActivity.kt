@@ -872,7 +872,7 @@ class MainActivity : AppCompatActivity() {
                     if (ProviderManager.isAgentMode(this@MainActivity)) {
                         val wsPath = ProviderManager.getWorkspacePath(this@MainActivity)
                         if (wsPath.isNotEmpty()) {
-                            systemPrompt += "\n\n[工作区] 当前工作区路径: $wsPath\n你可以使用文件工具（read_file, write_file, edit_file, list_directory, search_by_regex）来读写该工作区内的文件。所有文件路径相对于工作区根目录。"
+                            systemPrompt += "\n\n[工作区] 当前工作区路径: $wsPath\n你可以使用文件工具（read_file, write_file, edit_file, list_directory, search_by_regex, execute_shell_command）来操作该工作区内的文件。所有路径使用相对路径即可（相对于工作区根目录），例如用 \".\" 列出根目录，用 \"file.txt\" 读取文件。也支持绝对路径。"
                         }
                     }
                     currentConversationId = conversationRepo.createConversation(

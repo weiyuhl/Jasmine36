@@ -51,7 +51,11 @@ class ExecuteShellCommandTool(
 
         // 验证工作目录
         val workDir = if (workingDirectory != null) {
-            val dir = File(workingDirectory)
+            val dir = if (basePath != null && !File(workingDirectory).isAbsolute) {
+                File(basePath, workingDirectory)
+            } else {
+                File(workingDirectory)
+            }
             if (basePath != null) {
                 val base = File(basePath).canonicalFile
                 if (!dir.canonicalFile.path.startsWith(base.path)) {
@@ -62,6 +66,9 @@ class ExecuteShellCommandTool(
                 return "Error: Working directory does not exist: $workingDirectory"
             }
             dir
+        } else if (basePath != null) {
+            val dir = File(basePath)
+            if (dir.exists() && dir.isDirectory) dir else null
         } else null
 
         return try {

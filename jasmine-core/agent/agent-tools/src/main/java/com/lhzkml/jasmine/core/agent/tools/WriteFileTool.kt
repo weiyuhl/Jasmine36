@@ -20,9 +20,10 @@ class WriteFileTool(
 
     override val descriptor = ToolDescriptor(
         name = "write_file",
-        description = "Writes text content to a file at an absolute path. Creates parent directories if needed and overwrites existing content.",
+        description = "Writes text content to a file. Creates parent directories if needed and overwrites existing content. " +
+            "Path can be relative (resolved against workspace root) or absolute.",
         requiredParameters = listOf(
-            ToolParameterDescriptor("path", "Absolute path to the target file", ToolParameterType.StringType),
+            ToolParameterDescriptor("path", "Path to the target file (relative to workspace root, or absolute)", ToolParameterType.StringType),
             ToolParameterDescriptor("content", "Text content to write (must not be empty). Overwrites existing content completely", ToolParameterType.StringType)
         )
     )
@@ -48,7 +49,11 @@ class WriteFileTool(
     }
 
     private fun resolveFile(path: String): File? {
-        val file = File(path)
+        val file = if (basePath != null && !File(path).isAbsolute) {
+            File(basePath, path)
+        } else {
+            File(path)
+        }
         if (basePath != null) {
             val base = File(basePath).canonicalFile
             val resolved = file.canonicalFile

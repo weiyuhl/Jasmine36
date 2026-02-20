@@ -24,9 +24,9 @@ class EditFileTool(
         description = "Makes an edit to a target file by applying a single text replacement. " +
             "Searches for 'original' text and replaces it with 'replacement'. " +
             "Use empty string for 'original' when creating new files or performing complete rewrites. " +
-            "Only ONE replacement per call.",
+            "Only ONE replacement per call. Path can be relative (resolved against workspace root) or absolute.",
         requiredParameters = listOf(
-            ToolParameterDescriptor("path", "Absolute path to the target file to modify or create", ToolParameterType.StringType),
+            ToolParameterDescriptor("path", "Path to the target file (relative to workspace root, or absolute)", ToolParameterType.StringType),
             ToolParameterDescriptor("original", "The exact text block to find and replace. Use empty string for new files or full rewrites", ToolParameterType.StringType),
             ToolParameterDescriptor("replacement", "The new text content that will replace the original text block", ToolParameterType.StringType)
         )
@@ -108,7 +108,11 @@ class EditFileTool(
     }
 
     private fun resolveFile(path: String): File? {
-        val file = File(path)
+        val file = if (basePath != null && !File(path).isAbsolute) {
+            File(basePath, path)
+        } else {
+            File(path)
+        }
         if (basePath != null) {
             val base = File(basePath).canonicalFile
             val resolved = file.canonicalFile

@@ -23,9 +23,10 @@ class RegexSearchTool(
     override val descriptor = ToolDescriptor(
         name = "search_by_regex",
         description = "Executes a regular expression search on file or directory contents. " +
-            "Returns file paths, line numbers, and excerpts where the pattern was found. Read-only.",
+            "Returns file paths, line numbers, and excerpts where the pattern was found. Read-only. " +
+            "Path can be relative (resolved against workspace root) or absolute. Use '.' for workspace root.",
         requiredParameters = listOf(
-            ToolParameterDescriptor("path", "Absolute starting directory or file path", ToolParameterType.StringType),
+            ToolParameterDescriptor("path", "Starting directory or file path (relative to workspace root, or absolute)", ToolParameterType.StringType),
             ToolParameterDescriptor("regex", "Regular expression pattern to search for", ToolParameterType.StringType)
         ),
         optionalParameters = listOf(
@@ -122,7 +123,11 @@ class RegexSearchTool(
     }
 
     private fun resolveFile(path: String): File? {
-        val file = File(path)
+        val file = if (basePath != null && !File(path).isAbsolute) {
+            File(basePath, path)
+        } else {
+            File(path)
+        }
         if (basePath != null) {
             val base = File(basePath).canonicalFile
             val resolved = file.canonicalFile

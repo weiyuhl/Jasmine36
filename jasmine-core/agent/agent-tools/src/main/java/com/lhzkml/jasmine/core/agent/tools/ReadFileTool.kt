@@ -21,9 +21,10 @@ class ReadFileTool(
 
     override val descriptor = ToolDescriptor(
         name = "read_file",
-        description = "Reads a text file with optional line range selection. Returns file content with line numbers. TEXT-ONLY.",
+        description = "Reads a text file with optional line range selection. Returns file content with line numbers. TEXT-ONLY. " +
+            "Path can be relative (resolved against workspace root) or absolute.",
         requiredParameters = listOf(
-            ToolParameterDescriptor("path", "Absolute path to the text file to read", ToolParameterType.StringType)
+            ToolParameterDescriptor("path", "Path to the text file (relative to workspace root, or absolute)", ToolParameterType.StringType)
         ),
         optionalParameters = listOf(
             ToolParameterDescriptor("startLine", "First line to include (0-based, inclusive). Default 0", ToolParameterType.IntegerType),
@@ -64,7 +65,11 @@ class ReadFileTool(
     }
 
     private fun resolveFile(path: String): File? {
-        val file = File(path)
+        val file = if (basePath != null && !File(path).isAbsolute) {
+            File(basePath, path)
+        } else {
+            File(path)
+        }
         if (basePath != null) {
             val base = File(basePath).canonicalFile
             val resolved = file.canonicalFile

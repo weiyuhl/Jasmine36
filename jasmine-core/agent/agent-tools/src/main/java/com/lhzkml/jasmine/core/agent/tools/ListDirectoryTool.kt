@@ -23,9 +23,10 @@ class ListDirectoryTool(
         name = "list_directory",
         description = "Lists directory contents as a tree. Use depth to control traversal depth (1 = direct children). " +
             "Optionally filter by glob pattern (e.g. '*.kt', '**/*.java'). " +
-            "Returns structured tree with file/folder names and metadata. Read-only, does not modify filesystem.",
+            "Returns structured tree with file/folder names and metadata. Read-only. " +
+            "Path can be relative (resolved against workspace root) or absolute. Use '.' for workspace root.",
         requiredParameters = listOf(
-            ToolParameterDescriptor("path", "Absolute path to the directory to list", ToolParameterType.StringType)
+            ToolParameterDescriptor("path", "Path to the directory (relative to workspace root, or absolute). Use '.' for workspace root", ToolParameterType.StringType)
         ),
         optionalParameters = listOf(
             ToolParameterDescriptor("depth", "Maximum traversal depth (>0). Default 1", ToolParameterType.IntegerType),
@@ -102,6 +103,14 @@ class ListDirectoryTool(
                     '?' -> append("[^/]")
                     '.' -> append("\\.")
                     '/' -> append("/")
+                    '{' -> append("(?:")
+                    '}' -> append(")")
+                    ',' -> append("|")
+                    '(' -> append("\\(")
+                    ')' -> append("\\)")
+                    '+' -> append("\\+")
+                    '^' -> append("\\^")
+                    '$' -> append("\\$")
                     else -> append(glob[i])
                 }
                 i++
@@ -111,7 +120,11 @@ class ListDirectoryTool(
     }
 
     private fun resolveFile(path: String): File? {
-        val file = File(path)
+        val file = if (basePath != null && !File(path).isAbsolute) {
+            File(basePath, path)
+        } else {
+            File(path)
+        }
         if (basePath != null) {
             val base = File(basePath).canonicalFile
             val resolved = file.canonicalFile
