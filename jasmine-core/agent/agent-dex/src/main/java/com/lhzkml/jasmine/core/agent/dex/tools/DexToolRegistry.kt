@@ -47,6 +47,7 @@ object DexToolRegistry {
         // Manifest 操作
         ApkGetManifestTool,
         ApkModifyManifestTool,
+        ApkPatchManifestTool,
         ApkReplaceInManifestTool,
         // 资源操作
         ApkGetResourceTool,

@@ -69,6 +69,7 @@ class ToolConfigActivity : AppCompatActivity() {
         "apk_list_resources" to "列出 APK 资源",
         "apk_get_manifest" to "获取 AndroidManifest.xml",
         "apk_modify_manifest" to "修改 AndroidManifest.xml",
+        "apk_patch_manifest" to "快速修改 Manifest 属性",
         "apk_replace_in_manifest" to "替换 Manifest 字符串",
         "apk_get_resource" to "获取资源文件内容",
         "apk_modify_resource" to "修改资源文件",
