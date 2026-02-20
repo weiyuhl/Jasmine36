@@ -257,8 +257,8 @@ class MainActivity : AppCompatActivity() {
                 ))
             }
 
-            // 网络工具
-            if (isEnabled("web_tools")) {
+            // 网络搜索/抓取（BrightData API）
+            if (isEnabled("web_search")) {
                 val brightDataKey = ProviderManager.getBrightDataKey(this@MainActivity)
                 if (brightDataKey.isNotEmpty()) {
                     webSearchTool?.close()
@@ -267,7 +267,10 @@ class MainActivity : AppCompatActivity() {
                     register(wst.search)
                     register(wst.scrape)
                 }
+            }
 
+            // URL 抓取（本地直接请求）
+            if (isEnabled("fetch_url")) {
                 fetchUrlTool?.close()
                 val ft = FetchUrlTool()
                 fetchUrlTool = ft

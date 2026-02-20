@@ -22,7 +22,8 @@ class ToolConfigActivity : AppCompatActivity() {
         "get_current_time" to "获取当前时间",
         "file_tools" to "文件操作（读写/编辑/搜索/压缩等 17 个工具）",
         "execute_shell_command" to "执行命令",
-        "web_tools" to "网络工具（搜索/抓取/URL 获取）",
+        "web_search" to "网络搜索/抓取（需要 BrightData Key）",
+        "fetch_url" to "URL 抓取（本地直接请求，HTML/纯文本/JSON）",
         "dex_editor" to "DEX/APK 编辑（Smali 编辑/Manifest/资源/ARSC 等 38 个工具）",
         "attempt_completion" to "显式完成任务（Agent 模式）"
     )
