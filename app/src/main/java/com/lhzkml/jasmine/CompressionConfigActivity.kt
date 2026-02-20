@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
 
 class CompressionConfigActivity : AppCompatActivity() {
 
@@ -73,15 +74,15 @@ class CompressionConfigActivity : AppCompatActivity() {
         etLastN.setText(ProviderManager.getCompressionLastN(this).toString())
         etChunkSize.setText(ProviderManager.getCompressionChunkSize(this).toString())
 
-        cardTokenBudget.setOnClickListener { selectStrategy(ProviderManager.CompressionStrategy.TOKEN_BUDGET) }
-        cardWholeHistory.setOnClickListener { selectStrategy(ProviderManager.CompressionStrategy.WHOLE_HISTORY) }
-        cardLastN.setOnClickListener { selectStrategy(ProviderManager.CompressionStrategy.LAST_N) }
-        cardChunked.setOnClickListener { selectStrategy(ProviderManager.CompressionStrategy.CHUNKED) }
+        cardTokenBudget.setOnClickListener { selectStrategy(CompressionStrategyType.TOKEN_BUDGET) }
+        cardWholeHistory.setOnClickListener { selectStrategy(CompressionStrategyType.WHOLE_HISTORY) }
+        cardLastN.setOnClickListener { selectStrategy(CompressionStrategyType.LAST_N) }
+        cardChunked.setOnClickListener { selectStrategy(CompressionStrategyType.CHUNKED) }
 
         refreshSelection()
     }
 
-    private fun selectStrategy(strategy: ProviderManager.CompressionStrategy) {
+    private fun selectStrategy(strategy: CompressionStrategyType) {
         ProviderManager.setCompressionStrategy(this, strategy)
         refreshSelection()
     }
@@ -89,12 +90,12 @@ class CompressionConfigActivity : AppCompatActivity() {
     private fun refreshSelection() {
         val current = ProviderManager.getCompressionStrategy(this)
 
-        data class CardInfo(val card: LinearLayout, val check: TextView, val strategy: ProviderManager.CompressionStrategy)
+        data class CardInfo(val card: LinearLayout, val check: TextView, val strategy: CompressionStrategyType)
         val cards = listOf(
-            CardInfo(cardTokenBudget, tvTokenBudgetCheck, ProviderManager.CompressionStrategy.TOKEN_BUDGET),
-            CardInfo(cardWholeHistory, tvWholeHistoryCheck, ProviderManager.CompressionStrategy.WHOLE_HISTORY),
-            CardInfo(cardLastN, tvLastNCheck, ProviderManager.CompressionStrategy.LAST_N),
-            CardInfo(cardChunked, tvChunkedCheck, ProviderManager.CompressionStrategy.CHUNKED)
+            CardInfo(cardTokenBudget, tvTokenBudgetCheck, CompressionStrategyType.TOKEN_BUDGET),
+            CardInfo(cardWholeHistory, tvWholeHistoryCheck, CompressionStrategyType.WHOLE_HISTORY),
+            CardInfo(cardLastN, tvLastNCheck, CompressionStrategyType.LAST_N),
+            CardInfo(cardChunked, tvChunkedCheck, CompressionStrategyType.CHUNKED)
         )
         for (info in cards) {
             val selected = info.strategy == current
@@ -108,22 +109,22 @@ class CompressionConfigActivity : AppCompatActivity() {
         layoutChunkedParams.visibility = View.GONE
 
         when (current) {
-            ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
+            CompressionStrategyType.TOKEN_BUDGET -> {
                 layoutParams.visibility = View.VISIBLE
                 tvParamsTitle.text = "Token 预算参数"
                 layoutTokenBudgetParams.visibility = View.VISIBLE
             }
-            ProviderManager.CompressionStrategy.LAST_N -> {
+            CompressionStrategyType.LAST_N -> {
                 layoutParams.visibility = View.VISIBLE
                 tvParamsTitle.text = "保留最后 N 条参数"
                 layoutLastNParams.visibility = View.VISIBLE
             }
-            ProviderManager.CompressionStrategy.CHUNKED -> {
+            CompressionStrategyType.CHUNKED -> {
                 layoutParams.visibility = View.VISIBLE
                 tvParamsTitle.text = "分块压缩参数"
                 layoutChunkedParams.visibility = View.VISIBLE
             }
-            ProviderManager.CompressionStrategy.WHOLE_HISTORY -> {
+            CompressionStrategyType.WHOLE_HISTORY -> {
                 layoutParams.visibility = View.GONE
             }
         }
@@ -132,21 +133,21 @@ class CompressionConfigActivity : AppCompatActivity() {
     private fun save() {
         val strategy = ProviderManager.getCompressionStrategy(this)
         when (strategy) {
-            ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
+            CompressionStrategyType.TOKEN_BUDGET -> {
                 val maxTokens = etMaxTokens.text.toString().trim().toIntOrNull() ?: 0
                 val threshold = (etThreshold.text.toString().trim().toIntOrNull() ?: 75).coerceIn(1, 99)
                 ProviderManager.setCompressionMaxTokens(this, maxTokens)
                 ProviderManager.setCompressionThreshold(this, threshold)
             }
-            ProviderManager.CompressionStrategy.LAST_N -> {
+            CompressionStrategyType.LAST_N -> {
                 val n = (etLastN.text.toString().trim().toIntOrNull() ?: 10).coerceAtLeast(2)
                 ProviderManager.setCompressionLastN(this, n)
             }
-            ProviderManager.CompressionStrategy.CHUNKED -> {
+            CompressionStrategyType.CHUNKED -> {
                 val size = (etChunkSize.text.toString().trim().toIntOrNull() ?: 20).coerceAtLeast(5)
                 ProviderManager.setCompressionChunkSize(this, size)
             }
-            ProviderManager.CompressionStrategy.WHOLE_HISTORY -> { /* 无参数 */ }
+            CompressionStrategyType.WHOLE_HISTORY -> { /* 无参数 */ }
         }
     }
 }

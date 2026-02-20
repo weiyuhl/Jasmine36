@@ -7,13 +7,14 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import com.lhzkml.jasmine.core.agent.tools.event.EventCategory
 
 class EventHandlerConfigActivity : AppCompatActivity() {
 
     private lateinit var switchEnabled: SwitchCompat
     private lateinit var layoutConfigContent: LinearLayout
     private lateinit var tvSummary: TextView
-    private lateinit var switches: Map<ProviderManager.EventCategory, SwitchCompat>
+    private lateinit var switches: Map<EventCategory, SwitchCompat>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,13 +35,13 @@ class EventHandlerConfigActivity : AppCompatActivity() {
         tvSummary = findViewById(R.id.tvSummary)
 
         switches = mapOf(
-            ProviderManager.EventCategory.AGENT to findViewById(R.id.switchEvAgent),
-            ProviderManager.EventCategory.TOOL to findViewById(R.id.switchEvTool),
-            ProviderManager.EventCategory.LLM to findViewById(R.id.switchEvLLM),
-            ProviderManager.EventCategory.STRATEGY to findViewById(R.id.switchEvStrategy),
-            ProviderManager.EventCategory.NODE to findViewById(R.id.switchEvNode),
-            ProviderManager.EventCategory.SUBGRAPH to findViewById(R.id.switchEvSubgraph),
-            ProviderManager.EventCategory.STREAMING to findViewById(R.id.switchEvStream)
+            EventCategory.AGENT to findViewById(R.id.switchEvAgent),
+            EventCategory.TOOL to findViewById(R.id.switchEvTool),
+            EventCategory.LLM to findViewById(R.id.switchEvLLM),
+            EventCategory.STRATEGY to findViewById(R.id.switchEvStrategy),
+            EventCategory.NODE to findViewById(R.id.switchEvNode),
+            EventCategory.SUBGRAPH to findViewById(R.id.switchEvSubgraph),
+            EventCategory.STREAMING to findViewById(R.id.switchEvStream)
         )
 
         val current = ProviderManager.getEventHandlerFilter(this)
@@ -60,12 +61,12 @@ class EventHandlerConfigActivity : AppCompatActivity() {
     }
 
     private fun saveFilter() {
-        val checked = mutableSetOf<ProviderManager.EventCategory>()
+        val checked = mutableSetOf<EventCategory>()
         for (entry in switches) {
             if (entry.value.isChecked) checked.add(entry.key)
         }
         val selected = if (checked.size == switches.size || checked.isEmpty()) {
-            emptySet<ProviderManager.EventCategory>()
+            emptySet<EventCategory>()
         } else {
             checked.toSet()
         }

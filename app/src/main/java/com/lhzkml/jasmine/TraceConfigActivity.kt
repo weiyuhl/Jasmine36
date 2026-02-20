@@ -6,6 +6,7 @@ import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import android.widget.TextView
+import com.lhzkml.jasmine.core.agent.tools.trace.TraceEventCategory
 
 /**
  * 追踪配置界面
@@ -31,13 +32,13 @@ class TraceConfigActivity : AppCompatActivity() {
 
     private val categoryMap by lazy {
         mapOf(
-            ProviderManager.TraceEventCategory.AGENT to ::switchFilterAgent,
-            ProviderManager.TraceEventCategory.LLM to ::switchFilterLLM,
-            ProviderManager.TraceEventCategory.TOOL to ::switchFilterTool,
-            ProviderManager.TraceEventCategory.STRATEGY to ::switchFilterStrategy,
-            ProviderManager.TraceEventCategory.NODE to ::switchFilterNode,
-            ProviderManager.TraceEventCategory.SUBGRAPH to ::switchFilterSubgraph,
-            ProviderManager.TraceEventCategory.COMPRESSION to ::switchFilterCompression
+            TraceEventCategory.AGENT to ::switchFilterAgent,
+            TraceEventCategory.LLM to ::switchFilterLLM,
+            TraceEventCategory.TOOL to ::switchFilterTool,
+            TraceEventCategory.STRATEGY to ::switchFilterStrategy,
+            TraceEventCategory.NODE to ::switchFilterNode,
+            TraceEventCategory.SUBGRAPH to ::switchFilterSubgraph,
+            TraceEventCategory.COMPRESSION to ::switchFilterCompression
         )
     }
 
@@ -139,13 +140,13 @@ class TraceConfigActivity : AppCompatActivity() {
         } else {
             val names = filter.map { cat ->
                 when (cat) {
-                    ProviderManager.TraceEventCategory.AGENT -> "Agent"
-                    ProviderManager.TraceEventCategory.LLM -> "LLM"
-                    ProviderManager.TraceEventCategory.TOOL -> "Tool"
-                    ProviderManager.TraceEventCategory.STRATEGY -> "Strategy"
-                    ProviderManager.TraceEventCategory.NODE -> "Node"
-                    ProviderManager.TraceEventCategory.SUBGRAPH -> "Subgraph"
-                    ProviderManager.TraceEventCategory.COMPRESSION -> "Compression"
+                    TraceEventCategory.AGENT -> "Agent"
+                    TraceEventCategory.LLM -> "LLM"
+                    TraceEventCategory.TOOL -> "Tool"
+                    TraceEventCategory.STRATEGY -> "Strategy"
+                    TraceEventCategory.NODE -> "Node"
+                    TraceEventCategory.SUBGRAPH -> "Subgraph"
+                    TraceEventCategory.COMPRESSION -> "Compression"
                 }
             }
             sb.append(names.joinToString(", "))

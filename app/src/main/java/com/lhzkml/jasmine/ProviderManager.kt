@@ -527,28 +527,14 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("trace_file_enabled", enabled).apply()
     }
 
-    /**
-     * 追踪事件过滤：选择要追踪的事件类别
-     * 空集合表示全部追踪
-     */
-    enum class TraceEventCategory {
-        AGENT,      // Agent 生命周期
-        LLM,        // LLM 调用
-        TOOL,       // 工具调用
-        STRATEGY,   // 策略执行
-        NODE,       // 节点执行
-        SUBGRAPH,   // 子图执行
-        COMPRESSION // 压缩事件
-    }
-
-    fun getTraceEventFilter(ctx: Context): Set<TraceEventCategory> {
+    fun getTraceEventFilter(ctx: Context): Set<com.lhzkml.jasmine.core.agent.tools.trace.TraceEventCategory> {
         val raw = prefs(ctx).getString("trace_event_filter", null) ?: return emptySet()
         return raw.split(",").filter { it.isNotBlank() }.mapNotNull {
-            try { TraceEventCategory.valueOf(it) } catch (_: Exception) { null }
+            try { com.lhzkml.jasmine.core.agent.tools.trace.TraceEventCategory.valueOf(it) } catch (_: Exception) { null }
         }.toSet()
     }
 
-    fun setTraceEventFilter(ctx: Context, categories: Set<TraceEventCategory>) {
+    fun setTraceEventFilter(ctx: Context, categories: Set<com.lhzkml.jasmine.core.agent.tools.trace.TraceEventCategory>) {
         prefs(ctx).edit().putString("trace_event_filter", categories.joinToString(",") { it.name }).apply()
     }
 
@@ -611,19 +597,17 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("snapshot_auto_checkpoint", enabled).apply()
     }
 
-    /** 回滚策略 */
-    enum class SnapshotRollbackStrategy {
-        RESTART_FROM_NODE,   // 从节点重新执行
-        SKIP_NODE,           // 跳过该节点
-        USE_DEFAULT_OUTPUT   // 使用默认输出
+    fun getSnapshotRollbackStrategy(ctx: Context): com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy {
+        val name = prefs(ctx).getString("snapshot_rollback_strategy", null)
+            ?: return com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE
+        return try {
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.valueOf(name)
+        } catch (_: Exception) {
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE
+        }
     }
 
-    fun getSnapshotRollbackStrategy(ctx: Context): SnapshotRollbackStrategy {
-        val name = prefs(ctx).getString("snapshot_rollback_strategy", null) ?: return SnapshotRollbackStrategy.RESTART_FROM_NODE
-        return try { SnapshotRollbackStrategy.valueOf(name) } catch (_: Exception) { SnapshotRollbackStrategy.RESTART_FROM_NODE }
-    }
-
-    fun setSnapshotRollbackStrategy(ctx: Context, strategy: SnapshotRollbackStrategy) {
+    fun setSnapshotRollbackStrategy(ctx: Context, strategy: com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy) {
         prefs(ctx).edit().putString("snapshot_rollback_strategy", strategy.name).apply()
     }
 
@@ -637,28 +621,14 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("event_handler_enabled", enabled).apply()
     }
 
-    /**
-     * 事件处理器：选择要监听的事件类别
-     * 空集合表示全部监听
-     */
-    enum class EventCategory {
-        AGENT,      // Agent 开始/完成/失败
-        TOOL,       // 工具调用开始/完成
-        LLM,        // LLM 调用完成
-        STRATEGY,   // 策略开始/完成
-        NODE,       // 节点执行
-        SUBGRAPH,   // 子图执行
-        STREAMING   // LLM 流式事件
-    }
-
-    fun getEventHandlerFilter(ctx: Context): Set<EventCategory> {
+    fun getEventHandlerFilter(ctx: Context): Set<com.lhzkml.jasmine.core.agent.tools.event.EventCategory> {
         val raw = prefs(ctx).getString("event_handler_filter", null) ?: return emptySet()
         return raw.split(",").filter { it.isNotBlank() }.mapNotNull {
-            try { EventCategory.valueOf(it) } catch (_: Exception) { null }
+            try { com.lhzkml.jasmine.core.agent.tools.event.EventCategory.valueOf(it) } catch (_: Exception) { null }
         }.toSet()
     }
 
-    fun setEventHandlerFilter(ctx: Context, categories: Set<EventCategory>) {
+    fun setEventHandlerFilter(ctx: Context, categories: Set<com.lhzkml.jasmine.core.agent.tools.event.EventCategory>) {
         prefs(ctx).edit().putString("event_handler_filter", categories.joinToString(",") { it.name }).apply()
     }
 
@@ -672,24 +642,18 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("compression_enabled", enabled).apply()
     }
 
-    /**
-     * 压缩策略类型
-     * - TOKEN_BUDGET: 基于 token 预算自动触发（推荐）
-     * - WHOLE_HISTORY: 整个历史生成 TLDR
-     * - LAST_N: 只保留最后 N 条消息生成 TLDR
-     * - CHUNKED: 按固定大小分块压缩
-     */
-    enum class CompressionStrategy {
-        TOKEN_BUDGET, WHOLE_HISTORY, LAST_N, CHUNKED
-    }
-
     /** 获取压缩策略，默认 TOKEN_BUDGET */
-    fun getCompressionStrategy(ctx: Context): CompressionStrategy {
-        val name = prefs(ctx).getString("compression_strategy", null) ?: return CompressionStrategy.TOKEN_BUDGET
-        return try { CompressionStrategy.valueOf(name) } catch (_: Exception) { CompressionStrategy.TOKEN_BUDGET }
+    fun getCompressionStrategy(ctx: Context): com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType {
+        val name = prefs(ctx).getString("compression_strategy", null)
+            ?: return com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.TOKEN_BUDGET
+        return try {
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.valueOf(name)
+        } catch (_: Exception) {
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.TOKEN_BUDGET
+        }
     }
 
-    fun setCompressionStrategy(ctx: Context, strategy: CompressionStrategy) {
+    fun setCompressionStrategy(ctx: Context, strategy: com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType) {
         prefs(ctx).edit().putString("compression_strategy", strategy.name).apply()
     }
 

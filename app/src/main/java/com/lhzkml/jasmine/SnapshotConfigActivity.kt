@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy
 
 class SnapshotConfigActivity : AppCompatActivity() {
 
@@ -71,15 +72,15 @@ class SnapshotConfigActivity : AppCompatActivity() {
         }
 
         cardRestartFromNode.setOnClickListener {
-            ProviderManager.setSnapshotRollbackStrategy(this, ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE)
+            ProviderManager.setSnapshotRollbackStrategy(this, RollbackStrategy.RESTART_FROM_NODE)
             refreshRollback()
         }
         cardSkipNode.setOnClickListener {
-            ProviderManager.setSnapshotRollbackStrategy(this, ProviderManager.SnapshotRollbackStrategy.SKIP_NODE)
+            ProviderManager.setSnapshotRollbackStrategy(this, RollbackStrategy.SKIP_NODE)
             refreshRollback()
         }
         cardDefaultOutput.setOnClickListener {
-            ProviderManager.setSnapshotRollbackStrategy(this, ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT)
+            ProviderManager.setSnapshotRollbackStrategy(this, RollbackStrategy.USE_DEFAULT_OUTPUT)
             refreshRollback()
         }
 
@@ -115,9 +116,9 @@ class SnapshotConfigActivity : AppCompatActivity() {
     private fun refreshRollback() {
         val current = ProviderManager.getSnapshotRollbackStrategy(this)
         val cards = mapOf(
-            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE to Triple(cardRestartFromNode, tvRestartCheck, true),
-            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE to Triple(cardSkipNode, tvSkipCheck, true),
-            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT to Triple(cardDefaultOutput, tvDefaultCheck, true)
+            RollbackStrategy.RESTART_FROM_NODE to Triple(cardRestartFromNode, tvRestartCheck, true),
+            RollbackStrategy.SKIP_NODE to Triple(cardSkipNode, tvSkipCheck, true),
+            RollbackStrategy.USE_DEFAULT_OUTPUT to Triple(cardDefaultOutput, tvDefaultCheck, true)
         )
         for ((strategy, triple) in cards) {
             val (card, check, _) = triple

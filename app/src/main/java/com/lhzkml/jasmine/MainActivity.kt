@@ -435,7 +435,7 @@ class MainActivity : AppCompatActivity() {
         if (!ProviderManager.isEventHandlerEnabled(this)) return null
 
         val filter = ProviderManager.getEventHandlerFilter(this)
-        fun isEnabled(cat: ProviderManager.EventCategory) = filter.isEmpty() || cat in filter
+        fun isEnabled(cat: com.lhzkml.jasmine.core.agent.tools.event.EventCategory) = filter.isEmpty() || cat in filter
 
         // 统一的事件输出方法
         suspend fun emitEvent(line: String) {
@@ -447,34 +447,34 @@ class MainActivity : AppCompatActivity() {
         }
 
         return EventHandler.build {
-            if (isEnabled(ProviderManager.EventCategory.AGENT)) {
+            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.AGENT)) {
                 onAgentExecutionFailed { ctx -> emitEvent("[EVENT] Agent 失败: ${ctx.throwable.message}\n") }
             }
-            if (isEnabled(ProviderManager.EventCategory.TOOL)) {
+            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.TOOL)) {
                 onToolCallStarting { ctx -> emitEvent("[EVENT] 工具调用: ${ctx.toolName}(${ctx.toolArgs.take(60)})\n") }
                 onToolCallCompleted { ctx -> emitEvent("[EVENT] 工具完成: ${ctx.toolName} -> ${(ctx.result ?: "").take(100)}\n") }
                 onToolCallFailed { ctx -> emitEvent("[EVENT] 工具失败: ${ctx.toolName} - ${ctx.throwable.message}\n") }
                 onToolValidationFailed { ctx -> emitEvent("[EVENT] 工具验证失败: ${ctx.toolName} - ${ctx.validationError}\n") }
             }
-            if (isEnabled(ProviderManager.EventCategory.LLM)) {
+            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.LLM)) {
                 onLLMCallStarting { ctx -> emitEvent("[EVENT] LLM 请求 [消息: ${ctx.messageCount}, 工具: ${ctx.tools.size}]\n") }
                 onLLMCallCompleted { ctx -> emitEvent("[EVENT] LLM 回复 [${ctx.totalTokens} tokens]\n") }
             }
-            if (isEnabled(ProviderManager.EventCategory.STRATEGY)) {
+            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.STRATEGY)) {
                 onStrategyStarting { ctx -> emitEvent("[EVENT] 策略开始: ${ctx.strategyName}\n") }
                 onStrategyCompleted { ctx -> emitEvent("[EVENT] 策略完成: ${ctx.strategyName} -> ${ctx.result?.take(80) ?: ""}\n") }
             }
-            if (isEnabled(ProviderManager.EventCategory.NODE)) {
+            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.NODE)) {
                 onNodeExecutionStarting { ctx -> emitEvent("[EVENT] 节点开始: ${ctx.nodeName}\n") }
                 onNodeExecutionCompleted { ctx -> emitEvent("[EVENT] 节点完成: ${ctx.nodeName}\n") }
                 onNodeExecutionFailed { ctx -> emitEvent("[EVENT] 节点失败: ${ctx.nodeName} - ${ctx.throwable.message}\n") }
             }
-            if (isEnabled(ProviderManager.EventCategory.SUBGRAPH)) {
+            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.SUBGRAPH)) {
                 onSubgraphExecutionStarting { ctx -> emitEvent("[EVENT] 子图开始: ${ctx.subgraphName}\n") }
                 onSubgraphExecutionCompleted { ctx -> emitEvent("[EVENT] 子图完成: ${ctx.subgraphName}\n") }
                 onSubgraphExecutionFailed { ctx -> emitEvent("[EVENT] 子图失败: ${ctx.subgraphName} - ${ctx.throwable.message}\n") }
             }
-            if (isEnabled(ProviderManager.EventCategory.STREAMING)) {
+            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.STREAMING)) {
                 onLLMStreamingStarting { ctx -> emitEvent("[EVENT] LLM 流式开始 [模型: ${ctx.model}]\n") }
                 onLLMStreamingCompleted { ctx -> emitEvent("[EVENT] LLM 流式完成 [${ctx.totalTokens} tokens]\n") }
                 onLLMStreamingFailed { ctx -> emitEvent("[EVENT] LLM 流式失败: ${ctx.throwable.message}\n") }
@@ -508,14 +508,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         // 设置回滚策略
-        persistence.rollbackStrategy = when (ProviderManager.getSnapshotRollbackStrategy(this)) {
-            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE ->
-                com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE
-            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE ->
-                com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.SKIP_NODE
-            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT ->
-                com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT
-        }
+        persistence.rollbackStrategy = ProviderManager.getSnapshotRollbackStrategy(this)
 
         return persistence
     }
@@ -1621,9 +1614,9 @@ class MainActivity : AppCompatActivity() {
 
         val rollbackStrategy = ProviderManager.getSnapshotRollbackStrategy(this@MainActivity)
         val strategyName = when (rollbackStrategy) {
-            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> "重新执行"
-            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> "仅恢复上下文"
-            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT -> "使用默认输出"
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE -> "重新执行"
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.SKIP_NODE -> "仅恢复上下文"
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> "使用默认输出"
         }
 
         val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
@@ -1667,12 +1660,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         when (rollbackStrategy) {
-            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> {
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE -> {
                 withContext(Dispatchers.Main) {
                     sendMessage(originalMessage)
                 }
             }
-            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> {
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.SKIP_NODE -> {
                 val skipLine = "[Snapshot] 已恢复到该轮对话状态，可继续发送新消息。\n"
                 agentLogBuilder.append(skipLine)
                 withContext(Dispatchers.Main) {
@@ -1684,7 +1677,7 @@ class MainActivity : AppCompatActivity() {
                     conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
                 }
             }
-            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT -> {
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> {
                 val defaultReply = "抱歉，之前的处理过程中遇到了问题。已恢复到 [${selectedCheckpoint.nodePath}]。请重新描述您的需求。"
                 val assistantMsg = ChatMessage.assistant(defaultReply)
                 messageHistory.add(assistantMsg)
@@ -1860,7 +1853,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun buildCompressionStrategy(): HistoryCompressionStrategy? {
         return when (ProviderManager.getCompressionStrategy(this)) {
-            ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.TOKEN_BUDGET -> {
                 val maxTokens = ProviderManager.getCompressionMaxTokens(this)
                 val effectiveMaxTokens = if (maxTokens > 0) maxTokens else contextManager.maxTokens
                 val threshold = ProviderManager.getCompressionThreshold(this) / 100.0
@@ -1870,13 +1863,13 @@ class MainActivity : AppCompatActivity() {
                     tokenizer = TokenEstimator
                 )
             }
-            ProviderManager.CompressionStrategy.WHOLE_HISTORY ->
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.WHOLE_HISTORY ->
                 HistoryCompressionStrategy.WholeHistory
-            ProviderManager.CompressionStrategy.LAST_N -> {
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.LAST_N -> {
                 val n = ProviderManager.getCompressionLastN(this)
                 HistoryCompressionStrategy.FromLastNMessages(n)
             }
-            ProviderManager.CompressionStrategy.CHUNKED -> {
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.CHUNKED -> {
                 val size = ProviderManager.getCompressionChunkSize(this)
                 HistoryCompressionStrategy.Chunked(size)
             }

@@ -373,18 +373,18 @@ class SettingsActivity : AppCompatActivity() {
         }
         val strategy = ProviderManager.getCompressionStrategy(this)
         val info = when (strategy) {
-            ProviderManager.CompressionStrategy.TOKEN_BUDGET -> {
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.TOKEN_BUDGET -> {
                 val maxTokens = ProviderManager.getCompressionMaxTokens(this)
                 val threshold = ProviderManager.getCompressionThreshold(this)
                 val tokenStr = if (maxTokens > 0) "${maxTokens}" else "跟随模型"
                 "Token 预算 · $tokenStr · 阈值 ${threshold}%"
             }
-            ProviderManager.CompressionStrategy.WHOLE_HISTORY -> "整体压缩"
-            ProviderManager.CompressionStrategy.LAST_N -> {
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.WHOLE_HISTORY -> "整体压缩"
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.LAST_N -> {
                 val n = ProviderManager.getCompressionLastN(this)
                 "保留最后 ${n} 条"
             }
-            ProviderManager.CompressionStrategy.CHUNKED -> {
+            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.CHUNKED -> {
                 val size = ProviderManager.getCompressionChunkSize(this)
                 "分块压缩 · 每块 ${size} 条"
             }
@@ -447,9 +447,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         val autoStr = if (auto) "自动检查点" else "手动检查点"
         val rollbackName = when (rollback) {
-            ProviderManager.SnapshotRollbackStrategy.RESTART_FROM_NODE -> "从节点重启"
-            ProviderManager.SnapshotRollbackStrategy.SKIP_NODE -> "跳过节点"
-            ProviderManager.SnapshotRollbackStrategy.USE_DEFAULT_OUTPUT -> "默认输出"
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE -> "从节点重启"
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.SKIP_NODE -> "跳过节点"
+            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> "默认输出"
         }
         tvSnapshotInfo.text = "$storageName · $autoStr · $rollbackName"
     }
