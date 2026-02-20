@@ -23,6 +23,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvActiveProvider: TextView
     private lateinit var switchTools: SwitchCompat
     private lateinit var layoutToolConfig: LinearLayout
+    private lateinit var layoutAgentToolPreset: LinearLayout
+    private lateinit var tvAgentToolPreset: TextView
     private lateinit var layoutAgentStrategy: LinearLayout
     private lateinit var tvAgentStrategy: TextView
     private lateinit var tvToolCount: TextView
@@ -78,11 +80,22 @@ class SettingsActivity : AppCompatActivity() {
         switchTools.setOnCheckedChangeListener { _, isChecked ->
             ProviderManager.setToolsEnabled(this, isChecked)
             layoutToolConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+            layoutAgentToolPreset.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
             layoutAgentStrategy.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
         }
 
         layoutToolConfig.setOnClickListener {
             startActivity(Intent(this, ToolConfigActivity::class.java))
+        }
+
+        // Agent 工具预设入口
+        layoutAgentToolPreset = findViewById(R.id.layoutAgentToolPreset)
+        tvAgentToolPreset = findViewById(R.id.tvAgentToolPreset)
+        layoutAgentToolPreset.visibility = if (switchTools.isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        layoutAgentToolPreset.setOnClickListener {
+            startActivity(Intent(this, ToolConfigActivity::class.java).apply {
+                putExtra(ToolConfigActivity.EXTRA_AGENT_PRESET, true)
+            })
         }
 
         // Agent 策略选择
@@ -169,6 +182,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshUsageStats()
         refreshTopKVisibility()
         refreshToolCount()
+        refreshAgentToolPreset()
         refreshAgentStrategy()
         refreshCompressionInfo()
         refreshMcpInfo()
@@ -357,6 +371,11 @@ class SettingsActivity : AppCompatActivity() {
     private fun refreshToolCount() {
         val enabled = ProviderManager.getEnabledTools(this)
         tvToolCount.text = if (enabled.isEmpty()) "全部工具已启用" else "已启用 ${enabled.size} 个工具"
+    }
+
+    private fun refreshAgentToolPreset() {
+        val preset = ProviderManager.getAgentToolPreset(this)
+        tvAgentToolPreset.text = if (preset.isEmpty()) "全部工具已启用（默认）" else "已启用 ${preset.size} 个工具"
     }
 
     private fun refreshAgentStrategy() {

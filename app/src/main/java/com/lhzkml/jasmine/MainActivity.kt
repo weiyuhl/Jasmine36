@@ -185,7 +185,12 @@ class MainActivity : AppCompatActivity() {
      * 根据设置构建工具注册表
      */
     private fun buildToolRegistry(): ToolRegistry {
-        val enabledTools = ProviderManager.getEnabledTools(this)
+        // Agent 模式下优先使用 Agent 工具预设，否则使用普通工具配置
+        val enabledTools = if (ProviderManager.isAgentMode(this)) {
+            ProviderManager.getAgentToolPreset(this)
+        } else {
+            ProviderManager.getEnabledTools(this)
+        }
         fun isEnabled(name: String) = enabledTools.isEmpty() || name in enabledTools
 
         return ToolRegistry.build {

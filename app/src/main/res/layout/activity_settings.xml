@@ -176,6 +176,49 @@
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
 
+        <!-- Agent 工具预设入口 -->
+        <LinearLayout
+            android:id="@+id/layoutAgentToolPreset"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Agent 工具预设"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/tvAgentToolPreset"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Agent 模式下默认启用的工具"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="›"
+                android:textSize="18sp"
+                android:textColor="@color/text_secondary" />
+        </LinearLayout>
+
         <!-- Agent 策略选择（工具开关下方） -->
         <LinearLayout
             android:id="@+id/layoutAgentStrategy"

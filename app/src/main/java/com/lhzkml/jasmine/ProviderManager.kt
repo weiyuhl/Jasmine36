@@ -344,6 +344,16 @@ object ProviderManager {
         prefs(ctx).edit().putString("enabled_tools", tools.joinToString(",")).apply()
     }
 
+    /** Agent 模式工具预设，空集合表示全部启用 */
+    fun getAgentToolPreset(ctx: Context): Set<String> {
+        val raw = prefs(ctx).getString("agent_tool_preset", null) ?: return emptySet()
+        return raw.split(",").filter { it.isNotBlank() }.toSet()
+    }
+
+    fun setAgentToolPreset(ctx: Context, tools: Set<String>) {
+        prefs(ctx).edit().putString("agent_tool_preset", tools.joinToString(",")).apply()
+    }
+
     /** BrightData API Key（用于网络搜索工具） */
     fun getBrightDataKey(ctx: Context): String =
         prefs(ctx).getString("brightdata_api_key", null) ?: ""

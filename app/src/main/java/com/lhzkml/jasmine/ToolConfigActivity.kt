@@ -13,9 +13,15 @@ import androidx.appcompat.app.AppCompatActivity
 /**
  * 工具管理界面
  * 独立 Activity，展示所有可用工具的启用/禁用状态。
- * 点击"保存"按钮才写入 SharedPreferences。
+ * 支持两种模式：
+ * - 普通模式（默认）：管理 enabled_tools
+ * - Agent 预设模式（EXTRA_AGENT_PRESET=true）：管理 agent_tool_preset
  */
 class ToolConfigActivity : AppCompatActivity() {
+
+    companion object {
+        const val EXTRA_AGENT_PRESET = "agent_preset"
+    }
 
     private val allTools = listOf(
         "calculator" to "计算器（四则运算/科学计算/进制转换/单位转换/统计）",
@@ -28,12 +34,13 @@ class ToolConfigActivity : AppCompatActivity() {
         "attempt_completion" to "显式完成任务（Agent 模式）"
     )
 
+    private var isAgentPreset = false
 
     private lateinit var cbSelectAll: CheckBox
     private lateinit var layoutToolList: LinearLayout
     private lateinit var etBrightDataKey: EditText
 
-    /** 工具名 → 勾选状态（纯数据，不依赖 View 状态） */
+    /** 工具名 -> 勾选状态 */
     private val toolStates = mutableMapOf<String, Boolean>()
     private val toolCheckBoxes = mutableMapOf<String, CheckBox>()
     private var ignoreCallbacks = false
@@ -42,8 +49,15 @@ class ToolConfigActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_tool_config)
 
+        isAgentPreset = intent.getBooleanExtra(EXTRA_AGENT_PRESET, false)
+
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.btnSave).setOnClickListener { save() }
+
+        // Agent 预设模式下修改标题
+        if (isAgentPreset) {
+            findViewById<TextView>(android.R.id.text1)?.text = "Agent 工具预设"
+        }
 
         cbSelectAll = findViewById(R.id.cbSelectAll)
         layoutToolList = findViewById(R.id.layoutToolList)
@@ -53,22 +67,21 @@ class ToolConfigActivity : AppCompatActivity() {
         val currentKey = ProviderManager.getBrightDataKey(this)
         if (currentKey.isNotEmpty()) etBrightDataKey.setText(currentKey)
 
-        // 加载当前启用的工具
-        val enabledTools = ProviderManager.getEnabledTools(this)
+        // 加载工具状态：根据模式读取不同的存储
+        val enabledTools = if (isAgentPreset) {
+            ProviderManager.getAgentToolPreset(this)
+        } else {
+            ProviderManager.getEnabledTools(this)
+        }
         val allEnabled = enabledTools.isEmpty()
 
-        // 初始化状态：未配置过时全部开启
         for (tool in allTools) {
             toolStates[tool.first] = allEnabled || tool.first in enabledTools
         }
 
-        // 构建工具列表 UI
         buildToolList()
-
-        // 同步全选状态
         updateSelectAllCheckbox()
 
-        // 全选 checkbox — 禁止直接点击，只通过行点击
         cbSelectAll.isClickable = false
         cbSelectAll.isFocusable = false
         findViewById<LinearLayout>(R.id.layoutSelectAll).setOnClickListener {
@@ -95,13 +108,11 @@ class ToolConfigActivity : AppCompatActivity() {
             tvDesc.text = tool.second
             cb.isChecked = toolStates[tool.first] == true
 
-            // 禁止 checkbox 自身响应点击，只通过行点击
             cb.isClickable = false
             cb.isFocusable = false
 
             toolCheckBoxes[tool.first] = cb
 
-            // 点击整行切换
             itemView.setOnClickListener {
                 val current = toolStates[tool.first] == true
                 val newVal = !current
@@ -112,7 +123,6 @@ class ToolConfigActivity : AppCompatActivity() {
 
             layoutToolList.addView(itemView)
 
-            // 分隔线（最后一个不加）
             if (index < allTools.size - 1) {
                 val divider = View(this).apply {
                     layoutParams = LinearLayout.LayoutParams(
@@ -136,13 +146,14 @@ class ToolConfigActivity : AppCompatActivity() {
         for (tool in allTools) {
             if (toolStates[tool.first] == true) selected.add(tool.first)
         }
-        // 全选时存空集合（表示全部启用），否则存选中的
-        if (selected.size == allTools.size) {
-            ProviderManager.setEnabledTools(this, emptySet())
+        val toSave = if (selected.size == allTools.size) emptySet() else selected
+
+        if (isAgentPreset) {
+            ProviderManager.setAgentToolPreset(this, toSave)
         } else {
-            ProviderManager.setEnabledTools(this, selected)
+            ProviderManager.setEnabledTools(this, toSave)
         }
-        // 保存 BrightData Key
+        // BrightData Key 两种模式都保存
         ProviderManager.setBrightDataKey(this, etBrightDataKey.text.toString().trim())
 
         Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
