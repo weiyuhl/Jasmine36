@@ -108,6 +108,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnAgentMode: TextView
     private lateinit var layoutWorkspace: LinearLayout
     private lateinit var tvWorkspacePath: TextView
+    private lateinit var btnCloseWorkspace: TextView
 
     private val clientRouter = ChatClientRouter()
     private var currentProviderId: String? = null
@@ -479,10 +480,12 @@ class MainActivity : AppCompatActivity() {
         btnAgentMode = findViewById(R.id.btnAgentMode)
         layoutWorkspace = findViewById(R.id.layoutWorkspace)
         tvWorkspacePath = findViewById(R.id.tvWorkspacePath)
+        btnCloseWorkspace = findViewById(R.id.btnCloseWorkspace)
         refreshAgentModeUI()
 
         btnAgentMode.setOnClickListener { toggleAgentMode() }
         findViewById<TextView>(R.id.btnSelectWorkspace).setOnClickListener { openFolderPicker() }
+        btnCloseWorkspace.setOnClickListener { closeWorkspace() }
 
         // DrawerLayout push 效果：侧边栏滑出时，主内容跟着平移
         val drawerPanel = findViewById<LinearLayout>(R.id.drawerPanel)
@@ -635,7 +638,13 @@ class MainActivity : AppCompatActivity() {
             btnAgentMode.setBackgroundResource(R.drawable.bg_agent_mode)
             layoutWorkspace.visibility = View.VISIBLE
             val path = ProviderManager.getWorkspacePath(this)
-            tvWorkspacePath.text = if (path.isNotEmpty()) path else "未选择工作区"
+            if (path.isNotEmpty()) {
+                tvWorkspacePath.text = path
+                btnCloseWorkspace.visibility = View.VISIBLE
+            } else {
+                tvWorkspacePath.text = "未选择工作区"
+                btnCloseWorkspace.visibility = View.GONE
+            }
         } else {
             btnAgentMode.text = "Chat"
             btnAgentMode.setTextColor(resources.getColor(R.color.text_secondary, null))
@@ -648,6 +657,24 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         startActivityForResult(intent, REQUEST_OPEN_FOLDER)
+    }
+
+    private fun closeWorkspace() {
+        // 释放持久化的 URI 权限
+        val uriStr = ProviderManager.getWorkspaceUri(this)
+        if (uriStr.isNotEmpty()) {
+            try {
+                val uri = android.net.Uri.parse(uriStr)
+                contentResolver.releasePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+        }
+        ProviderManager.setWorkspacePath(this, "")
+        ProviderManager.setWorkspaceUri(this, "")
+        refreshAgentModeUI()
+        Toast.makeText(this, "已关闭工作区", Toast.LENGTH_SHORT).show()
     }
 
     @Suppress("DEPRECATION")
