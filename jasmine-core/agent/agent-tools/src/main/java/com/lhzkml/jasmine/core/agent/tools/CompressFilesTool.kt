@@ -32,8 +32,8 @@ class CompressFilesTool(
         requiredParameters = listOf(
             ToolParameterDescriptor(
                 "sources",
-                "JSON array of file/directory paths to compress, e.g. [\"src\", \"README.md\"]",
-                ToolParameterType.StringType
+                "List of file/directory paths to compress",
+                ToolParameterType.ListType(ToolParameterType.StringType)
             ),
             ToolParameterDescriptor(
                 "output",
@@ -46,14 +46,10 @@ class CompressFilesTool(
     override suspend fun execute(arguments: String): String {
         val obj = Json.parseToJsonElement(arguments).jsonObject
 
-        // 解析 sources 参数（支持 JSON 数组或单个字符串）
+        // 解析 sources 参数（JSON 数组）
         val sourcePaths: List<String> = try {
             val sourcesElement = obj["sources"] ?: return "Error: Missing parameter 'sources'"
-            try {
-                sourcesElement.jsonArray.map { it.jsonPrimitive.content }
-            } catch (_: Exception) {
-                listOf(sourcesElement.jsonPrimitive.content)
-            }
+            sourcesElement.jsonArray.map { it.jsonPrimitive.content }
         } catch (e: Exception) {
             return "Error: Invalid 'sources' parameter: ${e.message}"
         }
