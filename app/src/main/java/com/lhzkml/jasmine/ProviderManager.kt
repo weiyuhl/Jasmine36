@@ -715,4 +715,30 @@ object ProviderManager {
             vertexServiceAccountJson = getVertexServiceAccountJson(ctx, id)
         )
     }
+
+    // ========== Agent 模式 ==========
+
+    /** 是否处于 Agent 模式 */
+    fun isAgentMode(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("agent_mode", false)
+
+    fun setAgentMode(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("agent_mode", enabled).apply()
+    }
+
+    /** Agent 模式工作区路径（用户选择的本地文件夹） */
+    fun getWorkspacePath(ctx: Context): String =
+        prefs(ctx).getString("workspace_path", null) ?: ""
+
+    fun setWorkspacePath(ctx: Context, path: String) {
+        prefs(ctx).edit().putString("workspace_path", path).apply()
+    }
+
+    /** Agent 模式工作区 URI（SAF 持久化权限用） */
+    fun getWorkspaceUri(ctx: Context): String =
+        prefs(ctx).getString("workspace_uri", null) ?: ""
+
+    fun setWorkspaceUri(ctx: Context, uri: String) {
+        prefs(ctx).edit().putString("workspace_uri", uri).apply()
+    }
 }

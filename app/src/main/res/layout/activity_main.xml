@@ -32,6 +32,21 @@
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium" />
 
+            <!-- Agent 模式切换按钮 -->
+            <TextView
+                android:id="@+id/btnAgentMode"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:text="Chat"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:background="@drawable/bg_input"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginEnd="10dp" />
+
             <ImageButton
                 android:id="@+id/btnDrawer"
                 android:layout_width="32dp"
@@ -40,6 +55,39 @@
                 android:background="@android:color/transparent"
                 android:contentDescription="打开侧边栏"
                 android:scaleType="centerInside" />
+        </LinearLayout>
+
+        <!-- Agent 模式工作区栏 -->
+        <LinearLayout
+            android:id="@+id/layoutWorkspace"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="16dp"
+            android:background="#F5F5F5"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvWorkspacePath"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="未选择工作区"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:singleLine="true"
+                android:ellipsize="middle" />
+
+            <TextView
+                android:id="@+id/btnSelectWorkspace"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="选择文件夹"
+                android:textSize="12sp"
+                android:textColor="@color/accent"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingHorizontal="8dp" />
         </LinearLayout>
 
         <View

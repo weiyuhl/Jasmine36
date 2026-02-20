@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CONVERSATION_ID = "conversation_id"
+        private const val REQUEST_OPEN_FOLDER = 1001
 
         /**
          * 全局 MCP 连接状态缓存
@@ -104,6 +105,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scrollView: ScrollView
     private lateinit var tvDrawerEmpty: TextView
     private lateinit var rvDrawerConversations: RecyclerView
+    private lateinit var btnAgentMode: TextView
+    private lateinit var layoutWorkspace: LinearLayout
+    private lateinit var tvWorkspacePath: TextView
 
     private val clientRouter = ChatClientRouter()
     private var currentProviderId: String? = null
@@ -144,8 +148,13 @@ class MainActivity : AppCompatActivity() {
                 register(GetCurrentTimeTool)
             }
 
-            // 文件工具（Android 上使用外部存储作为沙箱）
-            val basePath = getExternalFilesDir(null)?.absolutePath
+            // 文件工具 — Agent 模式使用用户选择的工作区，否则使用 APP 沙箱
+            val workspacePath = ProviderManager.getWorkspacePath(this@MainActivity)
+            val basePath = if (ProviderManager.isAgentMode(this@MainActivity) && workspacePath.isNotEmpty()) {
+                workspacePath
+            } else {
+                getExternalFilesDir(null)?.absolutePath
+            }
             if (isEnabled("read_file")) register(ReadFileTool(basePath))
             if (isEnabled("write_file")) register(WriteFileTool(basePath))
             if (isEnabled("edit_file")) register(EditFileTool(basePath))
@@ -466,6 +475,15 @@ class MainActivity : AppCompatActivity() {
         tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
         rvDrawerConversations = findViewById(R.id.rvDrawerConversations)
 
+        // Agent 模式 UI
+        btnAgentMode = findViewById(R.id.btnAgentMode)
+        layoutWorkspace = findViewById(R.id.layoutWorkspace)
+        tvWorkspacePath = findViewById(R.id.tvWorkspacePath)
+        refreshAgentModeUI()
+
+        btnAgentMode.setOnClickListener { toggleAgentMode() }
+        findViewById<TextView>(R.id.btnSelectWorkspace).setOnClickListener { openFolderPicker() }
+
         // DrawerLayout push 效果：侧边栏滑出时，主内容跟着平移
         val drawerPanel = findViewById<LinearLayout>(R.id.drawerPanel)
         drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
@@ -549,6 +567,11 @@ class MainActivity : AppCompatActivity() {
         preconnectMcpServers()
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshAgentModeUI()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
@@ -568,6 +591,99 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawer(Gravity.END)
         } else {
             super.onBackPressed()
+        }
+    }
+
+    // ========== Agent 模式 ==========
+
+    private fun toggleAgentMode() {
+        val isAgent = !ProviderManager.isAgentMode(this)
+        ProviderManager.setAgentMode(this, isAgent)
+
+        if (isAgent) {
+            // 切换到 Agent 模式：自动开启所需功能
+            ProviderManager.setToolsEnabled(this, true)
+            ProviderManager.setStreamEnabled(this, true)
+            ProviderManager.setTraceEnabled(this, true)
+            ProviderManager.setEventHandlerEnabled(this, true)
+
+            // Android 11+ 需要 MANAGE_EXTERNAL_STORAGE 权限才能直接访问文件路径
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                if (!android.os.Environment.isExternalStorageManager()) {
+                    AlertDialog.Builder(this)
+                        .setTitle("需要文件访问权限")
+                        .setMessage("Agent 模式需要访问设备文件。请在设置中授予\"所有文件访问\"权限。")
+                        .setPositiveButton("去设置") { _, _ ->
+                            val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                            intent.data = android.net.Uri.parse("package:$packageName")
+                            startActivity(intent)
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                }
+            }
+        }
+
+        refreshAgentModeUI()
+    }
+
+    private fun refreshAgentModeUI() {
+        val isAgent = ProviderManager.isAgentMode(this)
+        if (isAgent) {
+            btnAgentMode.text = "Agent"
+            btnAgentMode.setTextColor(resources.getColor(R.color.white, null))
+            btnAgentMode.setBackgroundResource(R.drawable.bg_agent_mode)
+            layoutWorkspace.visibility = View.VISIBLE
+            val path = ProviderManager.getWorkspacePath(this)
+            tvWorkspacePath.text = if (path.isNotEmpty()) path else "未选择工作区"
+        } else {
+            btnAgentMode.text = "Chat"
+            btnAgentMode.setTextColor(resources.getColor(R.color.text_secondary, null))
+            btnAgentMode.setBackgroundResource(R.drawable.bg_input)
+            layoutWorkspace.visibility = View.GONE
+        }
+    }
+
+    private fun openFolderPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        startActivityForResult(intent, REQUEST_OPEN_FOLDER)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_OPEN_FOLDER && resultCode == RESULT_OK) {
+            val treeUri = data?.data ?: return
+            // 持久化权限
+            contentResolver.takePersistableUriPermission(
+                treeUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            // 从 URI 解析出实际路径用于显示
+            val displayPath = resolveTreeUriToPath(treeUri)
+            ProviderManager.setWorkspacePath(this, displayPath)
+            ProviderManager.setWorkspaceUri(this, treeUri.toString())
+            tvWorkspacePath.text = displayPath
+            Toast.makeText(this, "工作区: $displayPath", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 从 SAF tree URI 解析出可读路径
+     */
+    private fun resolveTreeUriToPath(treeUri: android.net.Uri): String {
+        val docId = android.provider.DocumentsContract.getTreeDocumentId(treeUri)
+        // docId 格式通常是 "primary:path/to/folder" 或 "XXXX-XXXX:path"
+        val parts = docId.split(":")
+        return if (parts.size == 2) {
+            if (parts[0] == "primary") {
+                "/storage/emulated/0/${parts[1]}"
+            } else {
+                "/storage/${parts[0]}/${parts[1]}"
+            }
+        } else {
+            docId
         }
     }
 
@@ -751,7 +867,14 @@ class MainActivity : AppCompatActivity() {
             try {
                 if (currentConversationId == null) {
                     val title = if (message.length > 20) message.substring(0, 20) + "..." else message
-                    val systemPrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
+                    var systemPrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
+                    // Agent 模式：在系统提示词中注入工作区上下文
+                    if (ProviderManager.isAgentMode(this@MainActivity)) {
+                        val wsPath = ProviderManager.getWorkspacePath(this@MainActivity)
+                        if (wsPath.isNotEmpty()) {
+                            systemPrompt += "\n\n[工作区] 当前工作区路径: $wsPath\n你可以使用文件工具（read_file, write_file, edit_file, list_directory, search_by_regex）来读写该工作区内的文件。所有文件路径相对于工作区根目录。"
+                        }
+                    }
                     currentConversationId = conversationRepo.createConversation(
                         title = title,
                         providerId = config.providerId,
