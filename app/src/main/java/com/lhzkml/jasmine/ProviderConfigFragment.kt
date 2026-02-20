@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
+import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
 import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient

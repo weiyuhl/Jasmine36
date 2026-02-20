@@ -2,18 +2,7 @@ package com.lhzkml.jasmine
 
 import android.content.Context
 import android.content.SharedPreferences
-
-/**
- * API 渠道类型
- */
-enum class ApiType {
-    /** OpenAI 兼容格式（DeepSeek、硅基流动等） */
-    OPENAI,
-    /** Anthropic Claude 原生 Messages API */
-    CLAUDE,
-    /** Google Gemini 原生 generateContent API */
-    GEMINI
-}
+import com.lhzkml.jasmine.core.prompt.executor.ApiType
 
 /**
  * 供应商配置

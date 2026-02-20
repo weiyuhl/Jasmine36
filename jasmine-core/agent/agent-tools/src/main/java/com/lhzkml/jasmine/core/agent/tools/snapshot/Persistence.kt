@@ -246,5 +246,25 @@ class Persistence(
     companion object {
         /** 禁用持久化 */
         val DISABLED = Persistence(NoPersistenceStorageProvider(), autoCheckpoint = false)
+
+        /**
+         * 从检查点列表重建完整消息历史
+         * 取 systemPrompt + 按顺序拼接每个检查点的 user/assistant 消息。
+         *
+         * @param checkpoints 按时间排序的检查点列表
+         * @param systemPrompt 系统提示词
+         * @return 重建的完整消息历史
+         */
+        fun rebuildHistoryFromCheckpoints(
+            checkpoints: List<AgentCheckpoint>,
+            systemPrompt: String
+        ): List<ChatMessage> {
+            val rebuilt = mutableListOf<ChatMessage>()
+            rebuilt.add(ChatMessage.system(systemPrompt))
+            for (cp in checkpoints) {
+                rebuilt.addAll(cp.messageHistory)
+            }
+            return rebuilt
+        }
     }
 }

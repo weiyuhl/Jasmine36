@@ -241,19 +241,16 @@ class CheckpointDetailActivity : AppCompatActivity() {
                     systemPrompt = systemPrompt
                 )
 
-                // 重建完整历史：system prompt + 所有检查点到当前轮次的消息
+                // 重建完整历史：使用框架层 Persistence.rebuildHistoryFromCheckpoints()
                 val allCheckpoints = provider?.getCheckpoints(agentId)
                     ?.sortedBy { it.createdAt } ?: emptyList()
                 val cpIndex = allCheckpoints.indexOfFirst { it.checkpointId == cp.checkpointId }
                 val relevantCps = if (cpIndex >= 0) allCheckpoints.take(cpIndex + 1) else listOf(cp)
 
-                // 写入 system prompt
-                repo.addMessage(conversationId, ChatMessage.system(systemPrompt))
-                // 按顺序写入每轮对话
-                for (turnCp in relevantCps) {
-                    for (msg in turnCp.messageHistory) {
-                        repo.addMessage(conversationId, msg)
-                    }
+                val rebuiltHistory = com.lhzkml.jasmine.core.agent.tools.snapshot.Persistence
+                    .rebuildHistoryFromCheckpoints(relevantCps, systemPrompt)
+                for (msg in rebuiltHistory) {
+                    repo.addMessage(conversationId, msg)
                 }
 
                 withContext(Dispatchers.Main) {

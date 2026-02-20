@@ -37,15 +37,8 @@ import com.lhzkml.jasmine.core.prompt.llm.SystemInfoContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.CurrentTimeContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.AvailableToolsContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.AgentPromptContextProvider
-import com.lhzkml.jasmine.core.prompt.executor.ClaudeClient
-import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
-import com.lhzkml.jasmine.core.prompt.executor.GeminiClient
-import com.lhzkml.jasmine.core.prompt.executor.GenericClaudeClient
-import com.lhzkml.jasmine.core.prompt.executor.GenericGeminiClient
-import com.lhzkml.jasmine.core.prompt.executor.GenericOpenAIClient
-import com.lhzkml.jasmine.core.prompt.executor.OpenAIClient
-import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
-import com.lhzkml.jasmine.core.prompt.executor.VertexAIClient
+import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
+import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.Prompt
 import com.lhzkml.jasmine.core.prompt.model.Usage
@@ -968,58 +961,19 @@ class MainActivity : AppCompatActivity() {
         
         val provider = ProviderManager.getProvider(config.providerId)
         
-        val client: ChatClient = when (config.apiType) {
-            ApiType.OPENAI -> {
-                val chatPath = config.chatPath ?: "/v1/chat/completions"
-                when (config.providerId) {
-                    "openai" -> OpenAIClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
-                    "deepseek" -> DeepSeekClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
-                    "siliconflow" -> SiliconFlowClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
-                    else -> GenericOpenAIClient(
-                        providerName = provider?.name ?: config.providerId,
-                        apiKey = config.apiKey,
-                        baseUrl = config.baseUrl,
-                        chatPath = chatPath
-                    )
-                }
-            }
-            ApiType.CLAUDE -> when (config.providerId) {
-                "claude" -> ClaudeClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
-                else -> GenericClaudeClient(
-                    providerName = provider?.name ?: config.providerId,
-                    apiKey = config.apiKey,
-                    baseUrl = config.baseUrl
-                )
-            }
-            ApiType.GEMINI -> {
-                // Vertex AI 模式
-                if (config.vertexEnabled && config.vertexServiceAccountJson.isNotEmpty()) {
-                    VertexAIClient(
-                        serviceAccountJson = config.vertexServiceAccountJson,
-                        projectId = config.vertexProjectId,
-                        location = config.vertexLocation
-                    )
-                } else {
-                    val genPath = config.chatPath ?: GeminiClient.DEFAULT_GENERATE_PATH
-                    val streamPath = genPath.replace(":generateContent", ":streamGenerateContent")
-                    when (config.providerId) {
-                        "gemini" -> GeminiClient(
-                            apiKey = config.apiKey,
-                            baseUrl = config.baseUrl,
-                            generatePath = genPath,
-                            streamPath = streamPath
-                        )
-                        else -> GenericGeminiClient(
-                            providerName = provider?.name ?: config.providerId,
-                            apiKey = config.apiKey,
-                            baseUrl = config.baseUrl,
-                            generatePath = genPath,
-                            streamPath = streamPath
-                        )
-                    }
-                }
-            }
-        }
+        val clientConfig = ChatClientConfig(
+            providerId = config.providerId,
+            providerName = provider?.name ?: config.providerId,
+            apiKey = config.apiKey,
+            baseUrl = config.baseUrl,
+            apiType = config.apiType,
+            chatPath = config.chatPath,
+            vertexEnabled = config.vertexEnabled,
+            vertexProjectId = config.vertexProjectId,
+            vertexLocation = config.vertexLocation,
+            vertexServiceAccountJson = config.vertexServiceAccountJson
+        )
+        val client = ChatClientFactory.create(clientConfig)
 
         clientRouter.register(config.providerId, client)
         currentProviderId = config.providerId
@@ -1702,18 +1656,11 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * 从检查点列表重建完整消息历史。
-     * 取当前对话的 system prompt + 按顺序拼接每个检查点的 user/assistant 消息。
+     * 委托给框架层 Persistence.rebuildHistoryFromCheckpoints()
      */
     private fun rebuildHistoryFromCheckpoints(checkpoints: List<AgentCheckpoint>): List<ChatMessage> {
-        val rebuilt = mutableListOf<ChatMessage>()
-        // 加入 system prompt
         val systemPrompt = ProviderManager.getDefaultSystemPrompt(this)
-        rebuilt.add(ChatMessage.system(systemPrompt))
-        // 按时间顺序拼接每轮对话
-        for (cp in checkpoints) {
-            rebuilt.addAll(cp.messageHistory)
-        }
-        return rebuilt
+        return Persistence.rebuildHistoryFromCheckpoints(checkpoints, systemPrompt)
     }
 
     /**

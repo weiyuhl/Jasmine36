@@ -111,22 +111,14 @@ class ModelListFragment : Fragment() {
         tvStatus.text = "正在获取模型列表..."
 
         val chatPath = ProviderManager.getChatPath(ctx, providerId)
-        val client: ChatClient = when (provider.apiType) {
-            ApiType.OPENAI -> when (providerId) {
-                "openai" -> OpenAIClient(apiKey = apiKey, baseUrl = baseUrl, chatPath = chatPath ?: "/v1/chat/completions")
-                "deepseek" -> DeepSeekClient(apiKey = apiKey, baseUrl = baseUrl, chatPath = chatPath ?: "/v1/chat/completions")
-                "siliconflow" -> SiliconFlowClient(apiKey = apiKey, baseUrl = baseUrl, chatPath = chatPath ?: "/v1/chat/completions")
-                else -> GenericOpenAIClient(providerName = provider.name, apiKey = apiKey, baseUrl = baseUrl, chatPath = chatPath ?: "/v1/chat/completions")
-            }
-            ApiType.CLAUDE -> when (providerId) {
-                "claude" -> ClaudeClient(apiKey = apiKey, baseUrl = baseUrl)
-                else -> GenericClaudeClient(providerName = provider.name, apiKey = apiKey, baseUrl = baseUrl)
-            }
-            ApiType.GEMINI -> when (providerId) {
-                "gemini" -> GeminiClient(apiKey = apiKey, baseUrl = baseUrl)
-                else -> GenericGeminiClient(providerName = provider.name, apiKey = apiKey, baseUrl = baseUrl)
-            }
-        }
+        val client: ChatClient = ChatClientFactory.create(ChatClientConfig(
+            providerId = providerId,
+            providerName = provider.name,
+            apiKey = apiKey,
+            baseUrl = baseUrl,
+            apiType = provider.apiType,
+            chatPath = chatPath
+        ))
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
