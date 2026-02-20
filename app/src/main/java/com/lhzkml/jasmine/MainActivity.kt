@@ -1,12 +1,14 @@
-package com.lhzkml.jasmine
+﻿package com.lhzkml.jasmine
 
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -137,6 +139,8 @@ class MainActivity : AppCompatActivity() {
     private var mcpPreloaded = false
     /** 中间过程日志收集器，用于持久化到对话历史 */
     private var agentLogBuilder = StringBuilder()
+    /** 用户是否手动向上滚动（流式回复期间暂停自动滚动） */
+    private var userScrolledUp = false
     /** 系统上下文收集器 — 自动拼接环境信息到 system prompt */
     private val contextCollector = SystemContextCollector()
 
@@ -435,7 +439,7 @@ class MainActivity : AppCompatActivity() {
             agentLogBuilder.append(line)
             withContext(Dispatchers.Main) {
                 appendRendered(line)
-                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                autoScrollToBottom()
             }
         }
 
@@ -526,6 +530,24 @@ class MainActivity : AppCompatActivity() {
         btnSend = findViewById(R.id.btnSend)
         tvOutput = findViewById(R.id.tvOutput)
         scrollView = findViewById(R.id.scrollView)
+
+        // 点击聊天区域时取消输入框焦点并隐藏键盘
+        scrollView.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                etInput.clearFocus()
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.hideSoftInputFromWindow(etInput.windowToken, 0)
+            }
+            false
+        }
+
+        // 检测用户手动滚动：向上滚动时暂停自动滚动，滚到底部时恢复
+        scrollView.viewTreeObserver.addOnScrollChangedListener {
+            if (!isGenerating) return@addOnScrollChangedListener
+            val diff = scrollView.getChildAt(0).bottom - (scrollView.height + scrollView.scrollY)
+            userScrolledUp = diff > 50
+        }
+
         tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
         rvDrawerConversations = findViewById(R.id.rvDrawerConversations)
 
@@ -936,7 +958,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 tvOutput.setText(sb.toString(), android.widget.TextView.BufferType.NORMAL)
-                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                autoScrollToBottom()
             }
 
             // 启动恢复：检查是否有未完成的检查点（非墓碑），提示用户恢复
@@ -1029,6 +1051,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         updateSendButtonState(ButtonState.GENERATING)
+        userScrolledUp = false
         val now = formatTime(System.currentTimeMillis())
         tvOutput.append("You: $message\n$now\n\n")
         etInput.text.clear()
@@ -1112,7 +1135,7 @@ class MainActivity : AppCompatActivity() {
                                 val line = "\n[Tool] 调用工具: $toolName($argsPreview)\n"
                                 appendRendered(line)
                                 agentLogBuilder.append(line)
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                autoScrollToBottom()
                             }
                         }
                         override suspend fun onToolCallResult(toolName: String, result: String) {
@@ -1121,7 +1144,7 @@ class MainActivity : AppCompatActivity() {
                                 val line = "[Result] $toolName 结果: $preview\n\n"
                                 appendRendered(line)
                                 agentLogBuilder.append(line)
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                autoScrollToBottom()
                             }
                         }
                         override suspend fun onThinking(content: String) {
@@ -1133,7 +1156,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 tvOutput.append(content)
                                 agentLogBuilder.append(content)
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                autoScrollToBottom()
                             }
                         }
                     }
@@ -1195,7 +1218,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 tvOutput.append("\n")
                                 agentLogBuilder.append("\n")
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                autoScrollToBottom()
                             }
 
                             // 快照：规划完成后不再单独创建检查点，统一在对话轮次结束后创建
@@ -1205,7 +1228,7 @@ class MainActivity : AppCompatActivity() {
                                 val line = "[Plan] [规划跳过: ${e.message}]\n\n"
                                 appendRendered(line)
                                 agentLogBuilder.append(line)
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                autoScrollToBottom()
                             }
                         }
                     }
@@ -1224,14 +1247,14 @@ class MainActivity : AppCompatActivity() {
                                 ) { chunk ->
                                     withContext(Dispatchers.Main) {
                                         tvOutput.append(chunk)
-                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                        autoScrollToBottom()
                                     }
                                 }
                                 result = streamResult.content
                                 usage = streamResult.usage
                                 withContext(Dispatchers.Main) {
                                     appendRendered(formatUsageLine(usage))
-                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    autoScrollToBottom()
                                 }
                             } else {
                                 val chatResult = executor.execute(
@@ -1249,7 +1272,7 @@ class MainActivity : AppCompatActivity() {
 
                                 withContext(Dispatchers.Main) {
                                     appendRendered("AI: $result$thinkingLine${formatUsageLine(usage)}")
-                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    autoScrollToBottom()
                                 }
                             }
                         }
@@ -1287,7 +1310,7 @@ class MainActivity : AppCompatActivity() {
                                 val header = "┌─ [Graph] 图策略执行 ─────────────\n│ [>] Start\n"
                                 appendRendered(header)
                                 agentLogBuilder.append(header)
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                autoScrollToBottom()
                             }
 
                             if (useStream) {
@@ -1301,7 +1324,7 @@ class MainActivity : AppCompatActivity() {
                                 { chunk: String ->
                                     withContext(Dispatchers.Main) {
                                         tvOutput.append(chunk)
-                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                        autoScrollToBottom()
                                     }
                                 }
                             } else null
@@ -1317,7 +1340,7 @@ class MainActivity : AppCompatActivity() {
                                         }
                                         tvOutput.append(text)
                                         agentLogBuilder.append(text)
-                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                        autoScrollToBottom()
                                     }
                                 }
                             } else null
@@ -1334,7 +1357,7 @@ class MainActivity : AppCompatActivity() {
                                 agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
                                     appendRendered(line)
-                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    autoScrollToBottom()
                                 }
                             }
 
@@ -1344,7 +1367,7 @@ class MainActivity : AppCompatActivity() {
                                 agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
                                     appendRendered(line)
-                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    autoScrollToBottom()
                                 }
                             }
 
@@ -1354,7 +1377,7 @@ class MainActivity : AppCompatActivity() {
                                 agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
                                     appendRendered(line)
-                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    autoScrollToBottom()
                                 }
                             }
 
@@ -1369,7 +1392,7 @@ class MainActivity : AppCompatActivity() {
                                     agentLogBuilder.append(line)
                                     withContext(Dispatchers.Main) {
                                         appendRendered(line)
-                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                        autoScrollToBottom()
                                     }
                                 },
                                 onToolCallResult = { toolName, toolResult ->
@@ -1378,7 +1401,7 @@ class MainActivity : AppCompatActivity() {
                                     agentLogBuilder.append(line)
                                     withContext(Dispatchers.Main) {
                                         appendRendered(line)
-                                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                        autoScrollToBottom()
                                     }
                                 },
                                 onNodeEnter = nodeEnterCallback,
@@ -1394,12 +1417,12 @@ class MainActivity : AppCompatActivity() {
                                     appendRendered(footer)
                                     agentLogBuilder.append(footer)
                                     appendRendered("AI: $result${formatUsageLine(null)}")
-                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    autoScrollToBottom()
                                 }
                             } else {
                                 withContext(Dispatchers.Main) {
                                     appendRendered(formatUsageLine(null))
-                                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                    autoScrollToBottom()
                                 }
                             }
                         }
@@ -1429,7 +1452,7 @@ class MainActivity : AppCompatActivity() {
                                     thinkingStarted = false
                                 }
                                 tvOutput.append(chunk)
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                autoScrollToBottom()
                             }
                         },
                         onThinking = { text ->
@@ -1441,7 +1464,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 tvOutput.append(text)
                                 agentLogBuilder.append(text)
-                                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                                autoScrollToBottom()
                             }
                         }
                     )
@@ -1451,7 +1474,7 @@ class MainActivity : AppCompatActivity() {
 
                     withContext(Dispatchers.Main) {
                         appendRendered(formatUsageLine(usage))
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        autoScrollToBottom()
                     }
                 } else {
                     // 普通非流式
@@ -1468,7 +1491,7 @@ class MainActivity : AppCompatActivity() {
 
                     withContext(Dispatchers.Main) {
                         appendRendered("AI: $result$thinkingLine${formatUsageLine(usage)}")
-                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        autoScrollToBottom()
                     }
                 }
 
@@ -1529,7 +1552,7 @@ class MainActivity : AppCompatActivity() {
                 ))
                 withContext(Dispatchers.Main) {
                     appendRendered("\n$errorMsg\n\n")
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    autoScrollToBottom()
                 }
                 // 快照恢复：检查是否有可用检查点
                 tryOfferCheckpointRecovery(e, message)
@@ -1542,7 +1565,7 @@ class MainActivity : AppCompatActivity() {
                 ))
                 withContext(Dispatchers.Main) {
                     appendRendered("\n未知错误: ${e.message}\n\n")
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    autoScrollToBottom()
                 }
                 // 快照恢复：检查是否有可用检查点
                 tryOfferCheckpointRecovery(e, message)
@@ -1610,7 +1633,7 @@ class MainActivity : AppCompatActivity() {
         agentLogBuilder.append(line)
         withContext(Dispatchers.Main) {
             appendRendered(line)
-            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+            autoScrollToBottom()
         }
 
         when (rollbackStrategy) {
@@ -1624,7 +1647,7 @@ class MainActivity : AppCompatActivity() {
                 agentLogBuilder.append(skipLine)
                 withContext(Dispatchers.Main) {
                     appendRendered(skipLine)
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    autoScrollToBottom()
                 }
                 val logContent = agentLogBuilder.toString()
                 if (logContent.isNotBlank() && currentConversationId != null) {
@@ -1641,7 +1664,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     appendRendered(defaultLine)
                     appendRendered("AI: $defaultReply\n${formatTime(System.currentTimeMillis())}\n\n")
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    autoScrollToBottom()
                 }
                 if (currentConversationId != null) {
                     val logContent = agentLogBuilder.toString()
@@ -1712,7 +1735,7 @@ class MainActivity : AppCompatActivity() {
 
             val line = "[Snapshot] 启动恢复: 从 $totalTurns 个检查点重建对话历史 [${rebuilt.size} 条消息]\n\n"
             appendRendered(line)
-            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+            autoScrollToBottom()
         }
     }
 
@@ -1735,14 +1758,14 @@ class MainActivity : AppCompatActivity() {
                 agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
                     appendRendered(line)
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    autoScrollToBottom()
                 }
             }
             override suspend fun onSummaryChunk(chunk: String) {
                 agentLogBuilder.append(chunk)
                 withContext(Dispatchers.Main) {
                     tvOutput.append(chunk)
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    autoScrollToBottom()
                 }
             }
             override suspend fun onBlockCompressed(blockIndex: Int, totalBlocks: Int) {
@@ -1750,7 +1773,7 @@ class MainActivity : AppCompatActivity() {
                 agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
                     appendRendered(line)
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    autoScrollToBottom()
                 }
             }
             override suspend fun onCompressionDone(compressedMessageCount: Int) {
@@ -1758,7 +1781,7 @@ class MainActivity : AppCompatActivity() {
                 agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
                     appendRendered(line)
-                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    autoScrollToBottom()
                 }
             }
         }
@@ -1788,7 +1811,7 @@ class MainActivity : AppCompatActivity() {
             agentLogBuilder.append(line)
             withContext(Dispatchers.Main) {
                 appendRendered(line)
-                scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                autoScrollToBottom()
             }
         } finally {
             session.close()
@@ -1826,6 +1849,13 @@ class MainActivity : AppCompatActivity() {
     /** 追加文本到聊天输出 */
     private fun appendRendered(text: String) {
         tvOutput.append(text)
+    }
+
+    /** 自动滚动到底部（用户手动向上滚动时跳过） */
+    private fun autoScrollToBottom() {
+        if (!userScrolledUp) {
+            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        }
     }
 
     private fun formatUsageLine(usage: Usage?): String {
