@@ -13,7 +13,9 @@ class RetryConfigTest {
         assertEquals(1000L, config.initialDelayMs)
         assertEquals(10000L, config.maxDelayMs)
         assertEquals(2.0, config.backoffMultiplier, 0.01)
-        assertEquals(60000L, config.requestTimeoutMs)
+        assertEquals(600000L, config.requestTimeoutMs)
+        assertEquals(30000L, config.connectTimeoutMs)
+        assertEquals(300000L, config.socketTimeoutMs)
     }
 
     @Test

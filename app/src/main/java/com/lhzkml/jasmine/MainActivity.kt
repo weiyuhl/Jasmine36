@@ -32,6 +32,7 @@ import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
 import com.lhzkml.jasmine.core.prompt.llm.LLMSession
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
 import com.lhzkml.jasmine.core.prompt.llm.TokenEstimator
+import com.lhzkml.jasmine.core.prompt.llm.StreamResumeHelper
 import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
 import com.lhzkml.jasmine.core.prompt.llm.WorkspaceContextProvider
@@ -994,7 +995,10 @@ class MainActivity : AppCompatActivity() {
             vertexEnabled = config.vertexEnabled,
             vertexProjectId = config.vertexProjectId,
             vertexLocation = config.vertexLocation,
-            vertexServiceAccountJson = config.vertexServiceAccountJson
+            vertexServiceAccountJson = config.vertexServiceAccountJson,
+            requestTimeoutMs = ProviderManager.getRequestTimeout(this).toLong() * 1000,
+            connectTimeoutMs = ProviderManager.getConnectTimeout(this).toLong() * 1000,
+            socketTimeoutMs = ProviderManager.getSocketTimeout(this).toLong() * 1000
         )
         val client = ChatClientFactory.create(clientConfig)
 
@@ -1437,38 +1441,80 @@ class MainActivity : AppCompatActivity() {
                         totalIterations = 0
                     ))
                 } else if (useStream) {
-                    // 普通流式输出
+                    // 普通流式输出（支持超时续传）
                     withContext(Dispatchers.Main) {
                         appendRendered("AI: ")
                     }
 
                     var thinkingStarted = false
-                    val streamResult = client.chatStreamWithUsageAndThinking(
-                        trimmedMessages, config.model, maxTokens, samplingParams,
-                        onChunk = { chunk ->
-                            withContext(Dispatchers.Main) {
-                                // 如果之前在显示思考内容，先换行再显示正文
-                                if (thinkingStarted) {
-                                    appendRendered("\n\nAI: ")
-                                    thinkingStarted = false
+                    val resumeEnabled = ProviderManager.isStreamResumeEnabled(this@MainActivity)
+
+                    val streamResult = if (resumeEnabled) {
+                        val helper = StreamResumeHelper(
+                            maxResumes = ProviderManager.getStreamResumeMaxRetries(this@MainActivity)
+                        )
+                        helper.streamWithResume(
+                            client = client,
+                            messages = trimmedMessages,
+                            model = config.model,
+                            maxTokens = maxTokens,
+                            samplingParams = samplingParams,
+                            onChunk = { chunk ->
+                                withContext(Dispatchers.Main) {
+                                    if (thinkingStarted) {
+                                        appendRendered("\n\nAI: ")
+                                        thinkingStarted = false
+                                    }
+                                    tvOutput.append(chunk)
+                                    autoScrollToBottom()
                                 }
-                                tvOutput.append(chunk)
-                                autoScrollToBottom()
-                            }
-                        },
-                        onThinking = { text ->
-                            withContext(Dispatchers.Main) {
-                                if (!thinkingStarted) {
-                                    appendRendered("[Think] ")
-                                    agentLogBuilder.append("[Think] ")
-                                    thinkingStarted = true
+                            },
+                            onThinking = { text ->
+                                withContext(Dispatchers.Main) {
+                                    if (!thinkingStarted) {
+                                        appendRendered("[Think] ")
+                                        agentLogBuilder.append("[Think] ")
+                                        thinkingStarted = true
+                                    }
+                                    tvOutput.append(text)
+                                    agentLogBuilder.append(text)
+                                    autoScrollToBottom()
                                 }
-                                tvOutput.append(text)
-                                agentLogBuilder.append(text)
-                                autoScrollToBottom()
+                            },
+                            onResumeAttempt = { attempt ->
+                                withContext(Dispatchers.Main) {
+                                    appendRendered("\n[网络超时，正在续传... 第${attempt}次]\n")
+                                    autoScrollToBottom()
+                                }
                             }
-                        }
-                    )
+                        )
+                    } else {
+                        client.chatStreamWithUsageAndThinking(
+                            trimmedMessages, config.model, maxTokens, samplingParams,
+                            onChunk = { chunk ->
+                                withContext(Dispatchers.Main) {
+                                    if (thinkingStarted) {
+                                        appendRendered("\n\nAI: ")
+                                        thinkingStarted = false
+                                    }
+                                    tvOutput.append(chunk)
+                                    autoScrollToBottom()
+                                }
+                            },
+                            onThinking = { text ->
+                                withContext(Dispatchers.Main) {
+                                    if (!thinkingStarted) {
+                                        appendRendered("[Think] ")
+                                        agentLogBuilder.append("[Think] ")
+                                        thinkingStarted = true
+                                    }
+                                    tvOutput.append(text)
+                                    agentLogBuilder.append(text)
+                                    autoScrollToBottom()
+                                }
+                            }
+                        )
+                    }
 
                     result = streamResult.content
                     usage = streamResult.usage

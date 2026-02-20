@@ -81,8 +81,8 @@ class VertexAIClient(
         }
         install(HttpTimeout) {
             requestTimeoutMillis = retryConfig.requestTimeoutMs
-            connectTimeoutMillis = 30000
-            socketTimeoutMillis = 60000
+            connectTimeoutMillis = retryConfig.connectTimeoutMs
+            socketTimeoutMillis = retryConfig.socketTimeoutMs
         }
     }
 

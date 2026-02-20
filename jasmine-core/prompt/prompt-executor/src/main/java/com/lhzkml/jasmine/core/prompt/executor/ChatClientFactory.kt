@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.prompt.executor
 
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
+import com.lhzkml.jasmine.core.prompt.llm.RetryConfig
 
 /**
  * API 渠道类型
@@ -28,7 +29,13 @@ data class ChatClientConfig(
     val vertexEnabled: Boolean = false,
     val vertexProjectId: String = "",
     val vertexLocation: String = "global",
-    val vertexServiceAccountJson: String = ""
+    val vertexServiceAccountJson: String = "",
+    /** 请求超时（毫秒），0 表示使用默认值 */
+    val requestTimeoutMs: Long = 0,
+    /** 连接超时（毫秒），0 表示使用默认值 */
+    val connectTimeoutMs: Long = 0,
+    /** Socket 读取超时（毫秒），0 表示使用默认值 */
+    val socketTimeoutMs: Long = 0
 )
 
 /**
@@ -41,45 +48,58 @@ object ChatClientFactory {
      * 根据配置创建 ChatClient 实例
      */
     fun create(config: ChatClientConfig): ChatClient {
+        val retryConfig = buildRetryConfig(config)
         return when (config.apiType) {
-            ApiType.OPENAI -> createOpenAICompatible(config)
-            ApiType.CLAUDE -> createClaudeCompatible(config)
-            ApiType.GEMINI -> createGeminiCompatible(config)
+            ApiType.OPENAI -> createOpenAICompatible(config, retryConfig)
+            ApiType.CLAUDE -> createClaudeCompatible(config, retryConfig)
+            ApiType.GEMINI -> createGeminiCompatible(config, retryConfig)
         }
     }
 
-    private fun createOpenAICompatible(config: ChatClientConfig): ChatClient {
+    private fun buildRetryConfig(config: ChatClientConfig): RetryConfig {
+        val default = RetryConfig.DEFAULT
+        return default.copy(
+            requestTimeoutMs = if (config.requestTimeoutMs > 0) config.requestTimeoutMs else default.requestTimeoutMs,
+            connectTimeoutMs = if (config.connectTimeoutMs > 0) config.connectTimeoutMs else default.connectTimeoutMs,
+            socketTimeoutMs = if (config.socketTimeoutMs > 0) config.socketTimeoutMs else default.socketTimeoutMs
+        )
+    }
+
+    private fun createOpenAICompatible(config: ChatClientConfig, retryConfig: RetryConfig): ChatClient {
         val chatPath = config.chatPath ?: "/v1/chat/completions"
         return when (config.providerId) {
-            "openai" -> OpenAIClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
-            "deepseek" -> DeepSeekClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
-            "siliconflow" -> SiliconFlowClient(apiKey = config.apiKey, baseUrl = config.baseUrl, chatPath = chatPath)
+            "openai" -> OpenAIClient(apiKey = config.apiKey, baseUrl = config.baseUrl, retryConfig = retryConfig, chatPath = chatPath)
+            "deepseek" -> DeepSeekClient(apiKey = config.apiKey, baseUrl = config.baseUrl, retryConfig = retryConfig, chatPath = chatPath)
+            "siliconflow" -> SiliconFlowClient(apiKey = config.apiKey, baseUrl = config.baseUrl, retryConfig = retryConfig, chatPath = chatPath)
             else -> GenericOpenAIClient(
                 providerName = config.providerName,
                 apiKey = config.apiKey,
                 baseUrl = config.baseUrl,
+                retryConfig = retryConfig,
                 chatPath = chatPath
             )
         }
     }
 
-    private fun createClaudeCompatible(config: ChatClientConfig): ChatClient {
+    private fun createClaudeCompatible(config: ChatClientConfig, retryConfig: RetryConfig): ChatClient {
         return when (config.providerId) {
-            "claude" -> ClaudeClient(apiKey = config.apiKey, baseUrl = config.baseUrl)
+            "claude" -> ClaudeClient(apiKey = config.apiKey, baseUrl = config.baseUrl, retryConfig = retryConfig)
             else -> GenericClaudeClient(
                 providerName = config.providerName,
                 apiKey = config.apiKey,
-                baseUrl = config.baseUrl
+                baseUrl = config.baseUrl,
+                retryConfig = retryConfig
             )
         }
     }
 
-    private fun createGeminiCompatible(config: ChatClientConfig): ChatClient {
+    private fun createGeminiCompatible(config: ChatClientConfig, retryConfig: RetryConfig): ChatClient {
         if (config.vertexEnabled && config.vertexServiceAccountJson.isNotEmpty()) {
             return VertexAIClient(
                 serviceAccountJson = config.vertexServiceAccountJson,
                 projectId = config.vertexProjectId,
-                location = config.vertexLocation
+                location = config.vertexLocation,
+                retryConfig = retryConfig
             )
         }
 
@@ -89,6 +109,7 @@ object ChatClientFactory {
             "gemini" -> GeminiClient(
                 apiKey = config.apiKey,
                 baseUrl = config.baseUrl,
+                retryConfig = retryConfig,
                 generatePath = genPath,
                 streamPath = streamPath
             )
@@ -96,6 +117,7 @@ object ChatClientFactory {
                 providerName = config.providerName,
                 apiKey = config.apiKey,
                 baseUrl = config.baseUrl,
+                retryConfig = retryConfig,
                 generatePath = genPath,
                 streamPath = streamPath
             )

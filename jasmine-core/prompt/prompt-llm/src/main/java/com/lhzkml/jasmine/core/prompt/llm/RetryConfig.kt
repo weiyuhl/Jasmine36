@@ -17,8 +17,12 @@ data class RetryConfig(
     val maxDelayMs: Long = 10000,
     /** 退避倍数 */
     val backoffMultiplier: Double = 2.0,
-    /** 请求超时（毫秒） */
-    val requestTimeoutMs: Long = 60000
+    /** 请求超时（毫秒），整个请求的总时长上限 */
+    val requestTimeoutMs: Long = 600000,
+    /** 连接超时（毫秒） */
+    val connectTimeoutMs: Long = 30000,
+    /** Socket 读取超时（毫秒），流式输出时两个 chunk 之间的最大等待时间 */
+    val socketTimeoutMs: Long = 300000
 ) {
     companion object {
         val DEFAULT = RetryConfig()

@@ -33,6 +33,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvSnapshotInfo: TextView
     private lateinit var tvEventHandlerInfo: TextView
     private lateinit var tvMcpInfo: TextView
+    private lateinit var tvTimeoutInfo: TextView
     private lateinit var tvMaxTokens: TextView
     private lateinit var tvSystemPrompt: TextView
     private lateinit var tvPromptTokens: TextView
@@ -146,6 +147,12 @@ class SettingsActivity : AppCompatActivity() {
             showSystemPromptDialog()
         }
 
+        // 超时与续传配置
+        tvTimeoutInfo = findViewById(R.id.tvTimeoutInfo)
+        findViewById<LinearLayout>(R.id.layoutTimeoutEntry).setOnClickListener {
+            startActivity(Intent(this, TimeoutConfigActivity::class.java))
+        }
+
         // 最大回复 Token 数
         findViewById<LinearLayout>(R.id.layoutMaxTokens).setOnClickListener {
             showMaxTokensDialog()
@@ -178,6 +185,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshSnapshotInfo()
         refreshEventHandlerInfo()
         refreshShellPolicyInfo()
+        refreshTimeoutInfo()
     }
 
     private fun refreshTopKVisibility() {
@@ -473,6 +481,22 @@ class SettingsActivity : AppCompatActivity() {
             com.lhzkml.jasmine.core.agent.tools.ShellPolicy.BLACKLIST -> "黑名单模式"
             com.lhzkml.jasmine.core.agent.tools.ShellPolicy.WHITELIST -> "白名单模式"
         }
+    }
+
+    private fun refreshTimeoutInfo() {
+        val reqTimeout = ProviderManager.getRequestTimeout(this)
+        val socketTimeout = ProviderManager.getSocketTimeout(this)
+        val connectTimeout = ProviderManager.getConnectTimeout(this)
+        val resumeEnabled = ProviderManager.isStreamResumeEnabled(this)
+
+        val parts = mutableListOf<String>()
+        if (reqTimeout > 0) parts.add("请求 ${reqTimeout}s")
+        if (socketTimeout > 0) parts.add("读取 ${socketTimeout}s")
+        if (connectTimeout > 0) parts.add("连接 ${connectTimeout}s")
+
+        val timeoutStr = if (parts.isEmpty()) "默认" else parts.joinToString(" · ")
+        val resumeStr = if (resumeEnabled) "续传开启" else "续传关闭"
+        tvTimeoutInfo.text = "$timeoutStr · $resumeStr"
     }
 
     private fun formatNumber(n: Int): String {

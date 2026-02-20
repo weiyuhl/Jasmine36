@@ -70,9 +70,9 @@ abstract class OpenAICompatibleClient(
             json(this@OpenAICompatibleClient.json)
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 300000  // 流式输出可能持续较长时间
-            connectTimeoutMillis = 30000
-            socketTimeoutMillis = 120000   // 单次读取超时
+            requestTimeoutMillis = retryConfig.requestTimeoutMs
+            connectTimeoutMillis = retryConfig.connectTimeoutMs
+            socketTimeoutMillis = retryConfig.socketTimeoutMs
         }
     }
 

@@ -291,6 +291,48 @@ object ProviderManager {
         prefs(ctx).edit().putInt("sampling_top_k", value).apply()
     }
 
+    // ========== 超时设置 ==========
+
+    /** 请求超时（秒），0 表示使用默认值（10 分钟） */
+    fun getRequestTimeout(ctx: Context): Int =
+        prefs(ctx).getInt("timeout_request", 0)
+
+    fun setRequestTimeout(ctx: Context, seconds: Int) {
+        prefs(ctx).edit().putInt("timeout_request", seconds).apply()
+    }
+
+    /** Socket 读取超时（秒），0 表示使用默认值（5 分钟） */
+    fun getSocketTimeout(ctx: Context): Int =
+        prefs(ctx).getInt("timeout_socket", 0)
+
+    fun setSocketTimeout(ctx: Context, seconds: Int) {
+        prefs(ctx).edit().putInt("timeout_socket", seconds).apply()
+    }
+
+    /** 连接超时（秒），0 表示使用默认值（30 秒） */
+    fun getConnectTimeout(ctx: Context): Int =
+        prefs(ctx).getInt("timeout_connect", 0)
+
+    fun setConnectTimeout(ctx: Context, seconds: Int) {
+        prefs(ctx).edit().putInt("timeout_connect", seconds).apply()
+    }
+
+    /** 是否启用流式超时续传 */
+    fun isStreamResumeEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("stream_resume_enabled", true)
+
+    fun setStreamResumeEnabled(ctx: Context, enabled: Boolean) {
+        prefs(ctx).edit().putBoolean("stream_resume_enabled", enabled).apply()
+    }
+
+    /** 流式超时续传最大次数，默认 3 */
+    fun getStreamResumeMaxRetries(ctx: Context): Int =
+        prefs(ctx).getInt("stream_resume_max_retries", 3)
+
+    fun setStreamResumeMaxRetries(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt("stream_resume_max_retries", value.coerceIn(1, 10)).apply()
+    }
+
     // ========== 工具设置 ==========
 
     /** 是否启用工具调用（Agent 模式） */
