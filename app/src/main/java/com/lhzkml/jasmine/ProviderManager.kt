@@ -198,6 +198,17 @@ object ProviderManager {
         return prefs(ctx).getString("${id}_model", null) ?: provider?.defaultModel ?: ""
     }
 
+    /** 获取供应商已勾选的模型列表 */
+    fun getSelectedModels(ctx: Context, id: String): List<String> {
+        val raw = prefs(ctx).getString("${id}_selected_models", null) ?: return emptyList()
+        return raw.split(",").filter { it.isNotBlank() }
+    }
+
+    /** 保存供应商已勾选的模型列表 */
+    fun setSelectedModels(ctx: Context, id: String, models: List<String>) {
+        prefs(ctx).edit().putString("${id}_selected_models", models.joinToString(",")).apply()
+    }
+
     /** 获取供应商的 API 路径 */
     fun getChatPath(ctx: Context, id: String): String? =
         prefs(ctx).getString("${id}_chat_path", null)

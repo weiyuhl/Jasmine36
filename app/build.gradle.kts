@@ -39,6 +39,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
+    implementation("androidx.viewpager2:viewpager2:1.1.0")
 
     // Jasmine 框架核心
     implementation(project(":jasmine-core:prompt:prompt-executor"))

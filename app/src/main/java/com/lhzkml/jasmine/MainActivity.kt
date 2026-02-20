@@ -122,6 +122,9 @@ class MainActivity : AppCompatActivity() {
 
     private val clientRouter = ChatClientRouter()
     private var currentProviderId: String? = null
+    /** 当前选中的模型（可被底部模型选择器覆盖） */
+    private var overrideModel: String? = null
+    private lateinit var tvCurrentModel: TextView
 
     private lateinit var conversationRepo: ConversationRepository
     private var currentConversationId: String? = null
@@ -529,6 +532,11 @@ class MainActivity : AppCompatActivity() {
 
         btnCloseWorkspace.setOnClickListener { closeWorkspace() }
 
+        // 底部模型选择器
+        tvCurrentModel = findViewById(R.id.tvCurrentModel)
+        tvCurrentModel.setOnClickListener { showModelPopup(it) }
+        refreshModelSelector()
+
         // 文件树侧边栏（Agent 模式）
         btnFileTree = findViewById(R.id.btnFileTree)
         fileTreePanel = findViewById(R.id.fileTreePanel)
@@ -653,6 +661,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshAgentModeUI()
+        refreshModelSelector()
     }
 
     override fun onPause() {
@@ -723,6 +732,98 @@ class MainActivity : AppCompatActivity() {
         if (isAgent) {
             drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, Gravity.START)
         }
+    }
+
+    /**
+     * 刷新底部模型选择器：更新当前模型名显示
+     */
+    private fun refreshModelSelector() {
+        val activeId = ProviderManager.getActiveId(this)
+        if (activeId == null) {
+            tvCurrentModel.text = "未配置"
+            return
+        }
+        val currentModel = overrideModel ?: ProviderManager.getModel(this, activeId)
+        tvCurrentModel.text = "${shortenModelName(currentModel).ifEmpty { "未选择模型" }} \u02C7"
+    }
+
+    /**
+     * 在模型名上方弹出浮动列表（PopupWindow，不是 Dialog）
+     */
+    private fun showModelPopup(anchor: View) {
+        val activeId = ProviderManager.getActiveId(this) ?: return
+        val currentModel = overrideModel ?: ProviderManager.getModel(this, activeId)
+        val selectedModels = ProviderManager.getSelectedModels(this, activeId)
+        val modelList = if (selectedModels.isEmpty()) {
+            if (currentModel.isNotEmpty()) listOf(currentModel) else return
+        } else {
+            if (currentModel.isNotEmpty() && currentModel !in selectedModels) {
+                listOf(currentModel) + selectedModels
+            } else {
+                selectedModels
+            }
+        }
+        if (modelList.size <= 1) return
+
+        val displayNames = modelList.map { shortenModelName(it) }
+
+        val listPopup = androidx.appcompat.widget.ListPopupWindow(this)
+        listPopup.anchorView = anchor
+        listPopup.isModal = true
+        listPopup.setDropDownGravity(android.view.Gravity.END)
+        listPopup.setBackgroundDrawable(resources.getDrawable(R.drawable.bg_popup_list, null))
+
+        // 自适应宽度：取最宽的条目
+        val adapter = object : android.widget.ArrayAdapter<String>(this, 0, displayNames) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val tv = (convertView as? TextView) ?: TextView(context).apply {
+                    textSize = 14f
+                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                }
+                tv.text = displayNames[position]
+                val isActive = modelList[position] == currentModel
+                tv.setTextColor(resources.getColor(
+                    if (isActive) R.color.accent else R.color.text_primary, null
+                ))
+                return tv
+            }
+        }
+        listPopup.setAdapter(adapter)
+
+        // 计算内容宽度
+        var maxWidth = 0
+        for (i in displayNames.indices) {
+            val itemView = adapter.getView(i, null, android.widget.FrameLayout(this))
+            itemView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+            maxWidth = maxOf(maxWidth, itemView.measuredWidth)
+        }
+        listPopup.width = maxWidth + dp(8)
+
+        // 向上弹出
+        listPopup.setOnItemClickListener { _, _, position, _ ->
+            val model = modelList[position]
+            overrideModel = model
+            val key = ProviderManager.getApiKey(this, activeId) ?: ""
+            val baseUrl = ProviderManager.getBaseUrl(this, activeId)
+            ProviderManager.saveConfig(this, activeId, key, baseUrl, model)
+            refreshModelSelector()
+            listPopup.dismiss()
+        }
+
+        // 在 anchor 上方显示
+        val itemHeight = dp(40)
+        listPopup.verticalOffset = -(modelList.size * itemHeight + anchor.height)
+        listPopup.horizontalOffset = 0
+        listPopup.show()
+    }
+
+    /** 缩短模型名用于显示 */
+    private fun shortenModelName(model: String): String {
+        return model.substringAfterLast("/")
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     private fun closeWorkspace() {

@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card"
+            android:padding="20dp">
+
+            <!-- API 地址 -->
+            <LinearLayout
+                android:id="@+id/layoutBaseUrl"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="API 地址"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/etBaseUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:textColorHint="@color/text_secondary"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:inputType="textUri"
+                    android:background="@drawable/bg_input"
+                    android:paddingHorizontal="16dp"
+                    android:fontFamily="monospace"
+                    android:importantForAutofill="no" />
+            </LinearLayout>
+
+            <!-- API 路径 -->
+            <LinearLayout
+                android:id="@+id/layoutChatPath"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="API 路径"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/etChatPath"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:textColorHint="@color/text_secondary"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:inputType="text"
+                    android:background="@drawable/bg_input"
+                    android:paddingHorizontal="16dp"
+                    android:fontFamily="monospace"
+                    android:importantForAutofill="no" />
+
+                <TextView
+                    android:id="@+id/tvChatPathHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary" />
+            </LinearLayout>
+
+            <!-- API Key -->
+            <TextView
+                android:id="@+id/tvKeyLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="API Key"
+                android:textSize="14sp"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:layout_marginTop="16dp" />
+
+            <EditText
+                android:id="@+id/etApiKey"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:hint="sk-..."
+                android:textColorHint="@color/text_secondary"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:inputType="textPassword"
+                android:background="@drawable/bg_input"
+                android:paddingHorizontal="16dp"
+                android:fontFamily="monospace"
+                android:importantForAutofill="no" />
+
+            <!-- 模型 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="模型"
+                android:textSize="14sp"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:layout_marginTop="16dp" />
+
+            <EditText
+                android:id="@+id/tvSelectedModel"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:paddingHorizontal="16dp"
+                android:gravity="center_vertical"
+                android:textSize="13sp"
+                android:textColor="@color/text_primary"
+                android:fontFamily="monospace"
+                android:hint="手动输入或滑动到模型列表选择"
+                android:textColorHint="@color/text_secondary"
+                android:singleLine="true"
+                android:inputType="text"
+                android:importantForAutofill="no" />
+
+            <TextView
+                android:id="@+id/tvModelStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:visibility="gone" />
+
+            <!-- Vertex AI -->
+            <LinearLayout
+                android:id="@+id/layoutVertexAI"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    android:layout_marginBottom="16dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="使用 Vertex AI"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchVertexAI"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="启用后将使用 Vertex AI 端点和服务账号认证"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary" />
+
+                <LinearLayout
+                    android:id="@+id/layoutVertexFields"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="项目 ID"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+                    <EditText
+                        android:id="@+id/etVertexProjectId"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="8dp"
+                        android:hint="my-gcp-project"
+                        android:textColorHint="@color/text_secondary"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:inputType="text"
+                        android:background="@drawable/bg_input"
+                        android:paddingHorizontal="16dp"
+                        android:fontFamily="monospace"
+                        android:importantForAutofill="no" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="区域 (Location)"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+                    <EditText
+                        android:id="@+id/etVertexLocation"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="8dp"
+                        android:hint="global 或 us-central1"
+                        android:textColorHint="@color/text_secondary"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:inputType="text"
+                        android:background="@drawable/bg_input"
+                        android:paddingHorizontal="16dp"
+                        android:fontFamily="monospace"
+                        android:importantForAutofill="no" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="服务账号 JSON"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+                    <EditText
+                        android:id="@+id/etVertexServiceAccountJson"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="粘贴服务账号 JSON 内容..."
+                        android:textColorHint="@color/text_secondary"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        android:inputType="textMultiLine"
+                        android:background="@drawable/bg_input"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp"
+                        android:fontFamily="monospace"
+                        android:minLines="4"
+                        android:maxLines="8"
+                        android:gravity="top"
+                        android:importantForAutofill="no" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSave"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="20dp"
+                android:text="保存并启用"
+                android:textSize="15sp"
+                app:cornerRadius="24dp"
+                app:backgroundTint="@color/accent"
+                android:textColor="@color/white"
+                android:stateListAnimator="@null"
+                app:elevation="0dp" />
+
+            <!-- 余额查询 -->
+            <LinearLayout
+                android:id="@+id/layoutBalance"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    android:layout_marginBottom="12dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="账户余额"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnQueryBalance"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="查询"
+                        android:textSize="13sp"
+                        android:textColor="@color/accent"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="12dp"
+                        android:background="@drawable/bg_input"
+                        android:stateListAnimator="@null"
+                        app:elevation="0dp"
+                        app:rippleColor="@color/divider" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvBalanceInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
