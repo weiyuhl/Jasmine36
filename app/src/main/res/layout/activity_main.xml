@@ -32,9 +32,9 @@
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium" />
 
-            <!-- Agent 模式切换按钮 -->
+            <!-- 模式标签（只读显示） -->
             <TextView
-                android:id="@+id/btnAgentMode"
+                android:id="@+id/tvModeLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="28dp"
                 android:gravity="center"
@@ -43,8 +43,6 @@
                 android:textSize="12sp"
                 android:textColor="@color/text_secondary"
                 android:background="@drawable/bg_input"
-                android:clickable="true"
-                android:focusable="true"
                 android:layout_marginEnd="10dp" />
 
             <ImageButton
@@ -89,17 +87,6 @@
                 android:focusable="true"
                 android:paddingHorizontal="6dp"
                 android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/btnSelectWorkspace"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="选择文件夹"
-                android:textSize="12sp"
-                android:textColor="@color/accent"
-                android:clickable="true"
-                android:focusable="true"
-                android:paddingHorizontal="6dp" />
         </LinearLayout>
 
         <View

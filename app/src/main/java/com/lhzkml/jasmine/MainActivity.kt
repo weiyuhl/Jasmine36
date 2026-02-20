@@ -31,6 +31,12 @@ import com.lhzkml.jasmine.core.prompt.llm.LLMSession
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
 import com.lhzkml.jasmine.core.prompt.llm.TokenEstimator
 import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
+import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
+import com.lhzkml.jasmine.core.prompt.llm.WorkspaceContextProvider
+import com.lhzkml.jasmine.core.prompt.llm.SystemInfoContextProvider
+import com.lhzkml.jasmine.core.prompt.llm.CurrentTimeContextProvider
+import com.lhzkml.jasmine.core.prompt.llm.AvailableToolsContextProvider
+import com.lhzkml.jasmine.core.prompt.llm.AgentPromptContextProvider
 import com.lhzkml.jasmine.core.prompt.executor.ClaudeClient
 import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
 import com.lhzkml.jasmine.core.prompt.executor.GeminiClient
@@ -81,7 +87,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CONVERSATION_ID = "conversation_id"
-        private const val REQUEST_OPEN_FOLDER = 1001
 
         /**
          * 全局 MCP 连接状态缓存
@@ -105,7 +110,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scrollView: ScrollView
     private lateinit var tvDrawerEmpty: TextView
     private lateinit var rvDrawerConversations: RecyclerView
-    private lateinit var btnAgentMode: TextView
+    private lateinit var tvModeLabel: TextView
     private lateinit var layoutWorkspace: LinearLayout
     private lateinit var tvWorkspacePath: TextView
     private lateinit var btnCloseWorkspace: TextView
@@ -130,6 +135,43 @@ class MainActivity : AppCompatActivity() {
     private var mcpPreloaded = false
     /** 中间过程日志收集器，用于持久化到对话历史 */
     private var agentLogBuilder = StringBuilder()
+    /** 系统上下文收集器 — 自动拼接环境信息到 system prompt */
+    private val contextCollector = SystemContextCollector()
+
+    /**
+     * 刷新系统上下文收集器
+     * 根据当前设置注册/注销上下文提供者，发送消息时自动拼接到 system prompt。
+     */
+    private fun refreshContextCollector(toolNames: List<String> = emptyList()) {
+        contextCollector.clear()
+
+        val isAgent = ProviderManager.isAgentMode(this)
+        val wsPath = ProviderManager.getWorkspacePath(this)
+
+        // Agent 模式：注入结构化行为指引提示词
+        if (isAgent) {
+            contextCollector.register(AgentPromptContextProvider(
+                agentName = "Jasmine",
+                workspacePath = wsPath
+            ))
+        }
+
+        // Agent 模式：注入工作区路径
+        if (isAgent && wsPath.isNotEmpty()) {
+            contextCollector.register(WorkspaceContextProvider(wsPath))
+        }
+
+        // 系统信息
+        contextCollector.register(SystemInfoContextProvider())
+
+        // 当前时间
+        contextCollector.register(CurrentTimeContextProvider())
+
+        // 可用工具列表
+        if (toolNames.isNotEmpty()) {
+            contextCollector.register(AvailableToolsContextProvider(toolNames))
+        }
+    }
 
     /**
      * 根据设置构建工具注册表
@@ -476,15 +518,13 @@ class MainActivity : AppCompatActivity() {
         tvDrawerEmpty = findViewById(R.id.tvDrawerEmpty)
         rvDrawerConversations = findViewById(R.id.rvDrawerConversations)
 
-        // Agent 模式 UI
-        btnAgentMode = findViewById(R.id.btnAgentMode)
+        // 模式标签（只读显示）
+        tvModeLabel = findViewById(R.id.tvModeLabel)
         layoutWorkspace = findViewById(R.id.layoutWorkspace)
         tvWorkspacePath = findViewById(R.id.tvWorkspacePath)
         btnCloseWorkspace = findViewById(R.id.btnCloseWorkspace)
         refreshAgentModeUI()
 
-        btnAgentMode.setOnClickListener { toggleAgentMode() }
-        findViewById<TextView>(R.id.btnSelectWorkspace).setOnClickListener { openFolderPicker() }
         btnCloseWorkspace.setOnClickListener { closeWorkspace() }
 
         // DrawerLayout push 效果：侧边栏滑出时，主内容跟着平移
@@ -599,43 +639,12 @@ class MainActivity : AppCompatActivity() {
 
     // ========== Agent 模式 ==========
 
-    private fun toggleAgentMode() {
-        val isAgent = !ProviderManager.isAgentMode(this)
-        ProviderManager.setAgentMode(this, isAgent)
-
-        if (isAgent) {
-            // 切换到 Agent 模式：自动开启所需功能
-            ProviderManager.setToolsEnabled(this, true)
-            ProviderManager.setStreamEnabled(this, true)
-            ProviderManager.setTraceEnabled(this, true)
-            ProviderManager.setEventHandlerEnabled(this, true)
-
-            // Android 11+ 需要 MANAGE_EXTERNAL_STORAGE 权限才能直接访问文件路径
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                if (!android.os.Environment.isExternalStorageManager()) {
-                    AlertDialog.Builder(this)
-                        .setTitle("需要文件访问权限")
-                        .setMessage("Agent 模式需要访问设备文件。请在设置中授予\"所有文件访问\"权限。")
-                        .setPositiveButton("去设置") { _, _ ->
-                            val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                            intent.data = android.net.Uri.parse("package:$packageName")
-                            startActivity(intent)
-                        }
-                        .setNegativeButton("取消", null)
-                        .show()
-                }
-            }
-        }
-
-        refreshAgentModeUI()
-    }
-
     private fun refreshAgentModeUI() {
         val isAgent = ProviderManager.isAgentMode(this)
         if (isAgent) {
-            btnAgentMode.text = "Agent"
-            btnAgentMode.setTextColor(resources.getColor(R.color.white, null))
-            btnAgentMode.setBackgroundResource(R.drawable.bg_agent_mode)
+            tvModeLabel.text = "Agent"
+            tvModeLabel.setTextColor(resources.getColor(R.color.white, null))
+            tvModeLabel.setBackgroundResource(R.drawable.bg_agent_mode)
             layoutWorkspace.visibility = View.VISIBLE
             val path = ProviderManager.getWorkspacePath(this)
             if (path.isNotEmpty()) {
@@ -646,17 +655,11 @@ class MainActivity : AppCompatActivity() {
                 btnCloseWorkspace.visibility = View.GONE
             }
         } else {
-            btnAgentMode.text = "Chat"
-            btnAgentMode.setTextColor(resources.getColor(R.color.text_secondary, null))
-            btnAgentMode.setBackgroundResource(R.drawable.bg_input)
+            tvModeLabel.text = "Chat"
+            tvModeLabel.setTextColor(resources.getColor(R.color.text_secondary, null))
+            tvModeLabel.setBackgroundResource(R.drawable.bg_input)
             layoutWorkspace.visibility = View.GONE
         }
-    }
-
-    private fun openFolderPicker() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-        startActivityForResult(intent, REQUEST_OPEN_FOLDER)
     }
 
     private fun closeWorkspace() {
@@ -673,45 +676,9 @@ class MainActivity : AppCompatActivity() {
         }
         ProviderManager.setWorkspacePath(this, "")
         ProviderManager.setWorkspaceUri(this, "")
-        refreshAgentModeUI()
-        Toast.makeText(this, "已关闭工作区", Toast.LENGTH_SHORT).show()
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_OPEN_FOLDER && resultCode == RESULT_OK) {
-            val treeUri = data?.data ?: return
-            // 持久化权限
-            contentResolver.takePersistableUriPermission(
-                treeUri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-            // 从 URI 解析出实际路径用于显示
-            val displayPath = resolveTreeUriToPath(treeUri)
-            ProviderManager.setWorkspacePath(this, displayPath)
-            ProviderManager.setWorkspaceUri(this, treeUri.toString())
-            tvWorkspacePath.text = displayPath
-            Toast.makeText(this, "工作区: $displayPath", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * 从 SAF tree URI 解析出可读路径
-     */
-    private fun resolveTreeUriToPath(treeUri: android.net.Uri): String {
-        val docId = android.provider.DocumentsContract.getTreeDocumentId(treeUri)
-        // docId 格式通常是 "primary:path/to/folder" 或 "XXXX-XXXX:path"
-        val parts = docId.split(":")
-        return if (parts.size == 2) {
-            if (parts[0] == "primary") {
-                "/storage/emulated/0/${parts[1]}"
-            } else {
-                "/storage/${parts[0]}/${parts[1]}"
-            }
-        } else {
-            docId
-        }
+        ProviderManager.setAgentMode(this, false)
+        // 返回到启动页
+        finish()
     }
 
     // ========== 对话逻辑 ==========
@@ -892,16 +859,14 @@ class MainActivity : AppCompatActivity() {
 
         currentJob = CoroutineScope(Dispatchers.IO).launch {
             try {
+                // 刷新上下文收集器（工作区、系统信息、时间等）
+                refreshContextCollector()
+
                 if (currentConversationId == null) {
                     val title = if (message.length > 20) message.substring(0, 20) + "..." else message
-                    var systemPrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
-                    // Agent 模式：在系统提示词中注入工作区上下文
-                    if (ProviderManager.isAgentMode(this@MainActivity)) {
-                        val wsPath = ProviderManager.getWorkspacePath(this@MainActivity)
-                        if (wsPath.isNotEmpty()) {
-                            systemPrompt += "\n\n[工作区] 当前工作区路径: $wsPath\n你可以使用文件工具（read_file, write_file, edit_file, list_directory, search_by_regex, execute_shell_command）来操作该工作区内的文件。所有路径使用相对路径即可（相对于工作区根目录），例如用 \".\" 列出根目录，用 \"file.txt\" 读取文件。也支持绝对路径。"
-                        }
-                    }
+                    val basePrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
+                    // 自动拼接环境上下文到 system prompt（工作区路径、系统信息、时间等）
+                    val systemPrompt = contextCollector.buildSystemPrompt(basePrompt)
                     currentConversationId = conversationRepo.createConversation(
                         title = title,
                         providerId = config.providerId,
@@ -951,6 +916,8 @@ class MainActivity : AppCompatActivity() {
                     // Agent 模式：使用 ToolExecutor 自动循环
                     val registry = buildToolRegistry()
                     loadMcpToolsInto(registry)
+                    // 将可用工具列表注入上下文收集器
+                    contextCollector.register(AvailableToolsContextProvider(registry.descriptors().map { it.name }))
                     val listener = object : AgentEventListener {
                         var thinkingStarted = false
                         override suspend fun onToolCallStart(toolName: String, arguments: String) {
