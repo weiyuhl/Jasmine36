@@ -356,7 +356,14 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun refreshToolCount() {
         val enabled = ProviderManager.getEnabledTools(this)
-        tvToolCount.text = if (enabled.isEmpty()) "全部工具已启用" else "已启用 ${enabled.size} 个工具"
+        val defaultDisabled = setOf("dex_editor", "web_search")
+        val totalTools = 8 // allTools count in ToolConfigActivity
+        if (enabled.isEmpty()) {
+            val activeCount = totalTools - defaultDisabled.size
+            tvToolCount.text = "已启用 $activeCount 个工具（默认）"
+        } else {
+            tvToolCount.text = "已启用 ${enabled.size} 个工具"
+        }
     }
 
     private fun refreshAgentStrategy() {

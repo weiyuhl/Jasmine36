@@ -28,6 +28,9 @@ class ToolConfigActivity : AppCompatActivity() {
         "attempt_completion" to "显式完成任务（Agent 模式）"
     )
 
+    /** 默认不开启的工具（用户未配置过时这些工具关闭） */
+    private val defaultDisabled = setOf("dex_editor", "web_search")
+
     private lateinit var cbSelectAll: CheckBox
     private lateinit var layoutToolList: LinearLayout
     private lateinit var etBrightDataKey: EditText
@@ -54,11 +57,15 @@ class ToolConfigActivity : AppCompatActivity() {
 
         // 加载当前启用的工具
         val enabledTools = ProviderManager.getEnabledTools(this)
-        val allEnabled = enabledTools.isEmpty()
+        val neverConfigured = enabledTools.isEmpty()
 
-        // 初始化状态
+        // 初始化状态：未配置过时 defaultDisabled 中的工具默认关闭，其余开启
         for (tool in allTools) {
-            toolStates[tool.first] = allEnabled || tool.first in enabledTools
+            toolStates[tool.first] = if (neverConfigured) {
+                tool.first !in defaultDisabled
+            } else {
+                tool.first in enabledTools
+            }
         }
 
         // 构建工具列表 UI
