@@ -45,6 +45,7 @@ dependencies {
     implementation(project(":jasmine-core:prompt:prompt-executor"))
     implementation(project(":jasmine-core:conversation:conversation-storage"))
     implementation(project(":jasmine-core:agent:agent-tools"))
+    implementation(project(":jasmine-core:agent:agent-dex"))
 
     // Coroutines（UI 层需要协程来调用框架）
     implementation(libs.kotlinx.coroutines.core)

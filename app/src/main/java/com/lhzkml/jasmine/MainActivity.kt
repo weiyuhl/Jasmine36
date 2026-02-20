@@ -263,6 +263,12 @@ class MainActivity : AppCompatActivity() {
                 if (isEnabled("web_search")) register(wst.search)
                 if (isEnabled("web_scrape")) register(wst.scrape)
             }
+
+            // DEX/APK 编辑工具
+            val dexTools = com.lhzkml.jasmine.core.agent.dex.tools.DexToolRegistry.allTools()
+            for (tool in dexTools) {
+                if (isEnabled(tool.name)) register(tool)
+            }
         }
     }
 
