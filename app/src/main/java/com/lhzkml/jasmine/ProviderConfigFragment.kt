@@ -12,8 +12,8 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
-import com.lhzkml.jasmine.core.prompt.executor.DeepSeekClient
-import com.lhzkml.jasmine.core.prompt.executor.SiliconFlowClient
+import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
+import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -188,8 +188,13 @@ class ProviderConfigFragment : Fragment() {
         tvBalanceInfo.text = "正在查询余额..."
 
         val client: ChatClient = when (provider.id) {
-            "deepseek" -> DeepSeekClient(apiKey = apiKey, baseUrl = baseUrl)
-            "siliconflow" -> SiliconFlowClient(apiKey = apiKey, baseUrl = baseUrl)
+            "deepseek", "siliconflow" -> ChatClientFactory.create(ChatClientConfig(
+                providerId = provider.id,
+                providerName = provider.name,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
+                apiType = provider.apiType
+            ))
             else -> {
                 btnQueryBalance.isEnabled = true
                 btnQueryBalance.text = "查询"
