@@ -20,30 +20,10 @@ class ToolConfigActivity : AppCompatActivity() {
     private val allTools = listOf(
         "calculator" to "计算器（四则运算/科学计算/进制转换/单位转换/统计）",
         "get_current_time" to "获取当前时间",
-        "read_file" to "读取文件",
-        "write_file" to "写入文件",
-        "edit_file" to "编辑文件",
-        "append_file" to "追加文件内容",
-        "create_file" to "创建文件（覆盖保护）",
-        "insert_content" to "插入内容到指定行",
-        "replace_in_file" to "查找替换文件内容",
-        "delete_file" to "删除文件",
-        "move_file" to "移动文件",
-        "copy_file" to "复制文件",
-        "rename_file" to "重命名文件",
-        "file_info" to "文件信息",
-        "list_directory" to "列出目录",
-        "find_files" to "按名称搜索文件",
-        "search_by_regex" to "正则搜索",
-        "create_directory" to "创建目录",
-        "compress_files" to "文件压缩（ZIP）",
+        "file_tools" to "文件操作（读写/编辑/搜索/压缩等 17 个工具）",
         "execute_shell_command" to "执行命令",
-        "web_search" to "网络搜索",
-        "web_scrape" to "网页抓取",
-        "fetch_url" to "URL 抓取（HTML/纯文本/JSON）",
-        // DEX/APK 编辑工具
+        "web_tools" to "网络工具（搜索/抓取/URL 获取）",
         "dex_editor" to "DEX/APK 编辑（Smali 编辑/Manifest/资源/ARSC 等 38 个工具）",
-        // Agent 控制工具
         "attempt_completion" to "显式完成任务（Agent 模式）"
     )
 

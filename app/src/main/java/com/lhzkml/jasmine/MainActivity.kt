@@ -206,23 +206,25 @@ class MainActivity : AppCompatActivity() {
             } else {
                 getExternalFilesDir(null)?.absolutePath
             }
-            if (isEnabled("read_file")) register(ReadFileTool(basePath))
-            if (isEnabled("write_file")) register(WriteFileTool(basePath))
-            if (isEnabled("edit_file")) register(EditFileTool(basePath))
-            if (isEnabled("list_directory")) register(ListDirectoryTool(basePath))
-            if (isEnabled("search_by_regex")) register(RegexSearchTool(basePath))
-            if (isEnabled("find_files")) register(FindFilesTool(basePath))
-            if (isEnabled("delete_file")) register(DeleteFileTool(basePath))
-            if (isEnabled("move_file")) register(MoveFileTool(basePath))
-            if (isEnabled("copy_file")) register(CopyFileTool(basePath))
-            if (isEnabled("append_file")) register(AppendFileTool(basePath))
-            if (isEnabled("file_info")) register(FileInfoTool(basePath))
-            if (isEnabled("create_directory")) register(CreateDirectoryTool(basePath))
-            if (isEnabled("compress_files")) register(CompressFilesTool(basePath))
-            if (isEnabled("insert_content")) register(InsertContentTool(basePath))
-            if (isEnabled("rename_file")) register(RenameFileTool(basePath))
-            if (isEnabled("replace_in_file")) register(ReplaceInFileTool(basePath))
-            if (isEnabled("create_file")) register(CreateFileTool(basePath))
+            if (isEnabled("file_tools")) {
+                register(ReadFileTool(basePath))
+                register(WriteFileTool(basePath))
+                register(EditFileTool(basePath))
+                register(ListDirectoryTool(basePath))
+                register(RegexSearchTool(basePath))
+                register(FindFilesTool(basePath))
+                register(DeleteFileTool(basePath))
+                register(MoveFileTool(basePath))
+                register(CopyFileTool(basePath))
+                register(AppendFileTool(basePath))
+                register(FileInfoTool(basePath))
+                register(CreateDirectoryTool(basePath))
+                register(CompressFilesTool(basePath))
+                register(InsertContentTool(basePath))
+                register(RenameFileTool(basePath))
+                register(ReplaceInFileTool(basePath))
+                register(CreateFileTool(basePath))
+            }
 
             // Shell 命令（根据策略决定确认方式）
             if (isEnabled("execute_shell_command")) {
@@ -255,18 +257,17 @@ class MainActivity : AppCompatActivity() {
                 ))
             }
 
-            // 网络搜索
-            val brightDataKey = ProviderManager.getBrightDataKey(this@MainActivity)
-            if (brightDataKey.isNotEmpty() && (isEnabled("web_search") || isEnabled("web_scrape"))) {
-                webSearchTool?.close()
-                val wst = WebSearchTool(brightDataKey)
-                webSearchTool = wst
-                if (isEnabled("web_search")) register(wst.search)
-                if (isEnabled("web_scrape")) register(wst.scrape)
-            }
+            // 网络工具
+            if (isEnabled("web_tools")) {
+                val brightDataKey = ProviderManager.getBrightDataKey(this@MainActivity)
+                if (brightDataKey.isNotEmpty()) {
+                    webSearchTool?.close()
+                    val wst = WebSearchTool(brightDataKey)
+                    webSearchTool = wst
+                    register(wst.search)
+                    register(wst.scrape)
+                }
 
-            // URL 抓取工具（不依赖 BrightData）
-            if (isEnabled("fetch_url")) {
                 fetchUrlTool?.close()
                 val ft = FetchUrlTool()
                 fetchUrlTool = ft
