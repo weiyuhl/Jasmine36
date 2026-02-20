@@ -22,12 +22,10 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var tvActiveProvider: TextView
     private lateinit var switchTools: SwitchCompat
-    private lateinit var layoutToolConfig: LinearLayout
     private lateinit var layoutAgentToolPreset: LinearLayout
     private lateinit var tvAgentToolPreset: TextView
     private lateinit var layoutAgentStrategy: LinearLayout
     private lateinit var tvAgentStrategy: TextView
-    private lateinit var tvToolCount: TextView
     private lateinit var tvCompressionInfo: TextView
     private lateinit var tvTraceInfo: TextView
     private lateinit var tvPlannerInfo: TextView
@@ -72,20 +70,12 @@ class SettingsActivity : AppCompatActivity() {
 
         // 工具调用开关
         switchTools = findViewById(R.id.switchTools)
-        layoutToolConfig = findViewById(R.id.layoutToolConfig)
-        tvToolCount = findViewById(R.id.tvToolCount)
 
         switchTools.isChecked = ProviderManager.isToolsEnabled(this)
-        layoutToolConfig.visibility = if (switchTools.isChecked) android.view.View.VISIBLE else android.view.View.GONE
         switchTools.setOnCheckedChangeListener { _, isChecked ->
             ProviderManager.setToolsEnabled(this, isChecked)
-            layoutToolConfig.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
             layoutAgentToolPreset.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
             layoutAgentStrategy.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
-        }
-
-        layoutToolConfig.setOnClickListener {
-            startActivity(Intent(this, ToolConfigActivity::class.java))
         }
 
         // Agent 工具预设入口
@@ -181,7 +171,6 @@ class SettingsActivity : AppCompatActivity() {
         refreshMaxTokens()
         refreshUsageStats()
         refreshTopKVisibility()
-        refreshToolCount()
         refreshAgentToolPreset()
         refreshAgentStrategy()
         refreshCompressionInfo()
@@ -366,11 +355,6 @@ class SettingsActivity : AppCompatActivity() {
                 tvTotalTokens.text = formatNumber(stats.totalTokens)
             }
         }
-    }
-
-    private fun refreshToolCount() {
-        val enabled = ProviderManager.getEnabledTools(this)
-        tvToolCount.text = if (enabled.isEmpty()) "全部工具已启用" else "已启用 ${enabled.size} 个工具"
     }
 
     private fun refreshAgentToolPreset() {
