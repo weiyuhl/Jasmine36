@@ -269,6 +269,9 @@ class MainActivity : AppCompatActivity() {
             for (tool in dexTools) {
                 if (isEnabled(tool.name)) register(tool)
             }
+
+            // Agent 显式完成工具
+            if (isEnabled("attempt_completion")) register(AttemptCompletionTool)
         }
     }
 

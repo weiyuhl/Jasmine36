@@ -15,6 +15,9 @@ import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.prompt.model.prompt
 import kotlinx.coroutines.ensureActive
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -30,7 +33,18 @@ interface AgentEventListener {
     suspend fun onThinking(content: String) {}
     /** 上下文压缩 */
     suspend fun onCompression(message: String) {}
+    /** Agent 显式完成任务（attempt_completion） */
+    suspend fun onCompletion(result: String, command: String?) {}
 }
+
+/**
+ * Agent 显式完成信号
+ * 当 LLM 调用 attempt_completion 时抛出，用于终止 agent loop
+ */
+class AgentCompletionSignal(
+    val result: String,
+    val command: String? = null
+) : Exception("Agent completed")
 
 /**
  * 工具执行器 — Agent Loop
@@ -167,6 +181,29 @@ class ToolExecutor(
             // 通知工具调用并执行
             for (call in result.toolCalls) {
                 coroutineContext.ensureActive()
+
+                // 检测 attempt_completion 显式完成信号
+                if (call.name == COMPLETION_TOOL_NAME) {
+                    val signal = parseCompletionSignal(call.arguments)
+                    eventListener?.onCompletion(signal.result, signal.command)
+
+                    tracing?.emit(TraceEvent.AgentCompleted(
+                        eventId = tracing.newEventId(), runId = runId,
+                        agentId = "", result = signal.result.take(100),
+                        totalIterations = iterations
+                    ))
+
+                    val content = buildString {
+                        append(signal.result)
+                        signal.command?.let { append("\n\n[建议操作] $it") }
+                    }
+                    return ChatResult(
+                        content = content,
+                        usage = totalUsage,
+                        finishReason = "completion"
+                    )
+                }
+
                 eventListener?.onToolCallStart(call.name, call.arguments)
 
                 tracing?.emit(TraceEvent.ToolCallStarting(
@@ -276,6 +313,29 @@ class ToolExecutor(
             // 通知工具调用并执行
             for (call in result.toolCalls) {
                 coroutineContext.ensureActive()
+
+                // 检测 attempt_completion 显式完成信号
+                if (call.name == COMPLETION_TOOL_NAME) {
+                    val signal = parseCompletionSignal(call.arguments)
+                    eventListener?.onCompletion(signal.result, signal.command)
+
+                    tracing?.emit(TraceEvent.AgentCompleted(
+                        eventId = tracing.newEventId(), runId = runId,
+                        agentId = "", result = signal.result.take(100),
+                        totalIterations = iterations
+                    ))
+
+                    val content = buildString {
+                        append(signal.result)
+                        signal.command?.let { append("\n\n[建议操作] $it") }
+                    }
+                    return StreamResult(
+                        content = content,
+                        usage = totalUsage,
+                        finishReason = "completion"
+                    )
+                }
+
                 eventListener?.onToolCallStart(call.name, call.arguments)
 
                 tracing?.emit(TraceEvent.ToolCallStarting(
@@ -358,6 +418,25 @@ class ToolExecutor(
             return block(this)
         } finally {
             close()
+        }
+    }
+
+    companion object {
+        /** attempt_completion 工具名 */
+        const val COMPLETION_TOOL_NAME = "attempt_completion"
+    }
+
+    /**
+     * 解析 attempt_completion 的参数
+     */
+    private fun parseCompletionSignal(arguments: String): AgentCompletionSignal {
+        return try {
+            val obj = Json.parseToJsonElement(arguments).jsonObject
+            val result = obj["result"]?.jsonPrimitive?.content ?: ""
+            val command = obj["command"]?.jsonPrimitive?.content
+            AgentCompletionSignal(result, command)
+        } catch (_: Exception) {
+            AgentCompletionSignal(arguments)
         }
     }
 }

@@ -77,7 +77,9 @@ class ToolConfigActivity : AppCompatActivity() {
         "apk_search_arsc_resources" to "搜索 ARSC 资源",
         "apk_parse_manifest_cpp" to "解析二进制 Manifest（结构化）",
         "apk_search_manifest_cpp" to "搜索二进制 Manifest 属性",
-        "apk_parse_arsc_cpp" to "解析 resources.arsc 概要"
+        "apk_parse_arsc_cpp" to "解析 resources.arsc 概要",
+        // Agent 控制工具
+        "attempt_completion" to "显式完成任务（Agent 模式）"
     )
 
     private lateinit var cbSelectAll: CheckBox
