@@ -48,5 +48,11 @@ class ProviderConfigActivity : AppCompatActivity() {
                 else -> ""
             }
         }.attach()
+
+        // 支持直接跳转到指定 tab（如从聊天界面跳转到模型列表）
+        val initialTab = intent.getIntExtra("tab", 0)
+        if (initialTab in 0..1) {
+            viewPager.currentItem = initialTab
+        }
     }
 }

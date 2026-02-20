@@ -37,12 +37,12 @@ object ProviderManager {
 
     private val _providers = mutableListOf(
         // 三大渠道供应商
-        Provider("openai", "OpenAI", "https://api.openai.com", "gpt-4o", ApiType.OPENAI),
-        Provider("claude", "Claude", "https://api.anthropic.com", "claude-sonnet-4-20250514", ApiType.CLAUDE),
-        Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com", "gemini-2.5-flash", ApiType.GEMINI),
+        Provider("openai", "OpenAI", "https://api.openai.com", "", ApiType.OPENAI),
+        Provider("claude", "Claude", "https://api.anthropic.com", "", ApiType.CLAUDE),
+        Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com", "", ApiType.GEMINI),
         // 其他供应商
-        Provider("deepseek", "DeepSeek", "https://api.deepseek.com", "deepseek-chat", ApiType.OPENAI),
-        Provider("siliconflow", "硅基流动", "https://api.siliconflow.cn", "deepseek-ai/DeepSeek-V3", ApiType.OPENAI),
+        Provider("deepseek", "DeepSeek", "https://api.deepseek.com", "", ApiType.OPENAI),
+        Provider("siliconflow", "硅基流动", "https://api.siliconflow.cn", "", ApiType.OPENAI),
     )
 
     private var isInitialized = false

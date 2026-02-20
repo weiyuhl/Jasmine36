@@ -1053,6 +1053,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val actualModel = overrideModel ?: config.model
+        if (actualModel.isEmpty()) {
+            Toast.makeText(this, "请先选择模型", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, ProviderConfigActivity::class.java).apply {
+                putExtra("provider_id", config.providerId)
+                putExtra("tab", 1)
+            })
+            return
+        }
+
         updateSendButtonState(ButtonState.GENERATING)
         val now = formatTime(System.currentTimeMillis())
         tvOutput.append("You: $message\n$now\n\n")
