@@ -186,8 +186,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun buildToolRegistry(): ToolRegistry {
         val enabledTools = ProviderManager.getEnabledTools(this)
-        val defaultDisabled = setOf("dex_editor", "web_search")
-        fun isEnabled(name: String) = if (enabledTools.isEmpty()) name !in defaultDisabled else name in enabledTools
+        fun isEnabled(name: String) = enabledTools.isEmpty() || name in enabledTools
 
         return ToolRegistry.build {
             // 计算器
