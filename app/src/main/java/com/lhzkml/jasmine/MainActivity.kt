@@ -266,19 +266,19 @@ class MainActivity : AppCompatActivity() {
             }
 
             // URL 抓取工具（不依赖 BrightData）
-            if (isEnabled("fetch_url_as_html") || isEnabled("fetch_url_as_text") || isEnabled("fetch_url_as_json")) {
+            if (isEnabled("fetch_url")) {
                 fetchUrlTool?.close()
                 val ft = FetchUrlTool()
                 fetchUrlTool = ft
-                if (isEnabled("fetch_url_as_html")) register(ft.fetchHtml)
-                if (isEnabled("fetch_url_as_text")) register(ft.fetchText)
-                if (isEnabled("fetch_url_as_json")) register(ft.fetchJson)
+                register(ft.fetchHtml)
+                register(ft.fetchText)
+                register(ft.fetchJson)
             }
 
             // DEX/APK 编辑工具
-            val dexTools = com.lhzkml.jasmine.core.agent.dex.tools.DexToolRegistry.allTools()
-            for (tool in dexTools) {
-                if (isEnabled(tool.name)) register(tool)
+            if (isEnabled("dex_editor")) {
+                val dexTools = com.lhzkml.jasmine.core.agent.dex.tools.DexToolRegistry.allTools()
+                dexTools.forEach { register(it) }
             }
 
             // Agent 显式完成工具
