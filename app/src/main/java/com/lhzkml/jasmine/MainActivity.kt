@@ -114,6 +114,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutWorkspace: LinearLayout
     private lateinit var tvWorkspacePath: TextView
     private lateinit var btnCloseWorkspace: TextView
+    private lateinit var btnFileTree: ImageButton
+    private lateinit var fileTreePanel: LinearLayout
+    private lateinit var tvFileTreeRoot: TextView
+    private lateinit var rvFileTree: RecyclerView
+    private val fileTreeAdapter = FileTreeAdapter()
 
     private val clientRouter = ChatClientRouter()
     private var currentProviderId: String? = null
@@ -421,8 +426,6 @@ class MainActivity : AppCompatActivity() {
 
         return EventHandler.build {
             if (isEnabled(ProviderManager.EventCategory.AGENT)) {
-                onAgentStarting { ctx -> emitEvent("[EVENT] Agent 开始 [${ctx.agentId}]\n") }
-                onAgentCompleted { ctx -> emitEvent("[EVENT] Agent 完成 [${ctx.agentId}]\n") }
                 onAgentExecutionFailed { ctx -> emitEvent("[EVENT] Agent 失败: ${ctx.throwable.message}\n") }
             }
             if (isEnabled(ProviderManager.EventCategory.TOOL)) {
@@ -523,22 +526,52 @@ class MainActivity : AppCompatActivity() {
         layoutWorkspace = findViewById(R.id.layoutWorkspace)
         tvWorkspacePath = findViewById(R.id.tvWorkspacePath)
         btnCloseWorkspace = findViewById(R.id.btnCloseWorkspace)
-        refreshAgentModeUI()
 
         btnCloseWorkspace.setOnClickListener { closeWorkspace() }
+
+        // 文件树侧边栏（Agent 模式）
+        btnFileTree = findViewById(R.id.btnFileTree)
+        fileTreePanel = findViewById(R.id.fileTreePanel)
+        tvFileTreeRoot = findViewById(R.id.tvFileTreeRoot)
+        rvFileTree = findViewById(R.id.rvFileTree)
+        rvFileTree.layoutManager = LinearLayoutManager(this)
+        rvFileTree.adapter = fileTreeAdapter
+        fileTreeAdapter.onFileClick = { file ->
+            // 点击文件：显示文件路径提示
+            Toast.makeText(this, file.absolutePath, Toast.LENGTH_SHORT).show()
+        }
+        btnFileTree.setOnClickListener {
+            drawerLayout.openDrawer(Gravity.START)
+        }
+
+        // 所有控件初始化完成后再刷新 UI 状态
+        refreshAgentModeUI()
 
         // DrawerLayout push 效果：侧边栏滑出时，主内容跟着平移
         val drawerPanel = findViewById<LinearLayout>(R.id.drawerPanel)
         drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerSlide(drawerView: View, slideOffset: Float) {
-                // slideOffset: 0（关闭）→ 1（完全打开）
-                // 主内容向左平移 = 侧边栏宽度 × slideOffset
-                val offset = drawerPanel.width * slideOffset
-                mainContent.translationX = -offset
+                if (drawerView.id == R.id.drawerPanel) {
+                    // 右侧侧边栏：主内容向左平移
+                    mainContent.translationX = -(drawerPanel.width * slideOffset)
+                } else if (drawerView.id == R.id.fileTreePanel) {
+                    // 左侧文件树：主内容向右平移
+                    mainContent.translationX = fileTreePanel.width * slideOffset
+                }
             }
 
             override fun onDrawerClosed(drawerView: View) {
                 mainContent.translationX = 0f
+            }
+
+            override fun onDrawerOpened(drawerView: View) {
+                // 文件树抽屉打开时自动刷新
+                if (drawerView.id == R.id.fileTreePanel) {
+                    val path = ProviderManager.getWorkspacePath(this@MainActivity)
+                    if (path.isNotEmpty()) {
+                        fileTreeAdapter.loadRoot(path)
+                    }
+                }
             }
         })
 
@@ -605,6 +638,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
+            ?: run {
+                // 恢复上次的会话
+                val lastId = ProviderManager.getLastConversationId(this)
+                if (lastId.isNotEmpty()) {
+                    loadConversation(lastId)
+                }
+            }
 
         // APP 启动时后台预连接 MCP 服务器
         preconnectMcpServers()
@@ -613,6 +653,12 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshAgentModeUI()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // 保存当前会话 ID，下次恢复时自动加载
+        ProviderManager.setLastConversationId(this, currentConversationId ?: "")
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -630,7 +676,9 @@ class MainActivity : AppCompatActivity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (drawerLayout.isDrawerOpen(Gravity.END)) {
+        if (drawerLayout.isDrawerOpen(Gravity.START)) {
+            drawerLayout.closeDrawer(Gravity.START)
+        } else if (drawerLayout.isDrawerOpen(Gravity.END)) {
             drawerLayout.closeDrawer(Gravity.END)
         } else {
             super.onBackPressed()
@@ -646,10 +694,16 @@ class MainActivity : AppCompatActivity() {
             tvModeLabel.setTextColor(resources.getColor(R.color.white, null))
             tvModeLabel.setBackgroundResource(R.drawable.bg_agent_mode)
             layoutWorkspace.visibility = View.VISIBLE
+            btnFileTree.visibility = View.VISIBLE
             val path = ProviderManager.getWorkspacePath(this)
             if (path.isNotEmpty()) {
                 tvWorkspacePath.text = path
+                btnCloseWorkspace.text = "关闭"
                 btnCloseWorkspace.visibility = View.VISIBLE
+                // 加载文件树
+                val folderName = java.io.File(path).name
+                tvFileTreeRoot.text = folderName
+                fileTreeAdapter.loadRoot(path)
             } else {
                 tvWorkspacePath.text = "未选择工作区"
                 btnCloseWorkspace.visibility = View.GONE
@@ -658,26 +712,41 @@ class MainActivity : AppCompatActivity() {
             tvModeLabel.text = "Chat"
             tvModeLabel.setTextColor(resources.getColor(R.color.text_secondary, null))
             tvModeLabel.setBackgroundResource(R.drawable.bg_input)
-            layoutWorkspace.visibility = View.GONE
+            layoutWorkspace.visibility = View.VISIBLE
+            tvWorkspacePath.text = "普通聊天"
+            btnCloseWorkspace.visibility = View.VISIBLE
+            btnCloseWorkspace.text = "退出"
+            btnFileTree.visibility = View.GONE
+            drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, Gravity.START)
+        }
+        // Agent 模式解锁左侧抽屉
+        if (isAgent) {
+            drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, Gravity.START)
         }
     }
 
     private fun closeWorkspace() {
-        // 释放持久化的 URI 权限
-        val uriStr = ProviderManager.getWorkspaceUri(this)
-        if (uriStr.isNotEmpty()) {
-            try {
-                val uri = android.net.Uri.parse(uriStr)
-                contentResolver.releasePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-            } catch (_: Exception) {}
+        // Agent 模式：释放持久化的 URI 权限
+        if (ProviderManager.isAgentMode(this)) {
+            val uriStr = ProviderManager.getWorkspaceUri(this)
+            if (uriStr.isNotEmpty()) {
+                try {
+                    val uri = android.net.Uri.parse(uriStr)
+                    contentResolver.releasePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Exception) {}
+            }
+            ProviderManager.setWorkspacePath(this, "")
+            ProviderManager.setWorkspaceUri(this, "")
         }
-        ProviderManager.setWorkspacePath(this, "")
-        ProviderManager.setWorkspaceUri(this, "")
         ProviderManager.setAgentMode(this, false)
+        ProviderManager.setLastSession(this, false)
         // 返回到启动页
+        val intent = Intent(this, LauncherActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
         finish()
     }
 

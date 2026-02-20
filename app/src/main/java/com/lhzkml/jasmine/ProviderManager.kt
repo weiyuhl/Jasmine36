@@ -726,6 +726,22 @@ object ProviderManager {
         prefs(ctx).edit().putBoolean("agent_mode", enabled).apply()
     }
 
+    /** 是否有上次的会话（用于启动时自动恢复） */
+    fun hasLastSession(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("has_last_session", false)
+
+    fun setLastSession(ctx: Context, active: Boolean) {
+        prefs(ctx).edit().putBoolean("has_last_session", active).apply()
+    }
+
+    /** 上次打开的会话 ID */
+    fun getLastConversationId(ctx: Context): String =
+        prefs(ctx).getString("last_conversation_id", "") ?: ""
+
+    fun setLastConversationId(ctx: Context, id: String) {
+        prefs(ctx).edit().putString("last_conversation_id", id).apply()
+    }
+
     /** Agent 模式工作区路径（用户选择的本地文件夹） */
     fun getWorkspacePath(ctx: Context): String =
         prefs(ctx).getString("workspace_path", null) ?: ""

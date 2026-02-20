@@ -15,9 +15,18 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_launcher)
 
         ProviderManager.initialize(this)
+
+        // 恢复上次的模式：如果上次没有主动退出，直接跳转到 MainActivity
+        val hasLastSession = ProviderManager.hasLastSession(this)
+        if (hasLastSession) {
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+            return
+        }
+
+        setContentView(R.layout.activity_launcher)
 
         // 普通聊天：关闭工具，清除工作区
         findViewById<TextView>(R.id.btnChat).setOnClickListener {
@@ -25,7 +34,9 @@ class LauncherActivity : AppCompatActivity() {
             ProviderManager.setToolsEnabled(this, false)
             ProviderManager.setWorkspacePath(this, "")
             ProviderManager.setWorkspaceUri(this, "")
+            ProviderManager.setLastSession(this, true)
             startActivity(Intent(this, MainActivity::class.java))
+            finish()
         }
 
         // 选择工作区 -> Agent 模式
@@ -78,7 +89,9 @@ class LauncherActivity : AppCompatActivity() {
             ProviderManager.setWorkspaceUri(this, treeUri.toString())
 
             Toast.makeText(this, "工作区: $displayPath", Toast.LENGTH_SHORT).show()
+            ProviderManager.setLastSession(this, true)
             startActivity(Intent(this, MainActivity::class.java))
+            finish()
         }
     }
 

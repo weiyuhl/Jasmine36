@@ -32,6 +32,18 @@
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium" />
 
+            <!-- 文件树按钮（Agent 模式可见） -->
+            <ImageButton
+                android:id="@+id/btnFileTree"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="文件资源管理器"
+                android:scaleType="centerInside"
+                android:visibility="gone"
+                android:layout_marginEnd="8dp"
+                android:src="@drawable/ic_folder" />
+
             <!-- 模式标签（只读显示） -->
             <TextView
                 android:id="@+id/tvModeLabel"
@@ -249,6 +261,55 @@
             android:clickable="true"
             android:focusable="true"
             android:background="?attr/selectableItemBackground" />
+
+    </LinearLayout>
+
+    <!-- 左侧文件树侧边栏（Agent 模式） -->
+    <LinearLayout
+        android:id="@+id/fileTreePanel"
+        android:layout_width="280dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:orientation="vertical"
+        android:background="@color/bg_primary">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="16dp"
+            android:text="资源管理器"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:textStyle="bold"
+            android:background="@color/white" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider" />
+
+        <!-- 工作区名称 -->
+        <TextView
+            android:id="@+id/tvFileTreeRoot"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="16dp"
+            android:textSize="12sp"
+            android:textColor="@color/accent"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="middle"
+            android:background="#F5F5F5" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvFileTree"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingBottom="16dp" />
 
     </LinearLayout>
 
