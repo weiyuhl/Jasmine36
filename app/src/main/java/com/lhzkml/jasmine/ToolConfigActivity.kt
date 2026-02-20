@@ -27,7 +27,8 @@ class ToolConfigActivity : AppCompatActivity() {
         "search_by_regex" to "正则搜索",
         "execute_shell_command" to "执行命令",
         "web_search" to "网络搜索",
-        "web_scrape" to "网页抓取"
+        "web_scrape" to "网页抓取",
+        "compress_files" to "文件压缩（ZIP）"
     )
 
     private lateinit var cbSelectAll: CheckBox

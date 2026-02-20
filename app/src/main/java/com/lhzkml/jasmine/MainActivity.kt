@@ -216,6 +216,7 @@ class MainActivity : AppCompatActivity() {
             if (isEnabled("append_file")) register(AppendFileTool(basePath))
             if (isEnabled("file_info")) register(FileInfoTool(basePath))
             if (isEnabled("create_directory")) register(CreateDirectoryTool(basePath))
+            if (isEnabled("compress_files")) register(CompressFilesTool(basePath))
 
             // Shell 命令（根据策略决定确认方式）
             if (isEnabled("execute_shell_command")) {
