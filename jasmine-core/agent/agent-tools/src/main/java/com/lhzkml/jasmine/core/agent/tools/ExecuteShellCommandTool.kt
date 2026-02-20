@@ -8,17 +8,74 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
+ * Shell 命令执行策略
+ * - MANUAL: 所有命令都需手动确认
+ * - BLACKLIST: 黑名单内的命令需确认，其余自动执行
+ * - WHITELIST: 白名单内的命令自动执行，其余需确认
+ */
+enum class ShellPolicy {
+    MANUAL, BLACKLIST, WHITELIST
+}
+
+/**
+ * Shell 命令执行策略配置
+ * @param policy 执行策略类型
+ * @param blacklist 黑名单关键词列表（命令包含关键词则需确认）
+ * @param whitelist 白名单关键词列表（命令以关键词开头则自动执行）
+ */
+data class ShellPolicyConfig(
+    val policy: ShellPolicy = ShellPolicy.MANUAL,
+    val blacklist: List<String> = DEFAULT_BLACKLIST,
+    val whitelist: List<String> = DEFAULT_WHITELIST
+) {
+    companion object {
+        val DEFAULT_BLACKLIST = listOf(
+            "rm ", "rm -", "rmdir", "del ", "format", "mkfs",
+            "dd ", "shutdown", "reboot", "> /dev/", "chmod 777"
+        )
+        val DEFAULT_WHITELIST = listOf(
+            "ls", "pwd", "cat ", "echo ", "git ", "find ",
+            "grep ", "head ", "tail ", "wc ", "which ", "whoami"
+        )
+    }
+
+    /**
+     * 判断命令是否需要确认
+     * @return true 表示需要弹确认框，false 表示自动执行
+     */
+    fun needsConfirmation(command: String): Boolean {
+        val cmdLower = command.lowercase(Locale.getDefault())
+        return when (policy) {
+            ShellPolicy.MANUAL -> true
+            ShellPolicy.BLACKLIST -> {
+                blacklist.any { keyword ->
+                    cmdLower.contains(keyword.lowercase(Locale.getDefault()))
+                }
+            }
+            ShellPolicy.WHITELIST -> {
+                !whitelist.any { keyword ->
+                    cmdLower.startsWith(keyword.lowercase(Locale.getDefault()))
+                }
+            }
+        }
+    }
+}
+
+/**
  * 参考 koog 的 ExecuteShellCommandTool
- * 执行 shell 命令，带确认机制和超时控制
+ * 执行 shell 命令，带策略化确认机制和超时控制
  *
- * @param confirmationHandler 确认回调，返回 true 允许执行，false 拒绝。默认自动允许（brave mode）
+ * @param confirmationHandler 确认回调，返回 true 允许执行，false 拒绝
+ * @param policyConfig Shell 命令执行策略配置，控制哪些命令需要确认
  * @param basePath 工作目录限制（安全沙箱），null 表示不限制
  */
 class ExecuteShellCommandTool(
     private val confirmationHandler: suspend (command: String, workingDirectory: String?) -> Boolean = { _, _ -> true },
+    private val policyConfig: ShellPolicyConfig = ShellPolicyConfig(),
     private val basePath: String? = null
 ) : Tool() {
 
@@ -43,10 +100,12 @@ class ExecuteShellCommandTool(
         val timeoutSeconds = obj["timeoutSeconds"]?.jsonPrimitive?.int ?: 60
         val workingDirectory = obj["workingDirectory"]?.jsonPrimitive?.content
 
-        // 确认机制
-        val approved = confirmationHandler(command, workingDirectory)
-        if (!approved) {
-            return "Command execution denied: $command"
+        // 根据策略判断是否需要确认
+        if (policyConfig.needsConfirmation(command)) {
+            val approved = confirmationHandler(command, workingDirectory)
+            if (!approved) {
+                return "Command execution denied: $command"
+            }
         }
 
         // 验证工作目录

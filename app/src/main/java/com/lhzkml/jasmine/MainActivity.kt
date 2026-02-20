@@ -212,9 +212,26 @@ class MainActivity : AppCompatActivity() {
             if (isEnabled("edit_file")) register(EditFileTool(basePath))
             if (isEnabled("list_directory")) register(ListDirectoryTool(basePath))
             if (isEnabled("search_by_regex")) register(RegexSearchTool(basePath))
+            if (isEnabled("find_files")) register(FindFilesTool(basePath))
+            if (isEnabled("delete_file")) register(DeleteFileTool(basePath))
+            if (isEnabled("move_file")) register(MoveFileTool(basePath))
+            if (isEnabled("copy_file")) register(CopyFileTool(basePath))
+            if (isEnabled("append_file")) register(AppendFileTool(basePath))
+            if (isEnabled("file_info")) register(FileInfoTool(basePath))
+            if (isEnabled("create_directory")) register(CreateDirectoryTool(basePath))
 
-            // Shell 命令（带确认对话框）
+            // Shell 命令（根据策略决定确认方式）
             if (isEnabled("execute_shell_command")) {
+                val shellPolicy = ProviderManager.getShellPolicy(this@MainActivity)
+                val blacklist = ProviderManager.getShellBlacklist(this@MainActivity)
+                val whitelist = ProviderManager.getShellWhitelist(this@MainActivity)
+
+                val policyConfig = ShellPolicyConfig(
+                    policy = shellPolicy,
+                    blacklist = blacklist,
+                    whitelist = whitelist
+                )
+
                 register(ExecuteShellCommandTool(
                     confirmationHandler = { command, _ ->
                         val deferred = CompletableDeferred<Boolean>()
@@ -229,6 +246,7 @@ class MainActivity : AppCompatActivity() {
                         }
                         deferred.await()
                     },
+                    policyConfig = policyConfig,
                     basePath = basePath
                 ))
             }

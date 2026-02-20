@@ -330,6 +330,44 @@ object ProviderManager {
         prefs(ctx).edit().putString("brightdata_api_key", key).apply()
     }
 
+    // ========== Shell 命令执行策略 ==========
+
+    fun getShellPolicy(ctx: Context): com.lhzkml.jasmine.core.agent.tools.ShellPolicy {
+        val name = prefs(ctx).getString("shell_policy", null)
+            ?: return com.lhzkml.jasmine.core.agent.tools.ShellPolicy.MANUAL
+        return try {
+            com.lhzkml.jasmine.core.agent.tools.ShellPolicy.valueOf(name)
+        } catch (_: Exception) {
+            com.lhzkml.jasmine.core.agent.tools.ShellPolicy.MANUAL
+        }
+    }
+
+    fun setShellPolicy(ctx: Context, policy: com.lhzkml.jasmine.core.agent.tools.ShellPolicy) {
+        prefs(ctx).edit().putString("shell_policy", policy.name).apply()
+    }
+
+    /** 获取 Shell 黑名单命令关键词列表 */
+    fun getShellBlacklist(ctx: Context): List<String> {
+        val raw = prefs(ctx).getString("shell_blacklist", null)
+            ?: return com.lhzkml.jasmine.core.agent.tools.ShellPolicyConfig.DEFAULT_BLACKLIST
+        return raw.split("\n").filter { it.isNotBlank() }
+    }
+
+    fun setShellBlacklist(ctx: Context, list: List<String>) {
+        prefs(ctx).edit().putString("shell_blacklist", list.joinToString("\n")).apply()
+    }
+
+    /** 获取 Shell 白名单命令关键词列表 */
+    fun getShellWhitelist(ctx: Context): List<String> {
+        val raw = prefs(ctx).getString("shell_whitelist", null)
+            ?: return com.lhzkml.jasmine.core.agent.tools.ShellPolicyConfig.DEFAULT_WHITELIST
+        return raw.split("\n").filter { it.isNotBlank() }
+    }
+
+    fun setShellWhitelist(ctx: Context, list: List<String>) {
+        prefs(ctx).edit().putString("shell_whitelist", list.joinToString("\n")).apply()
+    }
+
     // ========== MCP 服务器设置 ==========
 
     /** 是否启用 MCP 工具 */

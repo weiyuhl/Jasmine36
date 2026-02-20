@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_primary">
+
+    <!-- 顶部栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:background="@color/bg_primary">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBack"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="返回"
+            android:textColor="@color/text_primary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Shell 命令策略"
+            android:textSize="18sp"
+            android:textColor="@color/text_primary"
+            android:gravity="center" />
+
+        <View
+            android:layout_width="48dp"
+            android:layout_height="1dp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- 策略选择 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="执行策略"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="8dp" />
+
+            <RadioGroup
+                android:id="@+id/rgPolicy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:padding="12dp"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/rbManual"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="手动确认 - 所有命令都需要确认"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:paddingVertical="4dp" />
+
+                <RadioButton
+                    android:id="@+id/rbBlacklist"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="黑名单 - 匹配的命令需确认，其余自动执行"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:paddingVertical="4dp" />
+
+                <RadioButton
+                    android:id="@+id/rbWhitelist"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="白名单 - 匹配的命令自动执行，其余需确认"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:paddingVertical="4dp" />
+            </RadioGroup>
+
+            <!-- 黑名单编辑 -->
+            <LinearLayout
+                android:id="@+id/layoutBlacklist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="黑名单关键词（每行一个，命令包含关键词则需确认）"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="8dp" />
+
+                <EditText
+                    android:id="@+id/etBlacklist"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp"
+                    android:background="@drawable/bg_card"
+                    android:padding="12dp"
+                    android:gravity="top"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_primary"
+                    android:inputType="textMultiLine"
+                    android:scrollbars="vertical" />
+            </LinearLayout>
+
+            <!-- 白名单编辑 -->
+            <LinearLayout
+                android:id="@+id/layoutWhitelist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="白名单关键词（每行一个，命令以关键词开头则自动执行）"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="8dp" />
+
+                <EditText
+                    android:id="@+id/etWhitelist"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp"
+                    android:background="@drawable/bg_card"
+                    android:padding="12dp"
+                    android:gravity="top"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_primary"
+                    android:inputType="textMultiLine"
+                    android:scrollbars="vertical" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

@@ -105,6 +105,11 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, McpServerActivity::class.java))
         }
 
+        // Shell 命令策略入口
+        findViewById<LinearLayout>(R.id.layoutShellPolicyEntry).setOnClickListener {
+            startActivity(Intent(this, ShellPolicyActivity::class.java))
+        }
+
         // 智能上下文压缩入口
         tvCompressionInfo = findViewById(R.id.tvCompressionInfo)
         findViewById<LinearLayout>(R.id.layoutCompressionEntry).setOnClickListener {
@@ -171,6 +176,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshPlannerInfo()
         refreshSnapshotInfo()
         refreshEventHandlerInfo()
+        refreshShellPolicyInfo()
     }
 
     private fun refreshTopKVisibility() {
@@ -457,6 +463,15 @@ class SettingsActivity : AppCompatActivity() {
         }
         val filter = ProviderManager.getEventHandlerFilter(this)
         tvEventHandlerInfo.text = if (filter.isEmpty()) "全部事件" else "${filter.size} 类事件"
+    }
+
+    private fun refreshShellPolicyInfo() {
+        val policy = ProviderManager.getShellPolicy(this)
+        findViewById<TextView>(R.id.tvShellPolicyInfo).text = when (policy) {
+            com.lhzkml.jasmine.core.agent.tools.ShellPolicy.MANUAL -> "手动确认"
+            com.lhzkml.jasmine.core.agent.tools.ShellPolicy.BLACKLIST -> "黑名单模式"
+            com.lhzkml.jasmine.core.agent.tools.ShellPolicy.WHITELIST -> "白名单模式"
+        }
     }
 
     private fun formatNumber(n: Int): String {
