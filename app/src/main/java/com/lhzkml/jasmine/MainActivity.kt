@@ -128,6 +128,7 @@ class MainActivity : AppCompatActivity() {
     private val drawerAdapter = DrawerConversationAdapter()
     private var contextManager = ContextManager()
     private var webSearchTool: WebSearchTool? = null
+    private var fetchUrlTool: FetchUrlTool? = null
     private var currentJob: Job? = null
     private var conversationObserverJob: Job? = null
     private var isGenerating = false
@@ -262,6 +263,16 @@ class MainActivity : AppCompatActivity() {
                 webSearchTool = wst
                 if (isEnabled("web_search")) register(wst.search)
                 if (isEnabled("web_scrape")) register(wst.scrape)
+            }
+
+            // URL 抓取工具（不依赖 BrightData）
+            if (isEnabled("fetch_url_as_html") || isEnabled("fetch_url_as_text") || isEnabled("fetch_url_as_json")) {
+                fetchUrlTool?.close()
+                val ft = FetchUrlTool()
+                fetchUrlTool = ft
+                if (isEnabled("fetch_url_as_html")) register(ft.fetchHtml)
+                if (isEnabled("fetch_url_as_text")) register(ft.fetchText)
+                if (isEnabled("fetch_url_as_json")) register(ft.fetchJson)
             }
 
             // DEX/APK 编辑工具
@@ -723,6 +734,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         clientRouter.close()
         webSearchTool?.close()
+        fetchUrlTool?.close()
         tracing?.close()
         mcpClients.forEach { try { it.close() } catch (_: Exception) {} }
     }

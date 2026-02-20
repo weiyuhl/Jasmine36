@@ -40,6 +40,9 @@ class ToolConfigActivity : AppCompatActivity() {
         "execute_shell_command" to "执行命令",
         "web_search" to "网络搜索",
         "web_scrape" to "网页抓取",
+        "fetch_url_as_html" to "抓取网页返回 HTML",
+        "fetch_url_as_text" to "抓取网页返回纯文本",
+        "fetch_url_as_json" to "抓取网页返回 JSON",
         // DEX/APK 编辑工具
         "dex_open_apk" to "打开 APK 查看 DEX 列表",
         "dex_open" to "打开 DEX 文件编辑",
