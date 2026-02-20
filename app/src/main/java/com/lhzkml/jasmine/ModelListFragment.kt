@@ -41,6 +41,7 @@ class ModelListFragment : Fragment() {
     private lateinit var rvModels: RecyclerView
     private lateinit var btnRefresh: MaterialButton
     private lateinit var btnConfirm: MaterialButton
+    private lateinit var tvSelectedNames: TextView
 
     private val adapter = ModelAdapter()
     private var models: List<ModelInfo> = emptyList()
@@ -65,6 +66,7 @@ class ModelListFragment : Fragment() {
         rvModels = view.findViewById(R.id.rvModels)
         btnRefresh = view.findViewById(R.id.btnRefresh)
         btnConfirm = view.findViewById(R.id.btnConfirm)
+        tvSelectedNames = view.findViewById(R.id.tvSelectedNames)
 
         rvModels.layoutManager = LinearLayoutManager(ctx)
         rvModels.adapter = adapter
@@ -152,6 +154,12 @@ class ModelListFragment : Fragment() {
 
     private fun updateSelectedCount() {
         tvSelectedCount.text = "已选 ${checkedModels.size} 个"
+        if (checkedModels.isNotEmpty()) {
+            tvSelectedNames.visibility = View.VISIBLE
+            tvSelectedNames.text = checkedModels.joinToString(", ") { it.substringAfterLast("/") }
+        } else {
+            tvSelectedNames.visibility = View.GONE
+        }
     }
 
     private fun confirmSelection() {

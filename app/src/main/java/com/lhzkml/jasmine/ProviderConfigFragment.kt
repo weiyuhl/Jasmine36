@@ -26,8 +26,6 @@ class ProviderConfigFragment : Fragment() {
     private lateinit var etBaseUrl: EditText
     private lateinit var etChatPath: EditText
     private lateinit var tvChatPathHint: TextView
-    private lateinit var etSelectedModel: EditText
-    private lateinit var tvModelStatus: TextView
 
     // Vertex AI
     private lateinit var layoutVertexAI: LinearLayout
@@ -68,8 +66,6 @@ class ProviderConfigFragment : Fragment() {
         etBaseUrl = view.findViewById(R.id.etBaseUrl)
         etChatPath = view.findViewById(R.id.etChatPath)
         tvChatPathHint = view.findViewById(R.id.tvChatPathHint)
-        etSelectedModel = view.findViewById(R.id.tvSelectedModel)
-        tvModelStatus = view.findViewById(R.id.tvModelStatus)
 
         // Vertex AI views
         layoutVertexAI = view.findViewById(R.id.layoutVertexAI)
@@ -109,15 +105,6 @@ class ProviderConfigFragment : Fragment() {
         // 加载已保存的配置
         ProviderManager.getApiKey(ctx, provider.id)?.let { etApiKey.setText(it) }
         etBaseUrl.setText(ProviderManager.getBaseUrl(ctx, provider.id))
-        val selectedModel = ProviderManager.getModel(ctx, provider.id)
-        etSelectedModel.setText(selectedModel.ifEmpty { "" })
-
-        // 显示已选模型数量
-        val savedModels = ProviderManager.getSelectedModels(ctx, provider.id)
-        if (savedModels.isNotEmpty()) {
-            tvModelStatus.visibility = View.VISIBLE
-            tvModelStatus.text = "已选 ${savedModels.size} 个模型"
-        }
 
         // 加载 API 路径
         val savedPath = ProviderManager.getChatPath(ctx, provider.id)
@@ -144,17 +131,6 @@ class ProviderConfigFragment : Fragment() {
         } else {
             layoutBalance.visibility = View.GONE
         }
-    }
-
-    /** 外部调用：刷新模型状态显示 */
-    fun refreshModelStatus() {
-        if (!isAdded) return
-        val ctx = requireContext()
-        val selectedModel = ProviderManager.getModel(ctx, provider.id)
-        etSelectedModel.setText(selectedModel)
-        val selected = ProviderManager.getSelectedModels(ctx, provider.id)
-        tvModelStatus.visibility = View.VISIBLE
-        tvModelStatus.text = "已选 ${selected.size} 个模型"
     }
 
     private fun setupVertexAI(view: View) {
@@ -282,10 +258,9 @@ class ProviderConfigFragment : Fragment() {
             }
 
             val baseUrl = etBaseUrl.text.toString().trim()
-            val model = etSelectedModel.text.toString().trim().ifEmpty { null }
             val apiKey = etApiKey.text.toString().trim()
 
-            ProviderManager.saveConfig(ctx, provider.id, apiKey, baseUrl.ifEmpty { null }, model)
+            ProviderManager.saveConfig(ctx, provider.id, apiKey, baseUrl.ifEmpty { null }, null)
             ProviderManager.setVertexAIEnabled(ctx, provider.id, true)
             ProviderManager.setVertexProjectId(ctx, provider.id, projectId)
             ProviderManager.setVertexLocation(ctx, provider.id, location)
@@ -301,7 +276,7 @@ class ProviderConfigFragment : Fragment() {
                 Toast.makeText(ctx, "请输入 API 地址", Toast.LENGTH_SHORT).show()
                 return
             }
-            val model = etSelectedModel.text.toString().trim().ifEmpty { null }
+            val model: String? = null
             ProviderManager.saveConfig(ctx, provider.id, apiKey, baseUrl, model)
 
             if (provider.apiType == ApiType.GEMINI) {

@@ -115,42 +115,6 @@
                 android:fontFamily="monospace"
                 android:importantForAutofill="no" />
 
-            <!-- 模型 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="模型"
-                android:textSize="14sp"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold"
-                android:layout_marginTop="16dp" />
-
-            <EditText
-                android:id="@+id/tvSelectedModel"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_input"
-                android:paddingHorizontal="16dp"
-                android:gravity="center_vertical"
-                android:textSize="13sp"
-                android:textColor="@color/text_primary"
-                android:fontFamily="monospace"
-                android:hint="手动输入或滑动到模型列表选择"
-                android:textColorHint="@color/text_secondary"
-                android:singleLine="true"
-                android:inputType="text"
-                android:importantForAutofill="no" />
-
-            <TextView
-                android:id="@+id/tvModelStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textSize="12sp"
-                android:textColor="@color/text_secondary"
-                android:visibility="gone" />
-
             <!-- Vertex AI -->
             <LinearLayout
                 android:id="@+id/layoutVertexAI"

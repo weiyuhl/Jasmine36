@@ -30,11 +30,6 @@ class ProviderConfigActivity : AppCompatActivity() {
         val configFragment = ProviderConfigFragment.newInstance(providerId)
         val modelListFragment = ModelListFragment.newInstance(providerId)
 
-        // 模型列表确认后刷新配置页的模型状态
-        modelListFragment.onModelsConfirmed = {
-            configFragment.refreshModelStatus()
-        }
-
         viewPager.adapter = object : FragmentStateAdapter(this) {
             override fun getItemCount() = 2
             override fun createFragment(position: Int): Fragment {

@@ -45,6 +45,25 @@
             app:rippleColor="@android:color/transparent" />
     </LinearLayout>
 
+    <!-- 已选模型显示 -->
+    <TextView
+        android:id="@+id/tvSelectedNames"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="6dp"
+        android:textSize="11sp"
+        android:textColor="@color/accent"
+        android:background="@color/white"
+        android:maxLines="3"
+        android:ellipsize="end"
+        android:visibility="gone" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider" />
+
     <!-- 模型列表 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvModels"
