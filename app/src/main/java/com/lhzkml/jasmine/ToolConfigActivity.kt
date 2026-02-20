@@ -18,7 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 class ToolConfigActivity : AppCompatActivity() {
 
     private val allTools = listOf(
-        "calculator" to "计算器（四则运算）",
+        "calculator" to "计算器（四则运算/科学计算/进制转换/单位转换/统计）",
         "get_current_time" to "获取当前时间",
         "read_file" to "读取文件",
         "write_file" to "写入文件",

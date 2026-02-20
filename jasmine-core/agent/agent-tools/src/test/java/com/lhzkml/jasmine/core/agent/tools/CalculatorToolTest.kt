@@ -41,8 +41,8 @@ class CalculatorToolTest {
     }
 
     @Test
-    fun `allTools returns 4`() {
-        assertEquals(4, CalculatorTool.allTools().size)
+    fun `allTools returns 8`() {
+        assertEquals(8, CalculatorTool.allTools().size)
     }
 
     @Test

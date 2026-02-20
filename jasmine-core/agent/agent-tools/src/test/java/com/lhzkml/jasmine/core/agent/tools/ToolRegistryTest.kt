@@ -19,7 +19,7 @@ class ToolRegistryTest {
     fun `registerAll`() {
         val registry = ToolRegistry()
         registry.registerAll(*CalculatorTool.allTools().toTypedArray())
-        assertEquals(4, registry.descriptors().size)
+        assertEquals(8, registry.descriptors().size)
     }
 
     @Test
@@ -53,6 +53,6 @@ class ToolRegistryTest {
             register(GetCurrentTimeTool)
             registerAll(*CalculatorTool.allTools().toTypedArray())
         }
-        assertEquals(5, registry.allTools().size)
+        assertEquals(9, registry.allTools().size)
     }
 }
