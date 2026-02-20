@@ -16,7 +16,7 @@ class ProviderManagerTest {
         assertNotNull(provider)
         assertEquals("DeepSeek", provider!!.name)
         assertEquals("https://api.deepseek.com", provider.defaultBaseUrl)
-        assertEquals("deepseek-chat", provider.defaultModel)
+        assertEquals("", provider.defaultModel)
     }
 
     @Test
@@ -25,7 +25,7 @@ class ProviderManagerTest {
         assertNotNull(provider)
         assertEquals("硅基流动", provider!!.name)
         assertEquals("https://api.siliconflow.cn", provider.defaultBaseUrl)
-        assertEquals("deepseek-ai/DeepSeek-V3", provider.defaultModel)
+        assertEquals("", provider.defaultModel)
     }
 
     @Test
@@ -40,7 +40,8 @@ class ProviderManagerTest {
             assertTrue("id should not be empty", provider.id.isNotEmpty())
             assertTrue("name should not be empty", provider.name.isNotEmpty())
             assertTrue("defaultBaseUrl should not be empty", provider.defaultBaseUrl.isNotEmpty())
-            assertTrue("defaultModel should not be empty", provider.defaultModel.isNotEmpty())
+            // defaultModel 已改为空字符串，由用户在模型列表中选择
+            // assertTrue("defaultModel should not be empty", provider.defaultModel.isNotEmpty())
         }
     }
 

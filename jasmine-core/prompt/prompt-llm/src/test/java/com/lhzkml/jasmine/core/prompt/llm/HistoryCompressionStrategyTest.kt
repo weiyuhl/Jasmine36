@@ -105,13 +105,13 @@ class HistoryCompressionStrategyTest {
         }
         val session = LLMSession(client, "gpt-4", p)
 
-        val memoryMsgs = session.prompt.messages.filter {
-            it.content.contains("CONTEXT RESTORATION")
-        }
-        HistoryCompressionStrategy.WholeHistory.compress(session, memoryMsgs)
+        HistoryCompressionStrategy.WholeHistory.compress(session)
 
-        // 记忆消息应该被保留
-        assertTrue(session.prompt.messages.any { it.content.contains("CONTEXT RESTORATION") })
+        // 压缩后应该包含 system、第一条 user 和 TLDR 摘要
+        val msgs = session.prompt.messages
+        assertEquals("system", msgs[0].role)
+        assertTrue(msgs.any { it.role == "user" && it.content == "Q1" })
+        assertTrue(msgs.any { it.content.contains("Key Objectives") })
     }
 
     // ========== WholeHistoryMultipleSystemMessages ==========

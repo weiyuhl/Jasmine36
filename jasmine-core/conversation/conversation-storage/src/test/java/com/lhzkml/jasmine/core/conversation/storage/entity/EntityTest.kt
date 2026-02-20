@@ -7,14 +7,14 @@ class EntityTest {
 
     @Test
     fun `ConversationEntity data class equality`() {
-        val a = ConversationEntity("id1", "title", "deepseek", "model", "You are a helpful assistant.", 1000L, 2000L)
-        val b = ConversationEntity("id1", "title", "deepseek", "model", "You are a helpful assistant.", 1000L, 2000L)
+        val a = ConversationEntity("id1", "title", "deepseek", "model", "You are a helpful assistant.", "", 1000L, 2000L)
+        val b = ConversationEntity("id1", "title", "deepseek", "model", "You are a helpful assistant.", "", 1000L, 2000L)
         assertEquals(a, b)
     }
 
     @Test
     fun `ConversationEntity copy updates fields`() {
-        val original = ConversationEntity("id1", "old", "deepseek", "model", "You are a helpful assistant.", 1000L, 2000L)
+        val original = ConversationEntity("id1", "old", "deepseek", "model", "You are a helpful assistant.", "", 1000L, 2000L)
         val updated = original.copy(title = "new", updatedAt = 3000L)
         assertEquals("new", updated.title)
         assertEquals(3000L, updated.updatedAt)

@@ -131,7 +131,7 @@ class ExecuteShellCommandTool(
         } else null
 
         return try {
-            val isWindows = System.getProperty("os.name").lowercase().contains("win")
+            val isWindows = System.getProperty("os.name")?.lowercase()?.contains("win") == true
             val processBuilder = if (isWindows) {
                 ProcessBuilder("cmd", "/c", command)
             } else {
