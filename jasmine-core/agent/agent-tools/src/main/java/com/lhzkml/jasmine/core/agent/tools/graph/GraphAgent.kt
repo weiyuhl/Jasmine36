@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.agent.tools.graph
 
 import com.lhzkml.jasmine.core.agent.tools.ToolRegistry
+import com.lhzkml.jasmine.core.agent.tools.feature.pipeline.AgentGraphPipeline
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceError
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
 import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
@@ -41,6 +42,7 @@ class GraphAgent<TInput, TOutput>(
     private val strategy: AgentStrategy<TInput, TOutput>,
     private val toolRegistry: ToolRegistry = ToolRegistry(),
     private val tracing: Tracing? = null,
+    private val pipeline: AgentGraphPipeline? = null,
     private val agentId: String = "graph-agent"
 ) {
     /**
@@ -67,7 +69,13 @@ class GraphAgent<TInput, TOutput>(
             session = session,
             toolRegistry = toolRegistry,
             environment = environment,
-            tracing = tracing
+            tracing = tracing,
+            pipeline = pipeline
+        )
+
+        // 触发 Pipeline 事件
+        pipeline?.onAgentStarting(
+            eventId = tracing?.newEventId() ?: "", agentId = agentId, runId = runId, context = context
         )
 
         return try {
@@ -77,14 +85,26 @@ class GraphAgent<TInput, TOutput>(
                 agentId = agentId, result = result.toString().take(100),
                 totalIterations = context.iterations
             ))
+            pipeline?.onAgentCompleted(
+                eventId = tracing?.newEventId() ?: "", agentId = agentId, runId = runId,
+                result = result, context = context
+            )
             result
         } catch (e: Exception) {
             tracing?.emit(TraceEvent.AgentFailed(
                 eventId = tracing.newEventId(), runId = runId,
                 agentId = agentId, error = TraceError.from(e)
             ))
+            pipeline?.onAgentExecutionFailed(
+                eventId = tracing?.newEventId() ?: "", agentId = agentId, runId = runId,
+                throwable = e, context = context
+            )
             throw e
         } finally {
+            pipeline?.onAgentClosing(
+                eventId = tracing?.newEventId() ?: "", agentId = agentId
+            )
+            pipeline?.closeAllFeaturesMessageProcessors()
             session.close()
         }
     }
@@ -121,7 +141,8 @@ class GraphAgent<TInput, TOutput>(
             session = session,
             toolRegistry = toolRegistry,
             environment = environment,
-            tracing = tracing
+            tracing = tracing,
+            pipeline = pipeline
         )
 
         // 通过 storage 传递回调
@@ -133,6 +154,11 @@ class GraphAgent<TInput, TOutput>(
         onNodeExit?.let { context.put(PredefinedStrategies.KEY_ON_NODE_EXIT, it) }
         onEdge?.let { context.put(PredefinedStrategies.KEY_ON_EDGE, it) }
 
+        // 触发 Pipeline 事件
+        pipeline?.onAgentStarting(
+            eventId = tracing?.newEventId() ?: "", agentId = agentId, runId = runId, context = context
+        )
+
         return try {
             val result = strategy.execute(context, input)
             tracing?.emit(TraceEvent.AgentCompleted(
@@ -140,14 +166,26 @@ class GraphAgent<TInput, TOutput>(
                 agentId = agentId, result = result.toString().take(100),
                 totalIterations = context.iterations
             ))
+            pipeline?.onAgentCompleted(
+                eventId = tracing?.newEventId() ?: "", agentId = agentId, runId = runId,
+                result = result, context = context
+            )
             result
         } catch (e: Exception) {
             tracing?.emit(TraceEvent.AgentFailed(
                 eventId = tracing.newEventId(), runId = runId,
                 agentId = agentId, error = TraceError.from(e)
             ))
+            pipeline?.onAgentExecutionFailed(
+                eventId = tracing?.newEventId() ?: "", agentId = agentId, runId = runId,
+                throwable = e, context = context
+            )
             throw e
         } finally {
+            pipeline?.onAgentClosing(
+                eventId = tracing?.newEventId() ?: "", agentId = agentId
+            )
+            pipeline?.closeAllFeaturesMessageProcessors()
             session.close()
         }
     }

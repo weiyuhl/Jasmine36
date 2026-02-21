@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.agent.tools.graph
 
 import com.lhzkml.jasmine.core.agent.tools.ToolRegistry
+import com.lhzkml.jasmine.core.agent.tools.feature.pipeline.AgentPipeline
 import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.LLMSession
@@ -19,6 +20,7 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
  * @param toolRegistry 工具注册表
  * @param environment Agent 环境（工具执行、问题报告）
  * @param tracing 追踪系统（可选）
+ * @param pipeline Feature/Pipeline 系统（可选，移植自 koog）
  * @param storage 自定义存储（节点间共享数据）
  */
 class AgentGraphContext(
@@ -30,6 +32,7 @@ class AgentGraphContext(
     val toolRegistry: ToolRegistry,
     val environment: AgentEnvironment,
     val tracing: Tracing? = null,
+    val pipeline: AgentPipeline? = null,
     val storage: MutableMap<String, Any?> = mutableMapOf()
 ) {
     /** 当前策略名称 */
@@ -63,6 +66,7 @@ class AgentGraphContext(
             toolRegistry = toolRegistry,
             environment = environment,
             tracing = tracing,
+            pipeline = pipeline,
             storage = storage.toMutableMap()
         )
     }

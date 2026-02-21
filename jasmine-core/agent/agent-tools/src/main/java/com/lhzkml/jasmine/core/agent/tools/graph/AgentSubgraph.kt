@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine.core.agent.tools.graph
 
+import com.lhzkml.jasmine.core.agent.tools.feature.pipeline.AgentGraphPipeline
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceError
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
 import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
@@ -74,11 +75,16 @@ class AgentSubgraph<TInput, TOutput>(
      */
     suspend fun execute(context: AgentGraphContext, input: TInput): TOutput? {
         val tracing = context.tracing
+        val graphPipeline = context.pipeline as? AgentGraphPipeline
 
         tracing?.emit(TraceEvent.SubgraphStarting(
             eventId = tracing.newEventId(), runId = context.runId,
             subgraphName = name, input = input.toString().take(100)
         ))
+        graphPipeline?.onSubgraphExecutionStarting(
+            eventId = tracing?.newEventId() ?: "", subgraphName = name,
+            input = input.toString().take(100), context = context
+        )
 
         // 根据 ToolSelectionStrategy 过滤工具
         val originalTools = context.session.tools
@@ -108,6 +114,10 @@ class AgentSubgraph<TInput, TOutput>(
                     eventId = tracing.newEventId(), runId = context.runId,
                     nodeName = currentNode.name, input = currentInput.toString().take(100)
                 ))
+                graphPipeline?.onNodeExecutionStarting(
+                    eventId = tracing?.newEventId() ?: "", nodeName = currentNode.name,
+                    input = currentInput.toString().take(100), context = context
+                )
 
                 // 执行当前节点
                 @Suppress("UNCHECKED_CAST")
@@ -119,6 +129,10 @@ class AgentSubgraph<TInput, TOutput>(
                         nodeName = currentNode.name, input = currentInput.toString().take(100),
                         error = TraceError.from(e)
                     ))
+                    graphPipeline?.onNodeExecutionFailed(
+                        eventId = tracing?.newEventId() ?: "", nodeName = currentNode.name,
+                        input = currentInput.toString().take(100), throwable = e, context = context
+                    )
                     throw e
                 }
 
@@ -128,6 +142,11 @@ class AgentSubgraph<TInput, TOutput>(
                     nodeName = currentNode.name, input = currentInput.toString().take(100),
                     output = nodeOutput.toString().take(100)
                 ))
+                graphPipeline?.onNodeExecutionCompleted(
+                    eventId = tracing?.newEventId() ?: "", nodeName = currentNode.name,
+                    input = currentInput.toString().take(100), output = nodeOutput.toString().take(100),
+                    context = context
+                )
 
                 // 如果到达 finish 节点，返回结果
                 if (currentNode === finish) {
@@ -137,6 +156,11 @@ class AgentSubgraph<TInput, TOutput>(
                         eventId = tracing.newEventId(), runId = context.runId,
                         subgraphName = name, result = result.toString().take(100)
                     ))
+                    graphPipeline?.onSubgraphExecutionCompleted(
+                        eventId = tracing?.newEventId() ?: "", subgraphName = name,
+                        input = input.toString().take(100), output = result.toString().take(100),
+                        context = context
+                    )
                     return result
                 }
 
@@ -153,6 +177,10 @@ class AgentSubgraph<TInput, TOutput>(
                 eventId = tracing.newEventId(), runId = context.runId,
                 subgraphName = name, error = TraceError.from(e)
             ))
+            graphPipeline?.onSubgraphExecutionFailed(
+                eventId = tracing?.newEventId() ?: "", subgraphName = name,
+                input = input.toString().take(100), throwable = e, context = context
+            )
             throw e
         } finally {
             // 恢复原始工具列表
