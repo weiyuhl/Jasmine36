@@ -48,12 +48,13 @@ object PredefinedStrategies {
      * @param runMode 工具调用模式，默认 SEQUENTIAL
      */
     fun singleRunStrategy(
-        runMode: ToolCalls = ToolCalls.SEQUENTIAL
+        runMode: ToolCalls = ToolCalls.SEQUENTIAL,
+        toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL
     ): AgentStrategy<String, String> {
         return when (runMode) {
-            ToolCalls.SEQUENTIAL -> singleRunWithMultipleTools(parallelTools = false)
-            ToolCalls.PARALLEL -> singleRunWithMultipleTools(parallelTools = true)
-            ToolCalls.SINGLE_RUN_SEQUENTIAL -> singleRunSingleTool()
+            ToolCalls.SEQUENTIAL -> singleRunWithMultipleTools(parallelTools = false, toolSelection = toolSelection)
+            ToolCalls.PARALLEL -> singleRunWithMultipleTools(parallelTools = true, toolSelection = toolSelection)
+            ToolCalls.SINGLE_RUN_SEQUENTIAL -> singleRunSingleTool(toolSelection = toolSelection)
         }
     }
 
@@ -61,8 +62,9 @@ object PredefinedStrategies {
      * 支持多工具调用的单轮策略（顺序或并行）
      * 移植自 koog 的 singleRunWithParallelAbility
      */
-    private fun singleRunWithMultipleTools(parallelTools: Boolean): AgentStrategy<String, String> {
+    private fun singleRunWithMultipleTools(parallelTools: Boolean, toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL): AgentStrategy<String, String> {
         return graphStrategy("single_run_sequential") {
+            this.toolSelection = toolSelection
 
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequest") { input ->
                 fireNodeEnter("nodeLLMRequest")
@@ -133,8 +135,9 @@ object PredefinedStrategies {
      * 单工具调用的单轮策略
      * 移植自 koog 的 singleRunModeStrategy
      */
-    private fun singleRunSingleTool(): AgentStrategy<String, String> {
+    private fun singleRunSingleTool(toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL): AgentStrategy<String, String> {
         return graphStrategy("single_run") {
+            this.toolSelection = toolSelection
 
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequest") { input ->
                 fireNodeEnter("nodeLLMRequest")
@@ -187,17 +190,19 @@ object PredefinedStrategies {
      * @param runMode 工具调用模式
      */
     fun singleRunStreamStrategy(
-        runMode: ToolCalls = ToolCalls.SEQUENTIAL
+        runMode: ToolCalls = ToolCalls.SEQUENTIAL,
+        toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL
     ): AgentStrategy<String, String> {
         return when (runMode) {
-            ToolCalls.SEQUENTIAL -> singleRunStreamWithMultipleTools(parallelTools = false)
-            ToolCalls.PARALLEL -> singleRunStreamWithMultipleTools(parallelTools = true)
-            ToolCalls.SINGLE_RUN_SEQUENTIAL -> singleRunStreamSingleTool()
+            ToolCalls.SEQUENTIAL -> singleRunStreamWithMultipleTools(parallelTools = false, toolSelection = toolSelection)
+            ToolCalls.PARALLEL -> singleRunStreamWithMultipleTools(parallelTools = true, toolSelection = toolSelection)
+            ToolCalls.SINGLE_RUN_SEQUENTIAL -> singleRunStreamSingleTool(toolSelection = toolSelection)
         }
     }
 
-    private fun singleRunStreamWithMultipleTools(parallelTools: Boolean): AgentStrategy<String, String> {
+    private fun singleRunStreamWithMultipleTools(parallelTools: Boolean, toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL): AgentStrategy<String, String> {
         return graphStrategy("single_run_stream") {
+            this.toolSelection = toolSelection
 
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequestStream") { input ->
                 fireNodeEnter("nodeLLMRequest")
@@ -282,8 +287,9 @@ object PredefinedStrategies {
         }
     }
 
-    private fun singleRunStreamSingleTool(): AgentStrategy<String, String> {
+    private fun singleRunStreamSingleTool(toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL): AgentStrategy<String, String> {
         return graphStrategy("single_run_stream") {
+            this.toolSelection = toolSelection
 
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequestStream") { input ->
                 fireNodeEnter("nodeLLMRequest")

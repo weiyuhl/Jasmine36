@@ -541,6 +541,94 @@ object ProviderManager {
         prefs(ctx).edit().putString("agent_strategy", strategy.name).apply()
     }
 
+    // ========== 图策略子选项 ==========
+
+    /**
+     * 图策略工具调用模式
+     * 移植自 koog 的 ToolCalls 枚举
+     */
+    enum class GraphToolCallMode {
+        SEQUENTIAL,           // 多工具顺序执行（默认）
+        PARALLEL,             // 多工具并行执行
+        SINGLE_RUN_SEQUENTIAL // 单工具顺序执行
+    }
+
+    fun getGraphToolCallMode(ctx: Context): GraphToolCallMode {
+        val name = prefs(ctx).getString("graph_tool_call_mode", null) ?: return GraphToolCallMode.SEQUENTIAL
+        return try { GraphToolCallMode.valueOf(name) } catch (_: Exception) { GraphToolCallMode.SEQUENTIAL }
+    }
+
+    fun setGraphToolCallMode(ctx: Context, mode: GraphToolCallMode) {
+        prefs(ctx).edit().putString("graph_tool_call_mode", mode.name).apply()
+    }
+
+    /**
+     * 工具选择策略
+     * 移植自 koog 的 ToolSelectionStrategy
+     */
+    enum class ToolSelectionStrategyType {
+        ALL,                  // 使用所有可用工具（默认）
+        NONE,                 // 不使用任何工具
+        BY_NAME,              // 按名称过滤
+        AUTO_SELECT_FOR_TASK  // LLM 自动选择
+    }
+
+    fun getToolSelectionStrategy(ctx: Context): ToolSelectionStrategyType {
+        val name = prefs(ctx).getString("tool_selection_strategy", null) ?: return ToolSelectionStrategyType.ALL
+        return try { ToolSelectionStrategyType.valueOf(name) } catch (_: Exception) { ToolSelectionStrategyType.ALL }
+    }
+
+    fun setToolSelectionStrategy(ctx: Context, strategy: ToolSelectionStrategyType) {
+        prefs(ctx).edit().putString("tool_selection_strategy", strategy.name).apply()
+    }
+
+    /** ByName 策略的工具名列表（逗号分隔） */
+    fun getToolSelectionNames(ctx: Context): Set<String> {
+        val raw = prefs(ctx).getString("tool_selection_names", null) ?: return emptySet()
+        return raw.split(",").filter { it.isNotBlank() }.toSet()
+    }
+
+    fun setToolSelectionNames(ctx: Context, names: Set<String>) {
+        prefs(ctx).edit().putString("tool_selection_names", names.joinToString(",")).apply()
+    }
+
+    /** AutoSelectForTask 策略的子任务描述 */
+    fun getToolSelectionTaskDesc(ctx: Context): String =
+        prefs(ctx).getString("tool_selection_task_desc", null) ?: ""
+
+    fun setToolSelectionTaskDesc(ctx: Context, desc: String) {
+        prefs(ctx).edit().putString("tool_selection_task_desc", desc).apply()
+    }
+
+    /**
+     * ToolChoice 模式
+     * 移植自 koog 的 ToolChoice
+     */
+    enum class ToolChoiceMode {
+        DEFAULT,   // 不指定（由模型决定，默认）
+        AUTO,      // 自动选择
+        REQUIRED,  // 强制调用工具
+        NONE,      // 禁止调用工具
+        NAMED      // 强制使用指定工具
+    }
+
+    fun getToolChoiceMode(ctx: Context): ToolChoiceMode {
+        val name = prefs(ctx).getString("tool_choice_mode", null) ?: return ToolChoiceMode.DEFAULT
+        return try { ToolChoiceMode.valueOf(name) } catch (_: Exception) { ToolChoiceMode.DEFAULT }
+    }
+
+    fun setToolChoiceMode(ctx: Context, mode: ToolChoiceMode) {
+        prefs(ctx).edit().putString("tool_choice_mode", mode.name).apply()
+    }
+
+    /** Named 模式的工具名 */
+    fun getToolChoiceNamedTool(ctx: Context): String =
+        prefs(ctx).getString("tool_choice_named_tool", null) ?: ""
+
+    fun setToolChoiceNamedTool(ctx: Context, name: String) {
+        prefs(ctx).edit().putString("tool_choice_named_tool", name).apply()
+    }
+
     // ========== 执行追踪设置 ==========
 
     /** 是否启用执行追踪 */

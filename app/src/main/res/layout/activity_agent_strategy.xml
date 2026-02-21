@@ -20,7 +20,7 @@
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="← 返回"
+            android:text="&#x2190; &#x8FD4;&#x56DE;"
             android:textColor="@color/text_primary"
             android:textSize="14sp"
             android:minWidth="0dp"
@@ -33,7 +33,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Agent 策略"
+            android:text="Agent &#x7B56;&#x7565;"
             android:textSize="17sp"
             android:textColor="@color/text_primary"
             android:textStyle="bold"
@@ -92,7 +92,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="简单循环"
+                            android:text="&#x7B80;&#x5355;&#x5FAA;&#x73AF;"
                             android:textSize="16sp"
                             android:textColor="@color/text_primary"
                             android:textStyle="bold" />
@@ -100,7 +100,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="ToolExecutor while 循环，简单高效"
+                            android:text="ToolExecutor while &#x5FAA;&#x73AF;&#xFF0C;&#x7B80;&#x5355;&#x9AD8;&#x6548;"
                             android:textSize="12sp"
                             android:textColor="@color/text_secondary"
                             android:layout_marginTop="2dp" />
@@ -123,7 +123,6 @@
                     android:layout_marginTop="12dp"
                     android:gravity="center_horizontal">
 
-                    <!-- 流程：发送消息 → LLM → 有工具? → 执行 → 循环 / 返回结果 -->
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -133,7 +132,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="[Send] 发送"
+                            android:text="[Send] &#x53D1;&#x9001;"
                             android:textSize="11sp"
                             android:background="@drawable/bg_node"
                             android:paddingHorizontal="8dp"
@@ -143,7 +142,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text=" → "
+                            android:text=" &#x2192; "
                             android:textSize="11sp"
                             android:textColor="@color/text_secondary" />
 
@@ -160,14 +159,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text=" → "
+                            android:text=" &#x2192; "
                             android:textSize="11sp"
                             android:textColor="@color/text_secondary" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="[Tool] 工具?"
+                            android:text="[Tool] &#x5DE5;&#x5177;?"
                             android:textSize="11sp"
                             android:background="@drawable/bg_node"
                             android:paddingHorizontal="8dp"
@@ -177,14 +176,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text=" → "
+                            android:text=" &#x2192; "
                             android:textSize="11sp"
                             android:textColor="@color/text_secondary" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="[OK] 结果"
+                            android:text="[OK] &#x7ED3;&#x679C;"
                             android:textSize="11sp"
                             android:background="@drawable/bg_node"
                             android:paddingHorizontal="8dp"
@@ -195,7 +194,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="&lt;- 有工具调用时循环"
+                        android:text="&lt;- &#x6709;&#x5DE5;&#x5177;&#x8C03;&#x7528;&#x65F6;&#x5FAA;&#x73AF;"
                         android:textSize="10sp"
                         android:textColor="@color/text_secondary"
                         android:layout_marginTop="4dp" />
@@ -238,7 +237,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="图策略"
+                            android:text="&#x56FE;&#x7B56;&#x7565;"
                             android:textSize="16sp"
                             android:textColor="@color/text_primary"
                             android:textStyle="bold" />
@@ -246,7 +245,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="GraphAgent 节点图执行，参考 koog"
+                            android:text="GraphAgent &#x8282;&#x70B9;&#x56FE;&#x6267;&#x884C;&#xFF0C;&#x53C2;&#x8003; koog"
                             android:textSize="12sp"
                             android:textColor="@color/text_secondary"
                             android:layout_marginTop="2dp" />
@@ -261,7 +260,7 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- 图策略流程图：竖向节点图 -->
+                <!-- 图策略流程图 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -269,7 +268,6 @@
                     android:layout_marginTop="12dp"
                     android:gravity="center_horizontal">
 
-                    <!-- Start -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -283,11 +281,10 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="↓"
+                        android:text="&#x2193;"
                         android:textSize="14sp"
                         android:textColor="@color/text_secondary" />
 
-                    <!-- nodeLLMRequest -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -298,7 +295,6 @@
                         android:paddingVertical="6dp"
                         android:textColor="@color/text_primary" />
 
-                    <!-- 分支 -->
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -316,7 +312,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="↙ tool_calls"
+                                android:text="&#x2199; tool_calls"
                                 android:textSize="10sp"
                                 android:textColor="#FF2196F3" />
 
@@ -333,7 +329,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="↓"
+                                android:text="&#x2193;"
                                 android:textSize="12sp"
                                 android:textColor="@color/text_secondary" />
 
@@ -350,7 +346,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="↑ 循环"
+                                android:text="&#x2191; &#x5FAA;&#x73AF;"
                                 android:textSize="10sp"
                                 android:textColor="#FFFF9800" />
                         </LinearLayout>
@@ -365,20 +361,19 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="↘ assistant"
+                                android:text="&#x2198; assistant"
                                 android:textSize="10sp"
                                 android:textColor="#FF4CAF50" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="↓"
+                                android:text="&#x2193;"
                                 android:textSize="12sp"
                                 android:textColor="@color/text_secondary" />
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- Finish -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -409,7 +404,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="策略说明"
+                    android:text="&#x7B56;&#x7565;&#x8BF4;&#x660E;"
                     android:textSize="15sp"
                     android:textColor="@color/text_primary"
                     android:textStyle="bold" />
@@ -424,6 +419,691 @@
                     android:lineSpacingExtra="4dp"
                     android:layout_marginTop="8dp" />
             </LinearLayout>
+
+            <!-- ========== 图策略子选项（仅图策略时显示） ========== -->
+            <LinearLayout
+                android:id="@+id/layoutGraphOptions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:layout_marginTop="16dp">
+
+                <!-- ===== 工具调用模式 ===== -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="&#x5DE5;&#x5177;&#x8C03;&#x7528;&#x6A21;&#x5F0F;"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="&#x79FB;&#x690D;&#x81EA; koog ToolCalls&#xFF0C;&#x63A7;&#x5236;&#x591A;&#x5DE5;&#x5177;&#x8C03;&#x7528;&#x7684;&#x6267;&#x884C;&#x65B9;&#x5F0F;"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Sequential -->
+                <LinearLayout
+                    android:id="@+id/cardModeSequential"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="SEQUENTIAL"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x591A;&#x5DE5;&#x5177;&#x987A;&#x5E8F;&#x6267;&#x884C;&#xFF08;&#x9ED8;&#x8BA4;&#xFF09;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvModeSeqCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Parallel -->
+                <LinearLayout
+                    android:id="@+id/cardModeParallel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="PARALLEL"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x591A;&#x5DE5;&#x5177;&#x5E76;&#x884C;&#x6267;&#x884C;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvModeParCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Single Run Sequential -->
+                <LinearLayout
+                    android:id="@+id/cardModeSingle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="SINGLE_RUN_SEQUENTIAL"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x5355;&#x5DE5;&#x5177;&#x987A;&#x5E8F;&#x6267;&#x884C;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvModeSingleCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    android:layout_marginVertical="12dp" />
+
+                <!-- ===== 工具选择策略 ===== -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="&#x5DE5;&#x5177;&#x9009;&#x62E9;&#x7B56;&#x7565;"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="&#x79FB;&#x690D;&#x81EA; koog ToolSelectionStrategy&#xFF0C;&#x51B3;&#x5B9A;&#x5B50;&#x56FE;&#x53EF;&#x7528;&#x7684;&#x5DE5;&#x5177;&#x96C6;&#x5408;"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- ALL -->
+                <LinearLayout
+                    android:id="@+id/cardSelAll"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="ALL"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x4F7F;&#x7528;&#x6240;&#x6709;&#x53EF;&#x7528;&#x5DE5;&#x5177;&#xFF08;&#x9ED8;&#x8BA4;&#xFF09;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvSelAllCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- NONE -->
+                <LinearLayout
+                    android:id="@+id/cardSelNone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="NONE"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x4E0D;&#x4F7F;&#x7528;&#x4EFB;&#x4F55;&#x5DE5;&#x5177;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvSelNoneCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- BY_NAME -->
+                <LinearLayout
+                    android:id="@+id/cardSelByName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="BY_NAME"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x6309;&#x540D;&#x79F0;&#x8FC7;&#x6EE4;&#x5DE5;&#x5177;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvSelByNameCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- ByName 输入框 -->
+                <LinearLayout
+                    android:id="@+id/layoutSelByNameInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginBottom="6dp"
+                    android:paddingHorizontal="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="&#x5DE5;&#x5177;&#x540D;&#x79F0;&#xFF08;&#x9017;&#x53F7;&#x5206;&#x9694;&#xFF09;"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginBottom="4dp" />
+
+                    <EditText
+                        android:id="@+id/etSelByNameTools"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="read_file,write_file,shell"
+                        android:textSize="13sp"
+                        android:background="@drawable/bg_card"
+                        android:padding="10dp"
+                        android:inputType="text"
+                        android:importantForAutofill="no" />
+                </LinearLayout>
+
+                <!-- AUTO_SELECT_FOR_TASK -->
+                <LinearLayout
+                    android:id="@+id/cardSelAuto"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="AUTO_SELECT_FOR_TASK"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="LLM &#x6839;&#x636E;&#x5B50;&#x4EFB;&#x52A1;&#x63CF;&#x8FF0;&#x81EA;&#x52A8;&#x9009;&#x62E9;&#x5DE5;&#x5177;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvSelAutoCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- AutoSelect 输入框 -->
+                <LinearLayout
+                    android:id="@+id/layoutSelAutoInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginBottom="6dp"
+                    android:paddingHorizontal="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="&#x5B50;&#x4EFB;&#x52A1;&#x63CF;&#x8FF0;"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginBottom="4dp" />
+
+                    <EditText
+                        android:id="@+id/etSelAutoTaskDesc"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Read and analyze source code files"
+                        android:textSize="13sp"
+                        android:background="@drawable/bg_card"
+                        android:padding="10dp"
+                        android:inputType="textMultiLine"
+                        android:minLines="2"
+                        android:importantForAutofill="no" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    android:layout_marginVertical="12dp" />
+
+                <!-- ===== ToolChoice ===== -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ToolChoice"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="&#x79FB;&#x690D;&#x81EA; koog ToolChoice&#xFF0C;&#x63A7;&#x5236; LLM &#x662F;&#x5426;/&#x5982;&#x4F55;&#x8C03;&#x7528;&#x5DE5;&#x5177;"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- DEFAULT -->
+                <LinearLayout
+                    android:id="@+id/cardTcDefault"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="DEFAULT"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x4E0D;&#x6307;&#x5B9A;&#xFF0C;&#x7531;&#x6A21;&#x578B;&#x51B3;&#x5B9A;&#xFF08;&#x9ED8;&#x8BA4;&#xFF09;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvTcDefaultCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- AUTO -->
+                <LinearLayout
+                    android:id="@+id/cardTcAuto"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="AUTO"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="LLM &#x81EA;&#x52A8;&#x51B3;&#x5B9A;&#x662F;&#x5426;&#x8C03;&#x7528;&#x5DE5;&#x5177;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvTcAutoCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- REQUIRED -->
+                <LinearLayout
+                    android:id="@+id/cardTcRequired"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="REQUIRED"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x5F3A;&#x5236; LLM &#x8C03;&#x7528;&#x5DE5;&#x5177;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvTcRequiredCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- NONE -->
+                <LinearLayout
+                    android:id="@+id/cardTcNone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="NONE"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x7981;&#x6B62; LLM &#x8C03;&#x7528;&#x5DE5;&#x5177;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvTcNoneCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- NAMED -->
+                <LinearLayout
+                    android:id="@+id/cardTcNamed"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_strategy_card"
+                    android:padding="12dp"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="NAMED"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&#x5F3A;&#x5236;&#x4F7F;&#x7528;&#x6307;&#x5B9A;&#x5DE5;&#x5177;"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvTcNamedCheck"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="#FF2196F3"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Named 输入框 -->
+                <LinearLayout
+                    android:id="@+id/layoutTcNamedInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginBottom="6dp"
+                    android:paddingHorizontal="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="&#x5DE5;&#x5177;&#x540D;&#x79F0;"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginBottom="4dp" />
+
+                    <EditText
+                        android:id="@+id/etTcNamedTool"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="calculator"
+                        android:textSize="13sp"
+                        android:background="@drawable/bg_card"
+                        android:padding="10dp"
+                        android:inputType="text"
+                        android:importantForAutofill="no" />
+                </LinearLayout>
+
+            </LinearLayout>
+            <!-- ========== 图策略子选项结束 ========== -->
 
         </LinearLayout>
     </ScrollView>

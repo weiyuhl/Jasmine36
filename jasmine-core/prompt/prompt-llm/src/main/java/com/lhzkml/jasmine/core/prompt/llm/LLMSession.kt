@@ -174,7 +174,8 @@ class LLMSession(
             model = model,
             maxTokens = prompt.maxTokens,
             samplingParams = prompt.samplingParams,
-            tools = tools
+            tools = tools,
+            toolChoice = prompt.toolChoice
         )
         // 自动追加 response
         appendPrompt {
@@ -347,6 +348,7 @@ class LLMSession(
             maxTokens = prompt.maxTokens,
             samplingParams = prompt.samplingParams,
             tools = tools,
+            toolChoice = prompt.toolChoice,
             onChunk = onChunk,
             onThinking = onThinking
         )

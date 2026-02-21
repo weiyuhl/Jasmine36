@@ -63,6 +63,8 @@ import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
 import com.lhzkml.jasmine.core.agent.tools.graph.GenericAgentEnvironment
 import com.lhzkml.jasmine.core.agent.tools.graph.GraphAgent
 import com.lhzkml.jasmine.core.agent.tools.graph.PredefinedStrategies
+import com.lhzkml.jasmine.core.agent.tools.graph.ToolCalls
+import com.lhzkml.jasmine.core.agent.tools.graph.ToolSelectionStrategy
 import com.lhzkml.jasmine.core.agent.tools.event.EventHandler
 import com.lhzkml.jasmine.core.agent.tools.event.*
 import com.lhzkml.jasmine.core.agent.tools.snapshot.Persistence
@@ -1301,7 +1303,28 @@ class MainActivity : AppCompatActivity() {
 
                         ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH -> {
                             // 图策略模式：使用 GraphAgent + PredefinedStrategies（流式）
-                            val strategy = PredefinedStrategies.singleRunStreamStrategy()
+                            // 读取工具调用模式设置
+                            val toolCallMode = when (ProviderManager.getGraphToolCallMode(this@MainActivity)) {
+                                ProviderManager.GraphToolCallMode.SEQUENTIAL -> ToolCalls.SEQUENTIAL
+                                ProviderManager.GraphToolCallMode.PARALLEL -> ToolCalls.PARALLEL
+                                ProviderManager.GraphToolCallMode.SINGLE_RUN_SEQUENTIAL -> ToolCalls.SINGLE_RUN_SEQUENTIAL
+                            }
+
+                            // 读取工具选择策略设置
+                            val toolSelStrategy = when (ProviderManager.getToolSelectionStrategy(this@MainActivity)) {
+                                ProviderManager.ToolSelectionStrategyType.ALL -> ToolSelectionStrategy.ALL
+                                ProviderManager.ToolSelectionStrategyType.NONE -> ToolSelectionStrategy.NONE
+                                ProviderManager.ToolSelectionStrategyType.BY_NAME -> {
+                                    val names = ProviderManager.getToolSelectionNames(this@MainActivity)
+                                    if (names.isNotEmpty()) ToolSelectionStrategy.ByName(names) else ToolSelectionStrategy.ALL
+                                }
+                                ProviderManager.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK -> {
+                                    val desc = ProviderManager.getToolSelectionTaskDesc(this@MainActivity)
+                                    if (desc.isNotEmpty()) ToolSelectionStrategy.AutoSelectForTask(desc) else ToolSelectionStrategy.ALL
+                                }
+                            }
+
+                            val strategy = PredefinedStrategies.singleRunStreamStrategy(toolCallMode, toolSelStrategy)
 
                             val graphAgent = GraphAgent(
                                 client = client,
@@ -1322,6 +1345,20 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             }.copy(maxTokens = maxTokens, samplingParams = samplingParams)
+
+                            // 读取 ToolChoice 设置并应用到 Prompt
+                            val toolChoiceMode = ProviderManager.getToolChoiceMode(this@MainActivity)
+                            val toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice? = when (toolChoiceMode) {
+                                ProviderManager.ToolChoiceMode.DEFAULT -> null
+                                ProviderManager.ToolChoiceMode.AUTO -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Auto
+                                ProviderManager.ToolChoiceMode.REQUIRED -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Required
+                                ProviderManager.ToolChoiceMode.NONE -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.None
+                                ProviderManager.ToolChoiceMode.NAMED -> {
+                                    val name = ProviderManager.getToolChoiceNamedTool(this@MainActivity)
+                                    if (name.isNotEmpty()) com.lhzkml.jasmine.core.prompt.model.ToolChoice.Named(name) else null
+                                }
+                            }
+                            val finalGraphPrompt = if (toolChoice != null) graphPrompt.withToolChoice(toolChoice) else graphPrompt
 
                             // 显示图策略流程头
                             withContext(Dispatchers.Main) {
@@ -1394,7 +1431,7 @@ class MainActivity : AppCompatActivity() {
                             }
 
                             val graphResult = graphAgent.runWithCallbacks(
-                                prompt = graphPrompt,
+                                prompt = finalGraphPrompt,
                                 input = message,
                                 onChunk = chunkCallback,
                                 onThinking = thinkingCallback,
