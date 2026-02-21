@@ -12,12 +12,14 @@ import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
  * @param start 起始节点
  * @param finish 结束节点
  * @param maxIterations 最大迭代次数（防止死循环）
+ * @param toolSelectionStrategy 工具选择策略，决定子图执行时可用的工具集合
  */
 class AgentSubgraph<TInput, TOutput>(
     val name: String,
     val start: StartNode<TInput>,
     val finish: FinishNode<TOutput>,
-    private val maxIterations: Int = 100
+    private val maxIterations: Int = 100,
+    private val toolSelectionStrategy: ToolSelectionStrategy = ToolSelectionStrategy.ALL
 ) {
     /** 子图中所有注册的节点（用于元数据/追踪） */
     internal val nodes = mutableListOf<AgentNode<*, *>>()
@@ -34,6 +36,7 @@ class AgentSubgraph<TInput, TOutput>(
     /**
      * 执行子图
      * 从 start 节点开始，沿着边依次执行，直到到达 finish 节点。
+     * 执行前根据 toolSelectionStrategy 过滤可用工具。
      */
     suspend fun execute(context: AgentGraphContext, input: TInput): TOutput? {
         val tracing = context.tracing
@@ -42,6 +45,10 @@ class AgentSubgraph<TInput, TOutput>(
             eventId = tracing.newEventId(), runId = context.runId,
             subgraphName = name, input = input.toString().take(100)
         ))
+
+        // 根据 ToolSelectionStrategy 过滤工具
+        val originalTools = context.session.tools
+        context.session.tools = selectTools(originalTools)
 
         var currentNode: AgentNode<*, *> = start
         var currentInput: Any? = input
@@ -105,6 +112,27 @@ class AgentSubgraph<TInput, TOutput>(
                 subgraphName = name, error = TraceError.from(e)
             ))
             throw e
+        } finally {
+            // 恢复原始工具列表
+            context.session.tools = originalTools
+        }
+    }
+
+    /**
+     * 根据 ToolSelectionStrategy 过滤工具列表
+     * 移植自 koog 的 AIAgentSubgraph.selectTools
+     */
+    private fun selectTools(
+        allTools: List<com.lhzkml.jasmine.core.prompt.model.ToolDescriptor>
+    ): List<com.lhzkml.jasmine.core.prompt.model.ToolDescriptor> {
+        return when (toolSelectionStrategy) {
+            is ToolSelectionStrategy.ALL -> allTools
+            is ToolSelectionStrategy.NONE -> emptyList()
+            is ToolSelectionStrategy.Tools -> toolSelectionStrategy.tools
+            is ToolSelectionStrategy.ByName -> {
+                val nameSet = toolSelectionStrategy.names
+                allTools.filter { it.name in nameSet }
+            }
         }
     }
 }

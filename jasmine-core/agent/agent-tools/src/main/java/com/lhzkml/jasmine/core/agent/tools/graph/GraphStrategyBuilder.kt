@@ -41,6 +41,21 @@ class GraphStrategyBuilder<TInput, TOutput>(
     private val nodes = mutableListOf<AgentNode<*, *>>()
 
     /**
+     * 工具选择策略
+     * 移植自 koog 的 AIAgentSubgraph.toolSelectionStrategy，
+     * 决定子图执行时可用的工具集合。
+     *
+     * 使用方式：
+     * ```kotlin
+     * val strategy = graphStrategy<String, String>("my-strategy") {
+     *     toolSelection = ToolSelectionStrategy.ByName(setOf("read_file", "write_file"))
+     *     // ...
+     * }
+     * ```
+     */
+    var toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL
+
+    /**
      * 定义一个节点（直接返回）
      */
     fun <I, O> node(
@@ -110,7 +125,7 @@ class GraphStrategyBuilder<TInput, TOutput>(
     }
 
     internal fun build(): AgentStrategy<TInput, TOutput> {
-        val subgraph = AgentSubgraph(name, nodeStart, nodeFinish)
+        val subgraph = AgentSubgraph(name, nodeStart, nodeFinish, toolSelectionStrategy = toolSelection)
         for (node in nodes) {
             subgraph.registerNode(node)
         }
