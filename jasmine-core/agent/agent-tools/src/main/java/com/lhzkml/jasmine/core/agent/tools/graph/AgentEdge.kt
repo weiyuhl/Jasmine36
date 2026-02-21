@@ -288,3 +288,26 @@ infix fun <TFrom, TTo> EdgeBuilder<TFrom, List<ChatResult>, TTo>.onMultipleReaso
         .onCondition { it.isNotEmpty() }
         .onCondition { reasoningResults -> block(reasoningResults) }
 }
+
+/**
+ * 按工具名过滤工具执行结果
+ * 移植自 koog 的 onToolResult(tool, block)，适配 jasmine 的 ReceivedToolResult。
+ *
+ * 当 ReceivedToolResult 的工具名匹配且条件满足时匹配。
+ *
+ * 使用方式：
+ * ```kotlin
+ * edge(nodeExecTool forwardTo nodeNext onToolResult("calculator") { result -> result.resultKind is ToolResultKind.Success })
+ * ```
+ *
+ * @param toolName 工具名称
+ * @param block 条件函数，接收匹配的 ReceivedToolResult
+ */
+fun <TFrom, TTo> EdgeBuilder<TFrom, ReceivedToolResult, TTo>.onToolResult(
+    toolName: String,
+    block: suspend (ReceivedToolResult) -> Boolean
+): EdgeBuilder<TFrom, ReceivedToolResult, TTo> {
+    return onCondition { result ->
+        result.tool == toolName && block(result)
+    }
+}
