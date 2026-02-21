@@ -6,7 +6,8 @@ import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
 import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
-import com.lhzkml.jasmine.core.prompt.llm.LLMSession
+import com.lhzkml.jasmine.core.prompt.llm.LLMReadSession
+import com.lhzkml.jasmine.core.prompt.llm.LLMWriteSession
 import com.lhzkml.jasmine.core.prompt.llm.StreamResult
 import com.lhzkml.jasmine.core.prompt.model.*
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GraphAgentTest {
+
+    private fun createTestContext(
+        client: ChatClient = FakeChatClient(),
+        registry: ToolRegistry = ToolRegistry(),
+        tracing: Tracing? = null
+    ): AgentGraphContext {
+        val p = prompt("t") { system("hi") }
+        val session = LLMWriteSession(client, "test", p, emptyList())
+        val readSession = LLMReadSession(client, "test", p, emptyList())
+        return AgentGraphContext(
+            agentId = "test", runId = "r1",
+            client = client, model = "test",
+            session = session, readSession = readSession,
+            toolRegistry = registry,
+            environment = GenericAgentEnvironment("test", registry),
+            tracing = tracing
+        )
+    }
 
     // ========== AgentSubgraph ==========
 
@@ -32,21 +51,10 @@ class GraphAgentTest {
             edge(upper, nodeFinish)
         }
 
-        val client = FakeChatClient()
-        val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
-        val registry = ToolRegistry()
-        val ctx = AgentGraphContext(
-            agentId = "test", runId = "r1",
-            client = client, model = "test",
-            session = session, toolRegistry = registry,
-            environment = GenericAgentEnvironment("test", registry),
-            tracing = tracing
-        )
-
+        val ctx = createTestContext(tracing = tracing)
         val result = strategy.subgraph.execute(ctx, "hello")
         assertEquals("HELLO", result)
 
-        // 验证追踪事件
         val nodeStarts = events.filterIsInstance<TraceEvent.NodeExecutionStarting>()
         val nodeCompletes = events.filterIsInstance<TraceEvent.NodeExecutionCompleted>()
         assertTrue("Should have node start events", nodeStarts.isNotEmpty())
@@ -65,16 +73,7 @@ class GraphAgentTest {
             edge(addTen, nodeFinish)
         }
 
-        val client = FakeChatClient()
-        val registry = ToolRegistry()
-        val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
-        val ctx = AgentGraphContext(
-            agentId = "test", runId = "r1",
-            client = client, model = "test",
-            session = session, toolRegistry = registry,
-            environment = GenericAgentEnvironment("test", registry)
-        )
-
+        val ctx = createTestContext()
         val result = strategy.subgraph.execute(ctx, 5)
         assertEquals(20, result) // (5 * 2) + 10
     }
@@ -84,19 +83,9 @@ class GraphAgentTest {
         val strategy = graphStrategy<String, String>("broken") {
             val orphan = node<String, String>("orphan") { it }
             edge(nodeStart, orphan)
-            // 没有从 orphan 到 finish 的边
         }
 
-        val client = FakeChatClient()
-        val registry = ToolRegistry()
-        val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
-        val ctx = AgentGraphContext(
-            agentId = "test", runId = "r1",
-            client = client, model = "test",
-            session = session, toolRegistry = registry,
-            environment = GenericAgentEnvironment("test", registry)
-        )
-
+        val ctx = createTestContext()
         strategy.subgraph.execute(ctx, "input")
         Unit
     }
@@ -116,17 +105,7 @@ class GraphAgentTest {
             edge(echo, nodeFinish)
         }
 
-        val client = FakeChatClient()
-        val registry = ToolRegistry()
-        val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
-        val ctx = AgentGraphContext(
-            agentId = "test", runId = "r1",
-            client = client, model = "test",
-            session = session, toolRegistry = registry,
-            environment = GenericAgentEnvironment("test", registry),
-            tracing = tracing
-        )
-
+        val ctx = createTestContext(tracing = tracing)
         strategy.execute(ctx, "hello")
 
         assertTrue("Should have StrategyStarting", events.any { it is TraceEvent.StrategyStarting })
@@ -153,16 +132,7 @@ class GraphAgentTest {
             edge(negative, nodeFinish)
         }
 
-        val client = FakeChatClient()
-        val registry = ToolRegistry()
-        val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
-        val ctx = AgentGraphContext(
-            agentId = "test", runId = "r1",
-            client = client, model = "test",
-            session = session, toolRegistry = registry,
-            environment = GenericAgentEnvironment("test", registry)
-        )
-
+        val ctx = createTestContext()
         assertEquals("positive: 5", strategy.subgraph.execute(ctx, 5))
         assertEquals("negative: -3", strategy.subgraph.execute(ctx, -3))
     }
@@ -180,9 +150,7 @@ class GraphAgentTest {
         }
 
         val meta = strategy.graphMetadata()
-        // start + finish + a + b = 4 nodes
         assertEquals(4, meta.nodes.size)
-        // start→a, a→b, b→finish = 3 edges
         assertEquals(3, meta.edges.size)
     }
 
@@ -203,16 +171,7 @@ class GraphAgentTest {
             edge(reader, nodeFinish)
         }
 
-        val client = FakeChatClient()
-        val registry = ToolRegistry()
-        val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
-        val ctx = AgentGraphContext(
-            agentId = "test", runId = "r1",
-            client = client, model = "test",
-            session = session, toolRegistry = registry,
-            environment = GenericAgentEnvironment("test", registry)
-        )
-
+        val ctx = createTestContext()
         val result = strategy.subgraph.execute(ctx, "hello")
         assertEquals("HELLO", result)
     }

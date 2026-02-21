@@ -25,49 +25,374 @@ data class StructuredResponse<T>(
 )
 
 /**
- * LLM 会话
- * 参考 koog 的 AIAgentLLMWriteSession，管理提示词的累积式构建和 LLM 交互。
+ * LLM 会话基类
+ * 移植自 koog 的 AIAgentLLMSession (sealed base class)。
  *
- * 核心设计：
- * - prompt 是累积式的，每次 LLM 交互后 response 自动追加
- * - 工具描述通过 API 参数传递（function calling），不拼接到文本
- * - appendPrompt {} 用于追加消息
- * - rewritePrompt {} 用于完全重写（如历史压缩）
+ * 提供所有 LLM 请求方法（只读），不自动追加响应到 prompt。
+ * 属性 prompt/tools/model 在基类中为只读 (val)。
+ *
+ * 子类:
+ * - LLMReadSession: 纯只读会话，不能修改 prompt
+ * - LLMWriteSession: 可写会话，override 请求方法自动追加响应，提供 prompt 操作方法
  *
  * @param client LLM 客户端
  * @param model 模型名称
  * @param initialPrompt 初始提示词（通常包含 system 消息）
  * @param tools 可用工具描述列表
  */
-class LLMSession(
+sealed class LLMSession(
     private val client: ChatClient,
-    val model: String,
+    open val model: String,
     initialPrompt: Prompt,
-    var tools: List<ToolDescriptor> = emptyList()
+    open val tools: List<ToolDescriptor> = emptyList()
 ) : AutoCloseable {
 
     /** 暴露 client 用于创建临时 session（如 retrievalModel 场景） */
     internal val currentClient: ChatClient get() = client
 
-    /** 当前提示词（累积式） */
-    var prompt: Prompt = initialPrompt
-        internal set
+    /** 当前提示词 */
+    open val prompt: Prompt = initialPrompt
 
-    private var isActive = true
+    protected var isActive = true
 
-    private fun checkActive() {
+    protected fun checkActive() {
         check(isActive) { "Cannot use session after it was closed" }
     }
+
+    // ========== LLM 请求（只读，不自动追加响应） ==========
+
+    /**
+     * 发送请求给 LLM（带工具）
+     * 移植自 koog 的 AIAgentLLMSession.requestLLM
+     *
+     * @return LLM 的回复结果
+     */
+    open suspend fun requestLLM(): ChatResult {
+        checkActive()
+        return client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools,
+            toolChoice = prompt.toolChoice
+        )
+    }
+
+    /**
+     * 发送请求给 LLM（不带工具）
+     * 移植自 koog 的 AIAgentLLMSession.requestLLMWithoutTools
+     */
+    open suspend fun requestLLMWithoutTools(): ChatResult {
+        checkActive()
+        return client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = emptyList()
+        )
+    }
+
+    /**
+     * 强制 LLM 只能调用工具（不能生成纯文本）
+     * 移植自 koog 的 AIAgentLLMSession.requestLLMOnlyCallingTools
+     *
+     * @return LLM 响应结果（通常包含 tool_calls）
+     */
+    open suspend fun requestLLMOnlyCallingTools(): ChatResult {
+        checkActive()
+        return client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools,
+            toolChoice = ToolChoice.Required
+        )
+    }
+
+    /**
+     * 强制 LLM 使用指定工具
+     * 移植自 koog 的 AIAgentLLMSession.requestLLMForceOneTool
+     *
+     * @param toolName 强制使用的工具名称
+     * @return LLM 响应结果
+     */
+    open suspend fun requestLLMForceOneTool(toolName: String): ChatResult {
+        checkActive()
+        return client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools,
+            toolChoice = ToolChoice.Named(toolName)
+        )
+    }
+
+    /**
+     * 请求 LLM 返回多个响应
+     * 移植自 koog 的 AIAgentLLMSession.requestLLMMultiple
+     *
+     * @return LLM 响应结果列表
+     */
+    open suspend fun requestLLMMultiple(): List<ChatResult> {
+        checkActive()
+        val result = client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools
+        )
+        return listOf(result)
+    }
+
+    /**
+     * 请求 LLM 返回多个响应，且只能调用工具
+     * 移植自 koog 的 AIAgentLLMSession.requestLLMMultipleOnlyCallingTools
+     *
+     * @return LLM 响应结果列表
+     */
+    open suspend fun requestLLMMultipleOnlyCallingTools(): List<ChatResult> {
+        checkActive()
+        val result = client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools,
+            toolChoice = ToolChoice.Required
+        )
+        return listOf(result)
+    }
+
+    /**
+     * 请求 LLM 返回多个响应（不带工具）
+     * 移植自 koog 的 AIAgentLLMSession.requestLLMMultipleWithoutTools
+     *
+     * @return LLM 响应结果列表
+     */
+    open suspend fun requestLLMMultipleWithoutTools(): List<ChatResult> {
+        checkActive()
+        val result = client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = emptyList()
+        )
+        return listOf(result)
+    }
+
+
+    /**
+     * 流式请求 LLM（带工具）
+     * 移植自 koog 的 AIAgentLLMSession.requestLLMStreaming
+     */
+    open suspend fun requestLLMStream(
+        onChunk: suspend (String) -> Unit,
+        onThinking: suspend (String) -> Unit = {}
+    ): StreamResult {
+        checkActive()
+        return client.chatStreamWithUsageAndThinking(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools,
+            toolChoice = prompt.toolChoice,
+            onChunk = onChunk,
+            onThinking = onThinking
+        )
+    }
+
+    /**
+     * 流式请求 LLM（不带工具）
+     */
+    open suspend fun requestLLMStreamWithoutTools(
+        onChunk: suspend (String) -> Unit,
+        onThinking: suspend (String) -> Unit = {}
+    ): StreamResult {
+        checkActive()
+        return client.chatStreamWithUsageAndThinking(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = emptyList(),
+            onChunk = onChunk,
+            onThinking = onThinking
+        )
+    }
+
+    // ========== 结构化输出 ==========
+
+    companion object {
+        /** JSON 解析器，宽松模式以容忍 LLM 输出的格式偏差 */
+        internal val lenientJson = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            coerceInputValues = true
+        }
+    }
+
+    /**
+     * 请求 LLM 返回结构化 JSON 输出
+     * 移植自 koog 的 AIAgentLLMSession.requestLLMStructured
+     *
+     * 注意: 基类版本不自动追加响应到 prompt。
+     * LLMWriteSession 会 override 此方法以自动追加。
+     *
+     * @param serializer 目标类型的序列化器
+     * @param examples 可选的示例列表，帮助 LLM 理解输出格式
+     * @return Result 包含解析后的 StructuredResponse 或错误
+     */
+    open suspend fun <T> requestLLMStructured(
+        serializer: KSerializer<T>,
+        examples: List<T> = emptyList()
+    ): Result<StructuredResponse<T>> {
+        checkActive()
+
+        val instructionPrompt = buildString {
+            appendLine("You MUST respond with a valid JSON object that matches the following structure.")
+            appendLine("Do NOT include any text before or after the JSON. Only output the JSON object.")
+            appendLine()
+            if (examples.isNotEmpty()) {
+                appendLine("## Examples")
+                examples.forEachIndexed { index, example ->
+                    appendLine("Example ${index + 1}:")
+                    appendLine("```json")
+                    appendLine(lenientJson.encodeToString(serializer, example))
+                    appendLine("```")
+                }
+                appendLine()
+            }
+            appendLine("Respond ONLY with a valid JSON object. No markdown, no explanation, just JSON.")
+        }
+
+        // 构建临时 prompt（不修改 session 的 prompt）
+        val tempPrompt = prompt(prompt) { user(instructionPrompt) }
+        val result = client.chatWithUsage(
+            messages = tempPrompt.messages,
+            model = model,
+            maxTokens = tempPrompt.maxTokens,
+            samplingParams = tempPrompt.samplingParams,
+            tools = emptyList()
+        )
+
+        return runCatching {
+            val jsonContent = extractJson(result.content)
+            val data = lenientJson.decodeFromString(serializer, jsonContent)
+            StructuredResponse(data = data, content = result.content)
+        }
+    }
+
+    /**
+     * 请求 LLM 返回结构化 JSON 输出（inline reified 版本）
+     */
+    suspend inline fun <reified T> requestLLMStructured(
+        examples: List<T> = emptyList()
+    ): Result<StructuredResponse<T>> {
+        return requestLLMStructured(
+            serializer = kotlinx.serialization.serializer<T>(),
+            examples = examples
+        )
+    }
+
+    /**
+     * 从 LLM 响应中提取 JSON 内容
+     */
+    protected fun extractJson(content: String): String {
+        val trimmed = content.trim()
+
+        val codeBlockRegex = Regex("```(?:json)?\\s*\\n?(.*?)\\n?```", RegexOption.DOT_MATCHES_ALL)
+        val match = codeBlockRegex.find(trimmed)
+        if (match != null) {
+            return match.groupValues[1].trim()
+        }
+
+        val jsonStart = trimmed.indexOfFirst { it == '{' || it == '[' }
+        val jsonEnd = trimmed.indexOfLast { it == '}' || it == ']' }
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            return trimmed.substring(jsonStart, jsonEnd + 1)
+        }
+
+        return trimmed
+    }
+
+    final override fun close() {
+        isActive = false
+    }
+}
+
+
+// ========== LLMReadSession ==========
+
+/**
+ * 只读 LLM 会话
+ * 移植自 koog 的 AIAgentLLMReadSession。
+ *
+ * 只能执行 LLM 请求，不能修改 prompt/tools/model。
+ * 所有请求方法不自动追加响应到 prompt。
+ *
+ * 适用场景:
+ * - 需要查询 LLM 但不影响主对话流的场景
+ * - 并行请求多个 LLM 的场景
+ * - 只读分析/评估场景
+ */
+class LLMReadSession(
+    client: ChatClient,
+    model: String,
+    prompt: Prompt,
+    tools: List<ToolDescriptor> = emptyList()
+) : LLMSession(client, model, prompt, tools)
+
+// ========== LLMWriteSession ==========
+
+/**
+ * 可写 LLM 会话
+ * 移植自 koog 的 AIAgentLLMWriteSession。
+ *
+ * 核心设计:
+ * - prompt 是累积式的，每次 LLM 交互后 response 自动追加
+ * - 工具描述通过 API 参数传递（function calling），不拼接到文本
+ * - appendPrompt {} 用于追加消息
+ * - rewritePrompt {} 用于完全重写（如历史压缩）
+ * - changeModel() 用于动态切换模型
+ *
+ * 与基类的区别:
+ * - prompt/tools/model 属性可变 (var)
+ * - 所有 LLM 请求方法自动追加响应到 prompt
+ * - 提供 appendPrompt/rewritePrompt/clearHistory 等 prompt 操作方法
+ *
+ * @param client LLM 客户端
+ * @param model 模型名称
+ * @param initialPrompt 初始提示词
+ * @param tools 可用工具描述列表
+ */
+class LLMWriteSession(
+    client: ChatClient,
+    model: String,
+    initialPrompt: Prompt,
+    tools: List<ToolDescriptor> = emptyList()
+) : LLMSession(client, model, initialPrompt, tools) {
+
+    /** 可变 prompt */
+    override var prompt: Prompt = initialPrompt
+
+    /** 可变 tools */
+    override var tools: List<ToolDescriptor> = tools
+
+    /** 可变 model */
+    override var model: String = model
 
     // ========== Prompt 操作 ==========
 
     /**
      * 追加消息到当前 prompt
-     * ```kotlin
-     * session.appendPrompt {
-     *     user("What is the weather?")
-     * }
-     * ```
+     * 移植自 koog 的 AIAgentLLMWriteSession.appendPrompt
      */
     fun appendPrompt(body: PromptBuilder.() -> Unit) {
         checkActive()
@@ -76,6 +401,7 @@ class LLMSession(
 
     /**
      * 完全重写 prompt（用于历史压缩等场景）
+     * 移植自 koog 的 AIAgentLLMWriteSession.rewritePrompt
      */
     fun rewritePrompt(body: (Prompt) -> Prompt) {
         checkActive()
@@ -113,10 +439,7 @@ class LLMSession(
 
     /**
      * 只保留指定时间戳之后的消息（保留 system 消息）
-     * 参考 koog 的 leaveMessagesFromTimestamp
-     *
-     * @param timestamp 起始时间戳（毫秒），只保留此时间之后的消息
-     * @param preserveSystem 是否保留所有 system 消息，默认 true
+     * 移植自 koog 的 leaveMessagesFromTimestamp
      */
     fun leaveMessagesFromTimestamp(timestamp: Long, preserveSystem: Boolean = true) {
         checkActive()
@@ -161,23 +484,20 @@ class LLMSession(
         prompt = prompt.withToolChoice(null)
     }
 
-    // ========== LLM 请求 ==========
+    // ========== 模型/参数变更 ==========
 
     /**
-     * 发送请求给 LLM（带工具），自动追加 response 到 prompt
-     * @return LLM 的回复结果
+     * 动态切换模型
+     * 移植自 koog 的 AIAgentLLMWriteSession.changeModel
      */
-    suspend fun requestLLM(): ChatResult {
+    fun changeModel(newModel: String) {
         checkActive()
-        val result = client.chatWithUsage(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = tools,
-            toolChoice = prompt.toolChoice
-        )
-        // 自动追加 response
+        model = newModel
+    }
+
+    // ========== LLM 请求（自动追加响应到 prompt） ==========
+
+    private fun appendAssistantResponse(result: ChatResult) {
         appendPrompt {
             if (result.hasToolCalls) {
                 assistantWithToolCalls(result.toolCalls, result.content)
@@ -185,231 +505,74 @@ class LLMSession(
                 assistant(result.content)
             }
         }
-        return result
     }
 
-    /**
-     * 发送请求给 LLM（不带工具），自动追加 response
-     */
-    suspend fun requestLLMWithoutTools(): ChatResult {
-        checkActive()
-        val result = client.chatWithUsage(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = emptyList()
-        )
-        appendPrompt { assistant(result.content) }
-        return result
+    override suspend fun requestLLM(): ChatResult {
+        return super.requestLLM().also { appendAssistantResponse(it) }
     }
 
-    /**
-     * 强制 LLM 只能调用工具（不能生成纯文本）
-     * 移植自 koog 的 requestLLMOnlyCallingTools，使用 ToolChoice.Required。
-     *
-     * @return LLM 响应结果（通常包含 tool_calls）
-     */
-    suspend fun requestLLMOnlyCallingTools(): ChatResult {
-        checkActive()
-        val result = client.chatWithUsage(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = tools,
-            toolChoice = ToolChoice.Required
-        )
-        appendPrompt {
-            if (result.hasToolCalls) {
-                assistantWithToolCalls(result.toolCalls, result.content)
-            } else {
-                assistant(result.content)
-            }
+    override suspend fun requestLLMWithoutTools(): ChatResult {
+        return super.requestLLMWithoutTools().also { result ->
+            appendPrompt { assistant(result.content) }
         }
-        return result
     }
 
-    /**
-     * 强制 LLM 使用指定工具
-     * 移植自 koog 的 requestLLMForceOneTool，使用 ToolChoice.Named。
-     *
-     * @param toolName 强制使用的工具名称
-     * @return LLM 响应结果
-     */
-    suspend fun requestLLMForceOneTool(toolName: String): ChatResult {
-        checkActive()
-        val result = client.chatWithUsage(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = tools,
-            toolChoice = ToolChoice.Named(toolName)
-        )
-        appendPrompt {
-            if (result.hasToolCalls) {
-                assistantWithToolCalls(result.toolCalls, result.content)
-            } else {
-                assistant(result.content)
-            }
+    override suspend fun requestLLMOnlyCallingTools(): ChatResult {
+        return super.requestLLMOnlyCallingTools().also { appendAssistantResponse(it) }
+    }
+
+    override suspend fun requestLLMForceOneTool(toolName: String): ChatResult {
+        return super.requestLLMForceOneTool(toolName).also { appendAssistantResponse(it) }
+    }
+
+    override suspend fun requestLLMMultiple(): List<ChatResult> {
+        return super.requestLLMMultiple().also { results ->
+            results.forEach { appendAssistantResponse(it) }
         }
-        return result
     }
 
-    /**
-     * 请求 LLM 返回多个响应
-     * 移植自 koog 的 requestLLMMultiple。
-     *
-     * koog 的 requestLLMMultiple() 返回 List<Message.Response>，
-     * jasmine 的 ChatResult 已经包含多个 toolCalls，
-     * 因此这里返回 List<ChatResult>，其中第一个元素是主响应。
-     *
-     * 对于支持多 choice 的模型，可以返回多个 ChatResult。
-     * 当前实现返回单个 ChatResult 的列表（与 koog 行为一致：大多数模型只返回一个响应）。
-     *
-     * @return LLM 响应结果列表
-     */
-    suspend fun requestLLMMultiple(): List<ChatResult> {
-        checkActive()
-        val result = client.chatWithUsage(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = tools
-        )
-        appendPrompt {
-            if (result.hasToolCalls) {
-                assistantWithToolCalls(result.toolCalls, result.content)
-            } else {
-                assistant(result.content)
-            }
+    override suspend fun requestLLMMultipleOnlyCallingTools(): List<ChatResult> {
+        return super.requestLLMMultipleOnlyCallingTools().also { results ->
+            results.forEach { appendAssistantResponse(it) }
         }
-        return listOf(result)
     }
 
-    /**
-     * 请求 LLM 返回多个响应，且只能调用工具
-     * 移植自 koog 的 requestLLMMultipleOnlyCallingTools
-     *
-     * @return LLM 响应结果列表
-     */
-    suspend fun requestLLMMultipleOnlyCallingTools(): List<ChatResult> {
-        checkActive()
-        val result = client.chatWithUsage(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = tools,
-            toolChoice = ToolChoice.Required
-        )
-        appendPrompt {
-            if (result.hasToolCalls) {
-                assistantWithToolCalls(result.toolCalls, result.content)
-            } else {
-                assistant(result.content)
-            }
+    override suspend fun requestLLMMultipleWithoutTools(): List<ChatResult> {
+        return super.requestLLMMultipleWithoutTools().also { results ->
+            results.forEach { result -> appendPrompt { assistant(result.content) } }
         }
-        return listOf(result)
     }
 
-    /**
-     * 请求 LLM 返回多个响应（不带工具）
-     * 移植自 koog 的 requestLLMMultipleWithoutTools
-     *
-     * @return LLM 响应结果列表
-     */
-    suspend fun requestLLMMultipleWithoutTools(): List<ChatResult> {
-        checkActive()
-        val result = client.chatWithUsage(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = emptyList()
-        )
-        appendPrompt { assistant(result.content) }
-        return listOf(result)
-    }
-
-    /**
-     * 流式请求 LLM（带工具），自动追加 response
-     */
-    suspend fun requestLLMStream(
+    override suspend fun requestLLMStream(
         onChunk: suspend (String) -> Unit,
-        onThinking: suspend (String) -> Unit = {}
+        onThinking: suspend (String) -> Unit
     ): StreamResult {
-        checkActive()
-        val result = client.chatStreamWithUsageAndThinking(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = tools,
-            toolChoice = prompt.toolChoice,
-            onChunk = onChunk,
-            onThinking = onThinking
-        )
-        appendPrompt {
-            if (result.hasToolCalls) {
-                assistantWithToolCalls(result.toolCalls, result.content)
-            } else {
-                assistant(result.content)
+        return super.requestLLMStream(onChunk, onThinking).also { result ->
+            appendPrompt {
+                if (result.hasToolCalls) {
+                    assistantWithToolCalls(result.toolCalls, result.content)
+                } else {
+                    assistant(result.content)
+                }
             }
         }
-        return result
     }
 
-    /**
-     * 流式请求 LLM（不带工具），自动追加 response
-     */
-    suspend fun requestLLMStreamWithoutTools(
+    override suspend fun requestLLMStreamWithoutTools(
         onChunk: suspend (String) -> Unit,
-        onThinking: suspend (String) -> Unit = {}
+        onThinking: suspend (String) -> Unit
     ): StreamResult {
-        checkActive()
-        val result = client.chatStreamWithUsageAndThinking(
-            messages = prompt.messages,
-            model = model,
-            maxTokens = prompt.maxTokens,
-            samplingParams = prompt.samplingParams,
-            tools = emptyList(),
-            onChunk = onChunk,
-            onThinking = onThinking
-        )
-        appendPrompt { assistant(result.content) }
-        return result
-    }
-
-    // ========== 结构化输出 ==========
-
-    companion object {
-        /** JSON 解析器，宽松模式以容忍 LLM 输出的格式偏差 */
-        private val lenientJson = Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            coerceInputValues = true
+        return super.requestLLMStreamWithoutTools(onChunk, onThinking).also { result ->
+            appendPrompt { assistant(result.content) }
         }
     }
 
-    /**
-     * 请求 LLM 返回结构化 JSON 输出
-     * 参考 koog 的 requestLLMStructured，使用 Manual 模式：
-     * 向 LLM 发送 JSON 格式指令和示例，然后解析响应。
-     *
-     * @param serializer 目标类型的序列化器
-     * @param examples 可选的示例列表，帮助 LLM 理解输出格式
-     * @return Result 包含解析后的 StructuredResponse 或错误
-     */
-    suspend fun <T> requestLLMStructured(
+    override suspend fun <T> requestLLMStructured(
         serializer: KSerializer<T>,
-        examples: List<T> = emptyList()
+        examples: List<T>
     ): Result<StructuredResponse<T>> {
         checkActive()
 
-        // 构建结构化输出指令
         val instructionPrompt = buildString {
             appendLine("You MUST respond with a valid JSON object that matches the following structure.")
             appendLine("Do NOT include any text before or after the JSON. Only output the JSON object.")
@@ -436,68 +599,39 @@ class LLMSession(
             StructuredResponse(data = data, content = result.content)
         }
     }
-
-    /**
-     * 请求 LLM 返回结构化 JSON 输出（inline reified 版本）
-     */
-    suspend inline fun <reified T> requestLLMStructured(
-        examples: List<T> = emptyList()
-    ): Result<StructuredResponse<T>> {
-        return requestLLMStructured(
-            serializer = kotlinx.serialization.serializer<T>(),
-            examples = examples
-        )
-    }
-
-    /**
-     * 从 LLM 响应中提取 JSON 内容
-     * 处理 LLM 可能包裹在 markdown 代码块中的情况
-     */
-    private fun extractJson(content: String): String {
-        val trimmed = content.trim()
-
-        // 尝试提取 ```json ... ``` 代码块
-        val codeBlockRegex = Regex("```(?:json)?\\s*\\n?(.*?)\\n?```", RegexOption.DOT_MATCHES_ALL)
-        val match = codeBlockRegex.find(trimmed)
-        if (match != null) {
-            return match.groupValues[1].trim()
-        }
-
-        // 尝试提取第一个 { ... } 或 [ ... ]
-        val jsonStart = trimmed.indexOfFirst { it == '{' || it == '[' }
-        val jsonEnd = trimmed.indexOfLast { it == '}' || it == ']' }
-        if (jsonStart >= 0 && jsonEnd > jsonStart) {
-            return trimmed.substring(jsonStart, jsonEnd + 1)
-        }
-
-        return trimmed
-    }
-
-    override fun close() {
-        isActive = false
-    }
 }
 
+
+// ========== 便捷函数 ==========
+
 /**
- * 便捷函数：创建 session 并执行操作
- * ```kotlin
- * val result = client.session(model, prompt, tools) {
- *     appendPrompt { user("Hello!") }
- *     requestLLM()
- * }
- * ```
+ * 便捷函数: 创建 LLMWriteSession 并执行操作
+ * 移植自 koog 的 session {} DSL
  */
 suspend fun <T> ChatClient.session(
     model: String,
     prompt: Prompt,
     tools: List<ToolDescriptor> = emptyList(),
-    block: suspend LLMSession.() -> T
+    block: suspend LLMWriteSession.() -> T
 ): T {
-    val session = LLMSession(this, model, prompt, tools)
+    val session = LLMWriteSession(this, model, prompt, tools)
     return session.use { it.block() }
 }
 
-private suspend fun <T> LLMSession.use(block: suspend (LLMSession) -> T): T {
+/**
+ * 便捷函数: 创建 LLMReadSession 并执行操作
+ */
+suspend fun <T> ChatClient.readSession(
+    model: String,
+    prompt: Prompt,
+    tools: List<ToolDescriptor> = emptyList(),
+    block: suspend LLMReadSession.() -> T
+): T {
+    val session = LLMReadSession(this, model, prompt, tools)
+    return session.use { it.block() }
+}
+
+private suspend fun <T : LLMSession, R> T.use(block: suspend (T) -> R): R {
     try {
         return block(this)
     } finally {
@@ -510,10 +644,8 @@ private suspend fun <T> LLMSession.use(block: suspend (LLMSession) -> T): T {
 /**
  * 用 TLDR 摘要替换历史消息
  * 参考 koog 的 replaceHistoryWithTLDR
- *
- * @param strategy 压缩策略，默认 WholeHistory
  */
-suspend fun LLMSession.replaceHistoryWithTLDR(
+suspend fun LLMWriteSession.replaceHistoryWithTLDR(
     strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory,
     listener: CompressionEventListener? = null
 ) {
@@ -522,9 +654,8 @@ suspend fun LLMSession.replaceHistoryWithTLDR(
 
 /**
  * 检查是否需要压缩并自动执行
- * 配合 TokenBudget 策略使用
  */
-suspend fun LLMSession.compressIfNeeded(
+suspend fun LLMWriteSession.compressIfNeeded(
     strategy: HistoryCompressionStrategy.TokenBudget,
     listener: CompressionEventListener? = null
 ) {

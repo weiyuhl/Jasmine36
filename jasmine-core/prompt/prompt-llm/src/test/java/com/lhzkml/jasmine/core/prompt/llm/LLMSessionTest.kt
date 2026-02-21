@@ -71,13 +71,11 @@ class LLMSessionTest {
             system("You are helpful.")
         }
 
-        val session = LLMSession(client, "gpt-4", initialPrompt)
+        val session = LLMWriteSession(client, "gpt-4", initialPrompt)
 
-        // 追加用户消息
         session.appendPrompt { user("How are you?") }
         assertEquals(2, session.prompt.messages.size)
 
-        // 请求 LLM，response 自动追加
         val result = session.requestLLM()
         assertEquals("I'm fine, thanks!", result.content)
         assertEquals(3, session.prompt.messages.size)
@@ -96,7 +94,7 @@ class LLMSessionTest {
                     ToolParameterDescriptor("input", "Input value", ToolParameterType.StringType)
                 ))
         )
-        val session = LLMSession(client, "gpt-4", prompt("test") { user("Hi") }, tools)
+        val session = LLMWriteSession(client, "gpt-4", prompt("test") { user("Hi") }, tools)
 
         session.requestLLM()
         assertEquals(1, client.lastTools?.size)
@@ -109,7 +107,7 @@ class LLMSessionTest {
     fun `requestLLMWithoutTools sends empty tools`() = runTest {
         val client = MockClient("No tools")
         val tools = listOf(ToolDescriptor("tool1", "desc"))
-        val session = LLMSession(client, "gpt-4", prompt("test") { user("Hi") }, tools)
+        val session = LLMWriteSession(client, "gpt-4", prompt("test") { user("Hi") }, tools)
 
         session.requestLLMWithoutTools()
         assertTrue(client.lastTools!!.isEmpty())
@@ -119,7 +117,7 @@ class LLMSessionTest {
 
     @Test
     fun `clearHistory removes all messages`() = runTest {
-        val session = LLMSession(
+        val session = LLMWriteSession(
             MockClient(), "gpt-4",
             prompt("test") {
                 system("System")
@@ -137,7 +135,7 @@ class LLMSessionTest {
 
     @Test
     fun `leaveLastNMessages preserves system`() = runTest {
-        val session = LLMSession(
+        val session = LLMWriteSession(
             MockClient(), "gpt-4",
             prompt("test") {
                 system("System prompt")
@@ -150,7 +148,6 @@ class LLMSessionTest {
 
         session.leaveLastNMessages(2, preserveSystem = true)
         val msgs = session.prompt.messages
-        // system + last 2
         assertEquals(3, msgs.size)
         assertEquals("system", msgs[0].role)
         assertEquals("Q2", msgs[1].content)
@@ -161,7 +158,7 @@ class LLMSessionTest {
 
     @Test
     fun `dropLastNMessages removes from end`() = runTest {
-        val session = LLMSession(
+        val session = LLMWriteSession(
             MockClient(), "gpt-4",
             prompt("test") {
                 system("System")
@@ -190,12 +187,11 @@ class LLMSessionTest {
             ),
             id = "test"
         )
-        val session = LLMSession(MockClient(), "gpt-4", initialPrompt)
+        val session = LLMWriteSession(MockClient(), "gpt-4", initialPrompt)
 
         session.leaveMessagesFromTimestamp(now)
 
         val msgs = session.prompt.messages
-        // system (preserved) + 2 new messages
         assertEquals(3, msgs.size)
         assertEquals("system", msgs[0].role)
         assertEquals("New question", msgs[1].content)
@@ -215,12 +211,11 @@ class LLMSessionTest {
             ),
             id = "test"
         )
-        val session = LLMSession(MockClient(), "gpt-4", initialPrompt)
+        val session = LLMWriteSession(MockClient(), "gpt-4", initialPrompt)
 
         session.leaveMessagesFromTimestamp(now, preserveSystem = false)
 
         val msgs = session.prompt.messages
-        // only the new message
         assertEquals(1, msgs.size)
         assertEquals("New question", msgs[0].content)
 
@@ -229,7 +224,7 @@ class LLMSessionTest {
 
     @Test
     fun `rewritePrompt allows full control`() = runTest {
-        val session = LLMSession(
+        val session = LLMWriteSession(
             MockClient(), "gpt-4",
             prompt("test") {
                 system("Old system")
@@ -252,7 +247,7 @@ class LLMSessionTest {
 
     @Test
     fun `tool choice methods work`() = runTest {
-        val session = LLMSession(MockClient(), "gpt-4", prompt("test") { user("Hi") })
+        val session = LLMWriteSession(MockClient(), "gpt-4", prompt("test") { user("Hi") })
 
         session.setToolChoiceAuto()
         assertTrue(session.prompt.toolChoice is ToolChoice.Auto)
@@ -275,7 +270,7 @@ class LLMSessionTest {
     @Test
     fun `stream request accumulates response`() = runTest {
         val client = MockClient("Streamed response")
-        val session = LLMSession(client, "gpt-4", prompt("test") { user("Hi") })
+        val session = LLMWriteSession(client, "gpt-4", prompt("test") { user("Hi") })
 
         val chunks = mutableListOf<String>()
         val result = session.requestLLMStream(onChunk = { chunks.add(it) })
@@ -290,7 +285,7 @@ class LLMSessionTest {
 
     @Test(expected = IllegalStateException::class)
     fun `closed session throws on appendPrompt`() = runTest {
-        val session = LLMSession(MockClient(), "gpt-4", prompt("test") { user("Hi") })
+        val session = LLMWriteSession(MockClient(), "gpt-4", prompt("test") { user("Hi") })
         session.close()
         session.appendPrompt { user("Should fail") }
     }
@@ -306,5 +301,33 @@ class LLMSessionTest {
         }
 
         assertEquals("Extension result", result.content)
+    }
+
+    // ========== ReadSession 测试 ==========
+
+    @Test
+    fun `read session does not auto-append response`() = runTest {
+        val client = MockClient("Read response")
+        val p = prompt("test") { user("Hi") }
+        val session = LLMReadSession(client, "gpt-4", p)
+
+        val result = session.requestLLM()
+        assertEquals("Read response", result.content)
+        // ReadSession 不自动追加响应
+        assertEquals(1, session.prompt.messages.size)
+
+        session.close()
+    }
+
+    @Test
+    fun `read session extension function works`() = runTest {
+        val client = MockClient("Read result")
+        val p = prompt("test") { system("System") }
+
+        val result = client.readSession("gpt-4", p) {
+            requestLLM()
+        }
+
+        assertEquals("Read result", result.content)
     }
 }

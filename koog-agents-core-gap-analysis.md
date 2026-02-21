@@ -252,14 +252,86 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 
 ---
 
-## 八、架构差异 -- 不建议直接移植
+## 八、已完成移植 -- LLM Session 读写分离
+
+来源: `koog agents-core/agent/session/` (3 个文件)
+目标: `jasmine LLMSession.kt` (重构为 sealed class + 2 个子类)
+
+将 jasmine 的单一 LLMSession 重构为 koog 的读写分离架构。
+
+### 架构对比
+
+| koog | jasmine (移植后) | 说明 |
+|---|---|---|
+| AIAgentLLMSession (sealed base) | LLMSession (sealed base) | 所有 LLM 请求方法(只读)，不自动追加响应 |
+| AIAgentLLMReadSession | LLMReadSession | 纯只读会话，不能修改 prompt/tools/model |
+| AIAgentLLMWriteSession | LLMWriteSession | 可写会话，override 请求方法自动追加响应 |
+
+### LLMSession (sealed base) -- 只读请求方法
+
+| 方法 | 功能 | 状态 |
+|---|---|---|
+| requestLLM() | 发送请求(带工具)，不自动追加 | [已完成] |
+| requestLLMWithoutTools() | 发送请求(不带工具)，不自动追加 | [已完成] |
+| requestLLMOnlyCallingTools() | 强制只能调用工具 | [已完成] |
+| requestLLMForceOneTool(toolName) | 强制使用指定工具 | [已完成] |
+| requestLLMMultiple() | 多响应请求 | [已完成] |
+| requestLLMMultipleOnlyCallingTools() | 多响应 + 只能调用工具 | [已完成] |
+| requestLLMMultipleWithoutTools() | 多响应(不带工具) | [已完成] |
+| requestLLMStream(onChunk, onThinking) | 流式请求(带工具) | [已完成] |
+| requestLLMStreamWithoutTools(onChunk, onThinking) | 流式请求(不带工具) | [已完成] |
+| requestLLMStructured(serializer, examples) | 结构化 JSON 输出 | [已完成] |
+
+### LLMWriteSession -- 新增的写操作方法
+
+| 方法 | 对应 koog | 状态 |
+|---|---|---|
+| appendPrompt(body) | AIAgentLLMWriteSession.appendPrompt | [已完成] |
+| rewritePrompt(body) | AIAgentLLMWriteSession.rewritePrompt | [已完成] |
+| changeModel(newModel) | AIAgentLLMWriteSession.changeModel | [已完成] |
+| clearHistory() | jasmine 自有 | [已完成] |
+| leaveLastNMessages(n) | jasmine 自有 | [已完成] |
+| dropLastNMessages(n) | jasmine 自有 | [已完成] |
+| leaveMessagesFromTimestamp(ts) | jasmine 自有 | [已完成] |
+| dropTrailingToolCalls() | jasmine 自有 | [已完成] |
+| setToolChoiceAuto/Required/None/Named | jasmine 自有 | [已完成] |
+| 所有 requestLLM 方法 override | 自动追加响应到 prompt | [已完成] |
+
+### 便捷函数
+
+| 函数 | 功能 | 状态 |
+|---|---|---|
+| ChatClient.session {} | 创建 LLMWriteSession 并执行 | [已完成] |
+| ChatClient.readSession {} | 创建 LLMReadSession 并执行 | [已完成] |
+
+### 集成点更新
+
+- AgentGraphContext -- session 类型改为 LLMWriteSession，新增 readSession: LLMReadSession
+- GraphAgent -- 创建 LLMWriteSession + LLMReadSession
+- FunctionalAgent -- 创建 LLMWriteSession + LLMReadSession
+- ToolExecutor -- 使用 LLMWriteSession
+- HistoryCompressionStrategy -- compress() 参数类型改为 LLMWriteSession
+- 所有测试文件已同步更新
+
+### 未移植的 koog WriteSession 功能（架构差异）
+
+| koog 功能 | 原因 |
+|---|---|
+| callTool / findTool | 依赖 SafeTool 类型系统，jasmine 用 AgentEnvironment.executeTool 替代 |
+| toParallelToolCalls (Flow) | 依赖 SafeTool，jasmine 无此类型 |
+| changeLLMParams(LLMParams) | koog 有独立 LLMParams 类，jasmine 用 SamplingParams 直接在 Prompt 上 |
+| ActiveProperty 委托 | koog 用 ActiveProperty 实现属性活跃检查，jasmine 用简单 var + checkActive() |
+
+---
+
+## 九、架构差异 -- 不建议直接移植
 
 以下是 koog 和 jasmine 的架构设计差异，属于有意的简化，不建议直接移植:
 
 | koog 模块 | jasmine 对应 | 差异说明 |
 |---|---|---|
 | SafeTool<TArgs, TResult> | 无 | koog 的 Tool 有类型化的 Args/Result，jasmine 的 Tool 是 execute(String)->String |
-| LLM Session 读写分离 (ReadSession/WriteSession) | 单一 LLMSession | koog 分离读写权限，jasmine 合一 |
+| LLM Session 读写分离 (ReadSession/WriteSession) | LLMReadSession / LLMWriteSession | koog 分离读写权限，jasmine 已完成移植 |
 | AIAgentConfig / AIAgentConfigBase | 直接参数 | koog 用配置对象，jasmine 用构造函数参数 |
 | AIAgentStorage | MutableMap<String, Any?> | koog 有独立存储类，jasmine 直接用 Map |
 | AIAgentStateManager (Mutex) | ManagedAgent.state | koog 有 Mutex 保护的状态管理，jasmine 直接设置 |
@@ -273,7 +345,7 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 
 ---
 
-## 九、移植优先级建议
+## 十、移植优先级建议
 
 ### 高优先级 (实用性强，移植难度低) -- 全部已完成
 
@@ -299,12 +371,13 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 ### 大型子系统 -- 已完成
 
 16. Feature/Pipeline 系统 (17个新文件，完整插件/事件/处理器管道) [已完成]
+17. LLM Session 读写分离 (LLMSession sealed base + LLMReadSession + LLMWriteSession) [已完成]
 
 ### 低优先级 (依赖架构变更或使用场景有限) -- 不移植
 
-17. SafeTool 类型系统 -- 需要重构 Tool 基类，架构差异
-18. onSuccessful / onFailure -- 依赖 SafeTool.Result，jasmine 用 ToolResultKind 替代
-19. onAssistantMessageWithMedia -- 依赖 ContentPart.Attachment，jasmine 无附件概念
-20. nodeLLMModerateMessage -- 需要 moderate() API
-21. Flow-based streaming nodes -- 架构差异大，jasmine 用回调式
-22. nodeSetStructuredOutput -- 需要 StructuredOutputConfig
+18. SafeTool 类型系统 -- 需要重构 Tool 基类，架构差异
+19. onSuccessful / onFailure -- 依赖 SafeTool.Result，jasmine 用 ToolResultKind 替代
+20. onAssistantMessageWithMedia -- 依赖 ContentPart.Attachment，jasmine 无附件概念
+21. nodeLLMModerateMessage -- 需要 moderate() API
+22. Flow-based streaming nodes -- 架构差异大，jasmine 用回调式
+23. nodeSetStructuredOutput -- 需要 StructuredOutputConfig

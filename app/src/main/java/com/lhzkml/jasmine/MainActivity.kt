@@ -29,7 +29,7 @@ import com.lhzkml.jasmine.core.prompt.llm.CompressionEventListener
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
-import com.lhzkml.jasmine.core.prompt.llm.LLMSession
+import com.lhzkml.jasmine.core.prompt.llm.LLMWriteSession
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
 import com.lhzkml.jasmine.core.prompt.llm.TokenEstimator
 import com.lhzkml.jasmine.core.prompt.llm.StreamResumeHelper
@@ -1227,13 +1227,15 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             }
-                            val planSession = LLMSession(client, config.model, planPrompt)
+                            val planSession = LLMWriteSession(client, config.model, planPrompt)
+                            val planReadSession = com.lhzkml.jasmine.core.prompt.llm.LLMReadSession(client, config.model, planPrompt)
                             val planContext = AgentGraphContext(
                                 agentId = currentConversationId ?: "planner",
                                 runId = agentRunId,
                                 client = client,
                                 model = config.model,
                                 session = planSession,
+                                readSession = planReadSession,
                                 toolRegistry = registry,
                                 environment = GenericAgentEnvironment(
                                     currentConversationId ?: "planner", registry
@@ -1249,6 +1251,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             val plan = planner.buildPlanPublic(planContext, message, null)
                             planSession.close()
+                            planReadSession.close()
 
                             withContext(Dispatchers.Main) {
                                 appendRendered("[Plan] 任务规划:\n")
@@ -1861,7 +1864,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val session = LLMSession(client, model, prompt)
+        val session = LLMWriteSession(client, model, prompt)
         try {
             session.replaceHistoryWithTLDR(strategy, listener = listener)
 

@@ -6,7 +6,8 @@ import com.lhzkml.jasmine.core.agent.tools.trace.TraceError
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
 import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
-import com.lhzkml.jasmine.core.prompt.llm.LLMSession
+import com.lhzkml.jasmine.core.prompt.llm.LLMReadSession
+import com.lhzkml.jasmine.core.prompt.llm.LLMWriteSession
 import com.lhzkml.jasmine.core.prompt.model.Prompt
 
 /**
@@ -56,7 +57,8 @@ class FunctionalAgent<TInput, TOutput>(
      */
     suspend fun run(prompt: Prompt, input: TInput): TOutput {
         val runId = tracing?.newRunId() ?: ""
-        val session = LLMSession(client, model, prompt, toolRegistry.descriptors())
+        val session = LLMWriteSession(client, model, prompt, toolRegistry.descriptors())
+        val readSession = LLMReadSession(client, model, prompt, toolRegistry.descriptors())
         val environment = GenericAgentEnvironment(agentId, toolRegistry)
 
         tracing?.emit(TraceEvent.AgentStarting(
@@ -70,6 +72,7 @@ class FunctionalAgent<TInput, TOutput>(
             client = client,
             model = model,
             session = session,
+            readSession = readSession,
             toolRegistry = toolRegistry,
             environment = environment,
             tracing = tracing,
@@ -109,6 +112,7 @@ class FunctionalAgent<TInput, TOutput>(
             )
             pipeline?.closeAllFeaturesMessageProcessors()
             session.close()
+            readSession.close()
         }
     }
 }

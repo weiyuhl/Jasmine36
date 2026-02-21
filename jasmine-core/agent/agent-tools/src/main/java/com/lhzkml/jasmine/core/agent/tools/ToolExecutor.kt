@@ -5,7 +5,7 @@ import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
 import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
-import com.lhzkml.jasmine.core.prompt.llm.LLMSession
+import com.lhzkml.jasmine.core.prompt.llm.LLMWriteSession
 import com.lhzkml.jasmine.core.prompt.llm.StreamResult
 import com.lhzkml.jasmine.core.prompt.llm.compressIfNeeded
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
@@ -74,7 +74,7 @@ class ToolExecutor(
      */
     suspend fun execute(prompt: Prompt, model: String): ChatResult {
         val runId = tracing?.newRunId() ?: ""
-        val session = LLMSession(client, model, prompt, registry.descriptors())
+        val session = LLMWriteSession(client, model, prompt, registry.descriptors())
 
         tracing?.emit(TraceEvent.AgentStarting(
             eventId = tracing.newEventId(), runId = runId,
@@ -107,7 +107,7 @@ class ToolExecutor(
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         val runId = tracing?.newRunId() ?: ""
-        val session = LLMSession(client, model, prompt, registry.descriptors())
+        val session = LLMWriteSession(client, model, prompt, registry.descriptors())
 
         tracing?.emit(TraceEvent.AgentStarting(
             eventId = tracing.newEventId(), runId = runId,
@@ -131,7 +131,7 @@ class ToolExecutor(
         }
     }
 
-    private suspend fun executeLoop(session: LLMSession, runId: String = ""): ChatResult {
+    private suspend fun executeLoop(session: LLMWriteSession, runId: String = ""): ChatResult {
         var totalUsage = Usage(0, 0, 0)
         var iterations = 0
 
@@ -240,7 +240,7 @@ class ToolExecutor(
     }
 
     private suspend fun executeStreamLoop(
-        session: LLMSession,
+        session: LLMWriteSession,
         onChunk: suspend (String) -> Unit,
         runId: String = ""
     ): StreamResult {
@@ -413,7 +413,7 @@ class ToolExecutor(
         )
     }
 
-    private suspend fun <T> LLMSession.use(block: suspend (LLMSession) -> T): T {
+    private suspend fun <T> LLMWriteSession.use(block: suspend (LLMWriteSession) -> T): T {
         try {
             return block(this)
         } finally {
