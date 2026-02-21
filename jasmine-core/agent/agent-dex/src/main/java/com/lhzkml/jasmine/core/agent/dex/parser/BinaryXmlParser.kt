@@ -315,7 +315,7 @@ object BinaryXmlParser {
             buf.int
         }
 
-        val dataStart = chunkStart + 8 + stringsStart
+        val dataStart = chunkStart + stringsStart
         for (i in 0 until stringCount) {
             val pos = dataStart + offsets[i]
             if (pos >= buf.limit()) {
