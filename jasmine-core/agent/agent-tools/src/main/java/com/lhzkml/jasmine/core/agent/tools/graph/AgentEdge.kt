@@ -198,6 +198,31 @@ infix fun <TFrom, TTo> EdgeBuilder<TFrom, ChatResult, TTo>.onToolCall(
 }
 
 /**
+ * 按工具名+参数条件过滤工具调用
+ * 移植自 koog 的 onToolCall(tool: Tool, block: (Args) -> Boolean)，适配 jasmine 的字符串工具名。
+ *
+ * koog 原版通过 tool.decodeArgs() 反序列化参数后判断，jasmine 适配为对 JSON 参数字符串的条件判断。
+ *
+ * 使用方式：
+ * ```kotlin
+ * edge(nodeCallLLM forwardTo nodeExecTool onToolCallWithArgs("read_file") { args -> args.contains("important") })
+ * ```
+ *
+ * @param toolName 工具名称
+ * @param block 条件函数，接收工具调用的 JSON 参数字符串
+ */
+fun <TFrom, TTo> EdgeBuilder<TFrom, ChatResult, TTo>.onToolCallWithArgs(
+    toolName: String,
+    block: suspend (String) -> Boolean
+): EdgeBuilder<TFrom, ChatResult, TTo> {
+    return onCondition { result ->
+        result.hasToolCalls && result.toolCalls.any { toolCall ->
+            toolCall.name == toolName && block(toolCall.arguments)
+        }
+    }
+}
+
+/**
  * 排除指定工具的调用
  * 移植自 koog 的 onToolNotCalled(tool: Tool)，适配 jasmine 的字符串工具名。
  *

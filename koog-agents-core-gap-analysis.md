@@ -86,7 +86,7 @@ jasmine 已有 5 个边条件，koog 共有约 17 个。以下 12 个缺失:
 | onSuccessful(condition) | `EdgeBuilder<SafeTool.Result> -> EdgeBuilder<Success>` | SafeTool成功结果过滤 |
 | onFailure(condition) | `EdgeBuilder<SafeTool.Result> -> EdgeBuilder<Failure>` | SafeTool失败结果过滤 |
 | onToolCall(tool: Tool) | `EdgeBuilder -> EdgeBuilder<ToolCall>` | 按指定工具名过滤工具调用 |
-| onToolCall(tool, argsCondition) | `EdgeBuilder -> EdgeBuilder<ToolCall>` | 按工具名+参数条件过滤 |
+| onToolCall(tool, argsCondition) | `EdgeBuilder -> EdgeBuilder<ToolCall>` | 按工具名+参数条件过滤 [已完成] |
 | onToolNotCalled(tool) | `EdgeBuilder -> EdgeBuilder<ToolCall>` | 排除指定工具的调用 |
 | onToolResult(tool, condition) | `EdgeBuilder -> EdgeBuilder<ReceivedToolResult>` | 按工具结果过滤 [已完成] |
 | onMultipleToolCalls | `EdgeBuilder<List<Response>> -> EdgeBuilder<List<ToolCall>>` | 多工具调用列表过滤 |
