@@ -196,9 +196,7 @@ class AgentStrategyActivity : AppCompatActivity() {
         val isGraph = current == ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH
 
         tvSimpleLoopCheck.visibility = if (isSimple) View.VISIBLE else View.GONE
-        tvSimpleLoopCheck.text = "[*]"
         tvGraphCheck.visibility = if (isGraph) View.VISIBLE else View.GONE
-        tvGraphCheck.text = "[*]"
 
         cardSimpleLoop.setBackgroundResource(
             if (isSimple) R.drawable.bg_strategy_card_selected else R.drawable.bg_strategy_card
@@ -237,7 +235,6 @@ class AgentStrategyActivity : AppCompatActivity() {
         )
         for ((m, tv) in checks) {
             tv.visibility = if (m == mode) View.VISIBLE else View.GONE
-            tv.text = "[*]"
         }
         for ((m, card) in cards) {
             card.setBackgroundResource(
@@ -262,7 +259,6 @@ class AgentStrategyActivity : AppCompatActivity() {
         )
         for ((s, tv) in checks) {
             tv.visibility = if (s == strategy) View.VISIBLE else View.GONE
-            tv.text = "[*]"
         }
         for ((s, card) in cards) {
             card.setBackgroundResource(
@@ -293,7 +289,6 @@ class AgentStrategyActivity : AppCompatActivity() {
         )
         for ((m, tv) in checks) {
             tv.visibility = if (m == mode) View.VISIBLE else View.GONE
-            tv.text = "[*]"
         }
         for ((m, card) in cards) {
             card.setBackgroundResource(
