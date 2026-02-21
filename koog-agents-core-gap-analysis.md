@@ -118,12 +118,12 @@ koog 为 FunctionalContext 提供了约 20 个便捷扩展函数，jasmine 的 F
 | requestLLM(message, allowToolCalls) | 追加用户消息并请求LLM |
 | onAssistantMessage(response, action) | 如果是助手消息则执行action |
 | containsToolCalls() | 检查响应列表是否包含工具调用 |
-| asAssistantMessageOrNull() | 安全转换为助手消息 |
-| asAssistantMessage() | 强制转换为助手消息 |
+| asAssistantMessageOrNull() | 安全转换为助手消息 [已完成] |
+| asAssistantMessage() | 强制转换为助手消息 [已完成] |
 | onMultipleToolCalls(response, action) | 如果有多个工具调用则执行action |
 | extractToolCalls(response) | 从响应列表提取工具调用 |
 | onMultipleAssistantMessages(response, action) | 如果有多个助手消息则执行action |
-| latestTokenUsage() | 获取最新token用量 |
+| latestTokenUsage() | 获取最新token用量 [已完成] |
 | requestLLMStructured(message, examples) | 请求结构化输出 |
 | requestLLMStreaming(message) | 流式请求 |
 | requestLLMMultiple(message) | 多响应请求 |
@@ -133,7 +133,7 @@ koog 为 FunctionalContext 提供了约 20 个便捷扩展函数，jasmine 的 F
 | executeMultipleTools(toolCalls, parallel) | 执行多个工具 |
 | sendToolResult(toolResult) | 发送工具结果并请求LLM |
 | sendMultipleToolResults(results) | 发送多个工具结果 |
-| executeSingleTool(tool, args) | 直接调用指定工具 |
+| executeSingleTool(tool, args) | 直接调用指定工具 [已完成] |
 | compressHistory(strategy) | 压缩历史 |
 
 ### 移植难度评估

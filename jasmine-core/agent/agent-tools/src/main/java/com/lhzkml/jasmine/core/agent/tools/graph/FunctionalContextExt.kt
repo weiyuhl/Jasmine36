@@ -374,3 +374,85 @@ suspend fun AgentGraphContext.sendMultipleToolResultsMultiple(
     }
     return session.requestLLMMultiple()
 }
+
+// ========== 响应类型判断 ==========
+// 移植自 koog 的 asAssistantMessageOrNull / asAssistantMessage
+// koog 用密封类层次(Message.Assistant/Tool.Call/Reasoning)，jasmine 用扁平 ChatResult。
+// 适配为判断 ChatResult 是否为纯助手消息（无工具调用）。
+
+/**
+ * 如果 ChatResult 是纯助手消息（无工具调用），返回自身；否则返回 null
+ * 移植自 koog 的 Message.Response.asAssistantMessageOrNull()
+ *
+ * @return ChatResult 或 null
+ */
+fun ChatResult.asAssistantMessageOrNull(): ChatResult? {
+    return if (!hasToolCalls) this else null
+}
+
+/**
+ * 强制将 ChatResult 视为纯助手消息
+ * 移植自 koog 的 Message.Response.asAssistantMessage()
+ *
+ * @return ChatResult
+ * @throws IllegalStateException 如果包含工具调用
+ */
+fun ChatResult.asAssistantMessage(): ChatResult {
+    check(!hasToolCalls) { "ChatResult contains tool calls, not a pure assistant message" }
+    return this
+}
+
+// ========== 直接工具调用 ==========
+
+/**
+ * 直接调用指定工具（不经过 LLM 选择）
+ * 移植自 koog 的 AIAgentFunctionalContext.executeSingleTool
+ *
+ * koog 原版使用 SafeTool<ToolArg, TResult> 类型化参数，jasmine 适配为工具名 + JSON 参数字符串。
+ *
+ * @param toolName 要调用的工具名称
+ * @param toolArgs 工具参数（JSON 格式字符串）
+ * @param doAppendPrompt 是否将工具调用信息追加到 prompt，默认 true
+ * @return 工具执行结果
+ */
+suspend fun AgentGraphContext.executeSingleTool(
+    toolName: String,
+    toolArgs: String,
+    doAppendPrompt: Boolean = true
+): ReceivedToolResult {
+    if (doAppendPrompt) {
+        session.appendPrompt {
+            user("Tool call: $toolName was explicitly called with args: $toolArgs")
+        }
+    }
+
+    val toolCall = ToolCall(
+        id = "explicit_${toolName}_${System.currentTimeMillis()}",
+        name = toolName,
+        arguments = toolArgs
+    )
+    val result = environment.executeTool(toolCall)
+
+    if (doAppendPrompt) {
+        session.appendPrompt {
+            user("Tool call: $toolName was explicitly called and returned result: ${result.content}")
+        }
+    }
+
+    return result
+}
+
+// ========== Token 用量（实际值） ==========
+
+/**
+ * 获取最新的 token 用量
+ * 移植自 koog 的 AIAgentFunctionalContext.latestTokenUsage
+ *
+ * koog 从 prompt.latestTokenUsage 读取实际值，jasmine 从最近一次 ChatResult 的 usage 获取。
+ *
+ * @param lastResult 最近一次 LLM 响应（可选）
+ * @return token 用量，如果无法获取返回 null
+ */
+fun AgentGraphContext.latestTokenUsage(lastResult: ChatResult? = null): Int? {
+    return lastResult?.usage?.totalTokens
+}
