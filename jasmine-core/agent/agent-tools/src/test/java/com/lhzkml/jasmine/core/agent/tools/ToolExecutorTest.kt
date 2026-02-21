@@ -15,6 +15,8 @@ class ToolExecutorTest {
     private class FakeClient(private val responses: MutableList<ChatResult>) : ChatClient {
         override val provider = LLMProvider.OpenAI
         var callCount = 0; private set
+        /** 记录每次调用时传入的 tools 列表大小 */
+        var lastToolsCount = -1; private set
 
         override suspend fun chat(
             messages: List<ChatMessage>, model: String, maxTokens: Int?,
@@ -26,7 +28,7 @@ class ToolExecutorTest {
             messages: List<ChatMessage>, model: String, maxTokens: Int?,
             samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
             toolChoice: ToolChoice?
-        ): ChatResult { callCount++; return responses.removeAt(0) }
+        ): ChatResult { callCount++; lastToolsCount = tools.size; return responses.removeAt(0) }
 
         override fun chatStream(
             messages: List<ChatMessage>, model: String, maxTokens: Int?,
@@ -100,5 +102,31 @@ class ToolExecutorTest {
         ) { chunks.add(it) }
         assertEquals("Time is now.", result.content)
         assertTrue(chunks.contains("Time is now."))
+    }
+
+    @Test
+    fun `tools are passed to client`() = runBlocking {
+        val client = FakeClient(mutableListOf(ChatResult("OK", Usage(10, 5, 15), "stop")))
+        val registry = ToolRegistry.build {
+            register(CalculatorTool.plus)
+            register(CalculatorTool.minus)
+            register(GetCurrentTimeTool)
+        }
+        ToolExecutor(client, registry).execute(listOf(ChatMessage.user("Hi")), "m")
+        assertEquals("3 tools should be passed to client", 3, client.lastToolsCount)
+    }
+
+    @Test
+    fun `tools are passed to client in stream mode`() = runBlocking {
+        val client = FakeClient(mutableListOf(ChatResult("OK", Usage(10, 5, 15), "stop")))
+        val registry = ToolRegistry.build {
+            register(CalculatorTool.plus)
+            register(CalculatorTool.minus)
+            register(GetCurrentTimeTool)
+        }
+        ToolExecutor(client, registry).executeStream(
+            listOf(ChatMessage.user("Hi")), "m"
+        ) {}
+        assertEquals("3 tools should be passed to client in stream mode", 3, client.lastToolsCount)
     }
 }

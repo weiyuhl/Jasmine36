@@ -9,6 +9,58 @@ import org.junit.Test
 
 class LLMSessionTest {
 
+    /** ThinkingChatClient mock，追踪 chatStreamWithThinking 收到的 tools */
+    private class MockThinkingClient(
+        private val response: String = "Hello!"
+    ) : ThinkingChatClient {
+        override val provider = LLMProvider.OpenAI
+        var lastStreamTools: List<ToolDescriptor>? = null
+
+        override suspend fun chat(
+            messages: List<ChatMessage>, model: String,
+            maxTokens: Int?, samplingParams: SamplingParams?,
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
+        ): String = response
+
+        override suspend fun chatWithUsage(
+            messages: List<ChatMessage>, model: String,
+            maxTokens: Int?, samplingParams: SamplingParams?,
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
+        ): ChatResult = ChatResult(content = response, usage = Usage(10, 5, 15), finishReason = "stop")
+
+        override fun chatStream(
+            messages: List<ChatMessage>, model: String,
+            maxTokens: Int?, samplingParams: SamplingParams?,
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
+        ): Flow<String> = emptyFlow()
+
+        override suspend fun chatStreamWithUsage(
+            messages: List<ChatMessage>, model: String,
+            maxTokens: Int?, samplingParams: SamplingParams?,
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?,
+            onChunk: suspend (String) -> Unit
+        ): StreamResult {
+            lastStreamTools = tools
+            onChunk(response)
+            return StreamResult(content = response, usage = Usage(10, 5, 15))
+        }
+
+        override suspend fun chatStreamWithThinking(
+            messages: List<ChatMessage>, model: String,
+            maxTokens: Int?, samplingParams: SamplingParams?,
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?,
+            onChunk: suspend (String) -> Unit,
+            onThinking: suspend (String) -> Unit
+        ): StreamResult {
+            lastStreamTools = tools
+            onChunk(response)
+            return StreamResult(content = response, usage = Usage(10, 5, 15))
+        }
+
+        override suspend fun listModels(): List<ModelInfo> = emptyList()
+        override fun close() {}
+    }
+
     /** 简单 mock client，返回固定回复 */
     private class MockClient(
         private val response: String = "Hello!",
@@ -99,6 +151,43 @@ class LLMSessionTest {
         session.requestLLM()
         assertEquals(1, client.lastTools?.size)
         assertEquals("test_tool", client.lastTools!![0].name)
+
+        session.close()
+    }
+
+    @Test
+    fun `session tools property is correctly initialized`() = runTest {
+        val tools = listOf(
+            ToolDescriptor("tool_a", "Tool A"),
+            ToolDescriptor("tool_b", "Tool B"),
+            ToolDescriptor("tool_c", "Tool C")
+        )
+        val session = LLMWriteSession(MockClient(), "gpt-4", prompt("test") { user("Hi") }, tools)
+
+        // 验证 tools 属性在构造后立即可用且正确
+        assertEquals("tools property should have 3 items", 3, session.tools.size)
+        assertEquals("tool_a", session.tools[0].name)
+        assertEquals("tool_b", session.tools[1].name)
+        assertEquals("tool_c", session.tools[2].name)
+
+        session.close()
+    }
+
+    @Test
+    fun `stream request passes tools to client via ThinkingChatClient`() = runTest {
+        val thinkingClient = MockThinkingClient("Streamed")
+        val tools = listOf(
+            ToolDescriptor("tool_x", "Tool X"),
+            ToolDescriptor("tool_y", "Tool Y")
+        )
+        val session = LLMWriteSession(thinkingClient, "gpt-4", prompt("test") { user("Hi") }, tools)
+
+        session.requestLLMStream(onChunk = {})
+
+        // 验证 ThinkingChatClient.chatStreamWithThinking 收到了 tools
+        assertEquals("tools should be passed through stream path", 2, thinkingClient.lastStreamTools?.size)
+        assertEquals("tool_x", thinkingClient.lastStreamTools!![0].name)
+        assertEquals("tool_y", thinkingClient.lastStreamTools!![1].name)
 
         session.close()
     }

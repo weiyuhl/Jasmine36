@@ -152,18 +152,17 @@ class MainActivity : AppCompatActivity() {
      * 刷新系统上下文收集器
      * 根据当前设置注册/注销上下文提供者，发送消息时自动拼接到 system prompt。
      */
-    private fun refreshContextCollector(toolBriefs: List<AgentPromptContextProvider.ToolBrief> = emptyList()) {
+    private fun refreshContextCollector() {
         contextCollector.clear()
 
         val isAgent = ProviderManager.isAgentMode(this)
         val wsPath = ProviderManager.getWorkspacePath(this)
 
-        // Agent 模式：注入结构化行为指引提示词（包含动态工具列表）
+        // Agent 模式：注入结构化行为指引提示词（工具通过 API tools 参数发送，不在提示词中列出）
         if (isAgent) {
             contextCollector.register(AgentPromptContextProvider(
                 agentName = "Jasmine",
-                workspacePath = wsPath,
-                toolDescriptors = toolBriefs
+                workspacePath = wsPath
             ))
         }
 
@@ -1107,11 +1106,8 @@ class MainActivity : AppCompatActivity() {
                     r
                 } else null
 
-                // 刷新上下文收集器（工作区、系统信息、时间、工具列表等）
-                val toolBriefs = registry?.descriptors()?.map {
-                    AgentPromptContextProvider.ToolBrief(it.name, it.description)
-                } ?: emptyList()
-                refreshContextCollector(toolBriefs)
+                // 刷新上下文收集器（工作区、系统信息、时间等，工具通过 API tools 参数发送）
+                refreshContextCollector()
 
                 if (currentConversationId == null) {
                     val title = if (message.length > 20) message.substring(0, 20) + "..." else message

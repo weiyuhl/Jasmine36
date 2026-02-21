@@ -49,6 +49,52 @@ class ChatRequestTest {
     }
 
     @Test
+    fun `tools are serialized when present`() {
+        val params = kotlinx.serialization.json.buildJsonObject {
+            put("type", kotlinx.serialization.json.JsonPrimitive("object"))
+            put("properties", kotlinx.serialization.json.buildJsonObject {
+                put("path", kotlinx.serialization.json.buildJsonObject {
+                    put("type", kotlinx.serialization.json.JsonPrimitive("string"))
+                    put("description", kotlinx.serialization.json.JsonPrimitive("File path"))
+                })
+            })
+        }
+        val toolDef = OpenAIToolDef(
+            function = OpenAIFunctionDef(
+                name = "read_file",
+                description = "Read a file",
+                parameters = params
+            )
+        )
+        val request = ChatRequest(
+            model = "test",
+            messages = listOf(msg("user", "hi")),
+            stream = true,
+            tools = listOf(toolDef)
+        )
+        val jsonStr = json.encodeToString(ChatRequest.serializer(), request)
+        assertTrue("tools field should be present", jsonStr.contains("\"tools\""))
+        assertTrue("function name should be present", jsonStr.contains("\"read_file\""))
+        assertTrue("function type should be present", jsonStr.contains("\"function\""))
+
+        // Verify tools is an array, not null
+        val obj = Json.parseToJsonElement(jsonStr).jsonObject
+        val toolsElement = obj["tools"]
+        assertNotNull("tools should not be null", toolsElement)
+        assertTrue("tools should be an array", toolsElement is kotlinx.serialization.json.JsonArray)
+        assertEquals(1, (toolsElement as kotlinx.serialization.json.JsonArray).size)
+    }
+
+    @Test
+    fun `tools null when not provided`() {
+        val request = ChatRequest(model = "test", messages = emptyList())
+        val jsonStr = json.encodeToString(ChatRequest.serializer(), request)
+        val obj = Json.parseToJsonElement(jsonStr).jsonObject
+        val toolsElement = obj["tools"]
+        assertTrue("tools should be null", toolsElement is kotlinx.serialization.json.JsonNull)
+    }
+
+    @Test
     fun `messages are serialized in order`() {
         val messages = listOf(
             msg("system", "sys"),

@@ -110,65 +110,33 @@ class CurrentTimeContextProvider : SystemContextProvider {
 }
 
 /**
- * 可用工具列表上下文 — 注入当前启用的工具名称
- */
-class AvailableToolsContextProvider(private val toolNames: List<String>) : SystemContextProvider {
-    override val name = "available_tools"
-    override fun getContextSection(): String {
-        if (toolNames.isEmpty()) return ""
-        return "<available_tools>\n${toolNames.joinToString(", ")}\n</available_tools>"
-    }
-}
-
-/**
- * Agent 模式行为指引 — 注入结构化的 Agent 提示词
+ * Agent 模式行为指引 -- 注入结构化的 Agent 提示词
  *
- * 参考 IDE Agent 的提示词结构，为 LLM 提供身份、能力、规则、工具使用指南等。
+ * 参考 IDE Agent 的提示词结构，为 LLM 提供身份、规则等。
  * 只在 Agent 模式下注入。
  *
- * 工具列表从 ToolRegistry 动态获取，不再硬编码，确保新增工具自动同步。
+ * 注意：工具列表不在系统提示词中列出，而是通过 API 的 tools 参数以结构化方式发送。
+ * 在系统提示词中列出工具会导致某些模型（如 Kimi-K2）使用文本模式的 tool calling
+ * 而非 API 的结构化 function calling，从而导致工具调用无法被正确解析。
  *
  * @param agentName Agent 名称
  * @param workspacePath 工作区路径
- * @param toolDescriptors 当前注册的工具描述列表（name + description），由调用方从 ToolRegistry 获取
  */
 class AgentPromptContextProvider(
     private val agentName: String = "Jasmine",
-    private val workspacePath: String = "",
-    private val toolDescriptors: List<ToolBrief> = emptyList()
+    private val workspacePath: String = ""
 ) : SystemContextProvider {
-
-    /**
-     * 工具简要信息，用于生成提示词
-     */
-    data class ToolBrief(val name: String, val description: String)
 
     override val name = "agent_prompt"
     override fun getContextSection(): String = buildString {
         appendLine("<identity>")
         appendLine("你是 $agentName，一个运行在 Android 设备上的 AI Agent 助手。")
-        appendLine("你可以通过工具来完成各种任务，包括文件操作、命令执行、网络搜索、APK/DEX 编辑、数学计算等。")
-        appendLine("你拥有的所有工具都会通过 function calling 机制提供给你，请充分利用它们。")
+        appendLine("你可以通过 function calling 机制调用工具来完成各种任务。")
         appendLine("</identity>")
         appendLine()
 
-        // 动态生成可用工具列表
-        if (toolDescriptors.isNotEmpty()) {
-            appendLine("<available_tools count=\"${toolDescriptors.size}\">")
-            // 按功能分组显示
-            val groups = groupTools(toolDescriptors)
-            for ((groupName, tools) in groups) {
-                appendLine("[$groupName] (${tools.size} 个)")
-                for (tool in tools) {
-                    appendLine("  - ${tool.name}: ${tool.description.take(120)}")
-                }
-            }
-            appendLine("</available_tools>")
-            appendLine()
-        }
-
         appendLine("<rules>")
-        appendLine("- 你拥有上面列出的所有工具，请根据用户需求选择合适的工具")
+        appendLine("- 根据用户需求选择合适的工具，通过 function calling 调用")
         appendLine("- 使用工具时，路径参数使用相对路径（相对于工作区根目录）")
         appendLine("- 用 \".\" 表示工作区根目录")
         appendLine("- 不要猜测文件内容，先用 read_file 或 list_directory 查看")
@@ -176,34 +144,8 @@ class AgentPromptContextProvider(
         appendLine("- 一次工具调用失败时，分析错误原因，尝试换一种方式")
         appendLine("- 回复用户时使用简洁清晰的语言")
         appendLine("- 如果用户使用中文提问，用中文回复")
-        appendLine("- 当用户询问你有哪些工具时，根据 <available_tools> 中的完整列表回答")
         appendLine("</rules>")
     }.trimEnd()
-
-    companion object {
-        /**
-         * 将工具按前缀/功能分组
-         */
-        fun groupTools(tools: List<ToolBrief>): Map<String, List<ToolBrief>> {
-            val groups = linkedMapOf<String, MutableList<ToolBrief>>()
-            for (tool in tools) {
-                val group = when {
-                    tool.name.startsWith("calculator_") || tool.name == "calculate" ||
-                        tool.name == "convert_base" || tool.name == "convert_unit" ||
-                        tool.name == "statistics" -> "计算器"
-                    tool.name == "get_current_time" -> "时间"
-                    tool.name.startsWith("dex_") || tool.name.startsWith("apk_") -> "DEX/APK 编辑"
-                    tool.name.startsWith("web_") -> "网络搜索"
-                    tool.name.startsWith("fetch_url") -> "URL 抓取"
-                    tool.name == "execute_shell_command" -> "命令执行"
-                    tool.name == "attempt_completion" -> "Agent 控制"
-                    else -> "文件操作"
-                }
-                groups.getOrPut(group) { mutableListOf() }.add(tool)
-            }
-            return groups
-        }
-    }
 }
 
 /**
