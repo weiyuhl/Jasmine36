@@ -191,14 +191,74 @@ jasmine 额外提供的扩展函数（koog 没有的）:
 
 ---
 
-## 七、架构差异 -- 不建议直接移植
+## 七、已完成移植 -- Feature/Pipeline 系统
+
+来源: `koog agents-core/feature/` (~30+ 文件)
+目标: `jasmine feature/` (17 个新文件)
+
+将 jasmine 的简单 Tracing 系统增强为完整的 Feature/Pipeline 插件系统，与 koog 架构对齐。
+
+### 核心接口和类
+
+| jasmine 文件 | 对应 koog 源 | 状态 |
+|---|---|---|
+| FeatureKey.kt | AIAgentStorageKey | [已完成] |
+| AgentFeature.kt | AIAgentFeature / AIAgentGraphFeature / AIAgentFunctionalFeature | [已完成] |
+| AgentLifecycleEventType.kt | AgentLifecycleEventType (25种事件类型，7大类) | [已完成] |
+| AgentLifecycleEventContext.kt | AgentLifecycleEventContext | [已完成] |
+| FeatureConfig.kt | FeatureConfig (messageProcessors + eventFilter) | [已完成] |
+| FeatureMessage.kt | FeatureMessage (Message/Event 两种类型) | [已完成] |
+| FeatureMessageProcessor.kt | FeatureMessageProcessor (messageFilter + processMessage) | [已完成] |
+
+### Pipeline 实现
+
+| jasmine 文件 | 对应 koog 源 | 状态 |
+|---|---|---|
+| AgentPipeline.kt | AIAgentPipeline (Feature注册/卸载 + 所有拦截器 + 事件触发) | [已完成] |
+| AgentGraphPipeline.kt | AIAgentGraphPipeline (增加Node/Subgraph事件) | [已完成] |
+| AgentFunctionalPipeline.kt | AIAgentFunctionalPipeline | [已完成] |
+
+### Handler 包 (7大类)
+
+| jasmine handler 文件 | 对应 koog handler 包 | 包含内容 | 状态 |
+|---|---|---|---|
+| AgentEventHandler.kt | handler/agent/ | 5个上下文 + 4个Handler + 1个容器 | [已完成] |
+| StrategyEventHandler.kt | handler/strategy/ | 2个上下文 + 2个Handler + 1个容器 | [已完成] |
+| LLMCallEventHandler.kt | handler/llm/ | 2个上下文 + 2个Handler + 1个容器 | [已完成] |
+| ToolCallEventHandler.kt | handler/tool/ | 4个上下文 + 4个Handler + 1个容器 | [已完成] |
+| LLMStreamingEventHandler.kt | handler/streaming/ | 4个上下文 + 4个Handler + 1个容器 | [已完成] |
+| NodeExecutionEventHandler.kt | handler/node/ | 3个上下文 + 3个Handler + 1个容器 | [已完成] |
+| SubgraphExecutionEventHandler.kt | handler/subgraph/ | 3个上下文 + 3个Handler + 1个容器 | [已完成] |
+
+### 集成点
+
+Pipeline 已集成到以下现有文件中:
+
+- AgentGraphContext.kt -- 新增 `pipeline: AgentPipeline?` 字段
+- GraphAgent.kt -- 新增 `pipeline: AgentGraphPipeline?` 参数，触发 Agent 生命周期事件
+- FunctionalAgent.kt -- 新增 `pipeline: AgentFunctionalPipeline?` 参数，触发 Agent 生命周期事件
+- AgentSubgraph.kt -- 触发 Node/Subgraph 执行事件
+
+Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
+
+### 未移植的 koog Feature/Pipeline 子项（架构差异）
+
+| koog 子项 | 原因 |
+|---|---|
+| AgentEnvironmentTransformingHandler | koog 用于在 Agent 启动前变换环境，jasmine 环境创建方式不同 |
+| installFeaturesFromSystemConfig | koog 通过环境变量/VM参数自动安装系统Feature，jasmine 不需要 |
+| Debugger Feature | koog 内置调试Feature，jasmine 可通过 Tracing 实现类似功能 |
+| FeatureSystemVariables | koog 的环境变量配置，jasmine 不需要 |
+
+---
+
+## 八、架构差异 -- 不建议直接移植
 
 以下是 koog 和 jasmine 的架构设计差异，属于有意的简化，不建议直接移植:
 
 | koog 模块 | jasmine 对应 | 差异说明 |
 |---|---|---|
 | SafeTool<TArgs, TResult> | 无 | koog 的 Tool 有类型化的 Args/Result，jasmine 的 Tool 是 execute(String)->String |
-| Feature/Pipeline 系统 (~30+文件) | Tracing 系统 | koog 有完整的插件/事件/处理器管道，jasmine 用更简单的 Tracing |
 | LLM Session 读写分离 (ReadSession/WriteSession) | 单一 LLMSession | koog 分离读写权限，jasmine 合一 |
 | AIAgentConfig / AIAgentConfigBase | 直接参数 | koog 用配置对象，jasmine 用构造函数参数 |
 | AIAgentStorage | MutableMap<String, Any?> | koog 有独立存储类，jasmine 直接用 Map |
@@ -213,7 +273,7 @@ jasmine 额外提供的扩展函数（koog 没有的）:
 
 ---
 
-## 八、移植优先级建议
+## 九、移植优先级建议
 
 ### 高优先级 (实用性强，移植难度低) -- 全部已完成
 
@@ -236,12 +296,15 @@ jasmine 额外提供的扩展函数（koog 没有的）:
 14. ExecutionPointNode [已完成]
 15. ToolSelectionStrategy.AutoSelectForTask [已完成]
 
+### 大型子系统 -- 已完成
+
+16. Feature/Pipeline 系统 (17个新文件，完整插件/事件/处理器管道) [已完成]
+
 ### 低优先级 (依赖架构变更或使用场景有限) -- 不移植
 
-16. SafeTool 类型系统 -- 需要重构 Tool 基类，架构差异
-17. onSuccessful / onFailure -- 依赖 SafeTool.Result，jasmine 用 ToolResultKind 替代
-18. onAssistantMessageWithMedia -- 依赖 ContentPart.Attachment，jasmine 无附件概念
-19. nodeLLMModerateMessage -- 需要 moderate() API
-20. Flow-based streaming nodes -- 架构差异大，jasmine 用回调式
-21. nodeSetStructuredOutput -- 需要 StructuredOutputConfig
-22. Feature/Pipeline 系统 -- 大型子系统，jasmine 用 Tracing 替代
+17. SafeTool 类型系统 -- 需要重构 Tool 基类，架构差异
+18. onSuccessful / onFailure -- 依赖 SafeTool.Result，jasmine 用 ToolResultKind 替代
+19. onAssistantMessageWithMedia -- 依赖 ContentPart.Attachment，jasmine 无附件概念
+20. nodeLLMModerateMessage -- 需要 moderate() API
+21. Flow-based streaming nodes -- 架构差异大，jasmine 用回调式
+22. nodeSetStructuredOutput -- 需要 StructuredOutputConfig
