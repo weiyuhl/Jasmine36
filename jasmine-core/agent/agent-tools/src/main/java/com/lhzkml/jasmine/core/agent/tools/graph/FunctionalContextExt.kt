@@ -3,10 +3,10 @@ package com.lhzkml.jasmine.core.agent.tools.graph
 import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
 import com.lhzkml.jasmine.core.prompt.llm.StructuredResponse
 import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
-import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ToolCall
 import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
+import com.lhzkml.jasmine.core.prompt.model.latestTokenUsage
 import kotlinx.serialization.KSerializer
 
 /**
@@ -216,13 +216,9 @@ suspend fun AgentGraphContext.sendToolResult(
     toolResult: ReceivedToolResult
 ): ChatResult {
     session.appendPrompt {
-        message(ChatMessage.toolResult(
-            com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                callId = toolResult.id,
-                name = toolResult.tool,
-                content = toolResult.content
-            )
-        ))
+        tool {
+            result(toolResult)
+        }
     }
     return session.requestLLM()
 }
@@ -231,24 +227,21 @@ suspend fun AgentGraphContext.sendToolResult(
  * 发送多个工具结果并请求 LLM
  * 移植自 koog 的 AIAgentFunctionalContext.sendMultipleToolResults
  *
+ * 注意: koog 原版返回 List<Message.Response>（调用 requestLLMMultiple），
+ * jasmine 适配为返回 List<ChatResult>。
+ *
  * @param results 工具执行结果列表
- * @return LLM 响应结果
+ * @return LLM 响应结果列表
  */
 suspend fun AgentGraphContext.sendMultipleToolResults(
     results: List<ReceivedToolResult>
-): ChatResult {
-    for (result in results) {
-        session.appendPrompt {
-            message(ChatMessage.toolResult(
-                com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                    callId = result.id,
-                    name = result.tool,
-                    content = result.content
-                )
-            ))
+): List<ChatResult> {
+    session.appendPrompt {
+        tool {
+            results.forEach { result(it) }
         }
     }
-    return session.requestLLM()
+    return session.requestLLMMultiple()
 }
 
 // ========== 历史压缩 ==========
@@ -258,11 +251,13 @@ suspend fun AgentGraphContext.sendMultipleToolResults(
  * 移植自 koog 的 AIAgentFunctionalContext.compressHistory
  *
  * @param strategy 压缩策略，默认 WholeHistory
+ * @param preserveMemory 是否保留记忆相关消息，默认 true
  */
 suspend fun AgentGraphContext.compressHistory(
-    strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory
+    strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory,
+    preserveMemory: Boolean = true
 ) {
-    session.replaceHistoryWithTLDR(strategy)
+    session.replaceHistoryWithTLDR(strategy, preserveMemory)
 }
 
 // ========== Token 用量 ==========
@@ -361,15 +356,9 @@ fun extractToolCalls(results: List<ChatResult>): List<ToolCall> {
 suspend fun AgentGraphContext.sendMultipleToolResultsMultiple(
     results: List<ReceivedToolResult>
 ): List<ChatResult> {
-    for (result in results) {
-        session.appendPrompt {
-            message(ChatMessage.toolResult(
-                com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                    callId = result.id,
-                    name = result.tool,
-                    content = result.content
-                )
-            ))
+    session.appendPrompt {
+        tool {
+            results.forEach { result(it) }
         }
     }
     return session.requestLLMMultiple()
@@ -493,4 +482,88 @@ fun AgentGraphContext.appendMessage(message: com.lhzkml.jasmine.core.prompt.mode
  */
 fun AgentGraphContext.appendMessages(messages: List<com.lhzkml.jasmine.core.prompt.model.Message>) {
     session.appendMessages(messages)
+}
+
+// ========== Message.Response 版本的响应判断 ==========
+// 移植自 koog 的 AIAgentFunctionalContextExt.kt (Message.Response 版本)
+
+/**
+ * 如果 Message.Response 是 Assistant 消息，执行 action
+ * 移植自 koog 的 onAssistantMessage(Message.Response, (Message.Assistant) -> Unit)
+ */
+inline fun AgentGraphContext.onAssistantMessage(
+    response: com.lhzkml.jasmine.core.prompt.model.Message.Response,
+    action: (com.lhzkml.jasmine.core.prompt.model.Message.Assistant) -> Unit
+) {
+    if (response is com.lhzkml.jasmine.core.prompt.model.Message.Assistant) {
+        action(response)
+    }
+}
+
+/**
+ * 如果 Message.Response 列表包含 Tool.Call，执行 action
+ * 移植自 koog 的 onMultipleToolCalls(List<Message.Response>, (List<Message.Tool.Call>) -> Unit)
+ */
+inline fun AgentGraphContext.onMultipleToolCallMessages(
+    responses: List<com.lhzkml.jasmine.core.prompt.model.Message.Response>,
+    action: (List<com.lhzkml.jasmine.core.prompt.model.Message.Tool.Call>) -> Unit
+) {
+    val toolCalls = responses.filterIsInstance<com.lhzkml.jasmine.core.prompt.model.Message.Tool.Call>()
+    if (toolCalls.isNotEmpty()) {
+        action(toolCalls)
+    }
+}
+
+/**
+ * 如果 Message.Response 列表包含 Assistant 消息，执行 action
+ * 移植自 koog 的 onMultipleAssistantMessages(List<Message.Response>, (List<Message.Assistant>) -> Unit)
+ */
+@JvmName("onMultipleAssistantMessagesTyped")
+inline fun AgentGraphContext.onMultipleAssistantMessages(
+    responses: List<com.lhzkml.jasmine.core.prompt.model.Message.Response>,
+    action: (List<com.lhzkml.jasmine.core.prompt.model.Message.Assistant>) -> Unit
+) {
+    val assistants = responses.filterIsInstance<com.lhzkml.jasmine.core.prompt.model.Message.Assistant>()
+    if (assistants.isNotEmpty()) {
+        action(assistants)
+    }
+}
+
+/**
+ * 检查 Message.Response 列表是否包含 Tool.Call
+ * 移植自 koog 的 List<Message.Response>.containsToolCalls()
+ */
+@JvmName("containsToolCallsTyped")
+fun List<com.lhzkml.jasmine.core.prompt.model.Message.Response>.containsToolCalls(): Boolean =
+    any { it is com.lhzkml.jasmine.core.prompt.model.Message.Tool.Call }
+
+/**
+ * 从 Message.Response 列表中提取所有 Tool.Call
+ * 移植自 koog 的 extractToolCalls(List<Message.Response>)
+ */
+fun AgentGraphContext.extractToolCallMessages(
+    responses: List<com.lhzkml.jasmine.core.prompt.model.Message.Response>
+): List<com.lhzkml.jasmine.core.prompt.model.Message.Tool.Call> =
+    responses.filterIsInstance<com.lhzkml.jasmine.core.prompt.model.Message.Tool.Call>()
+
+/**
+ * 将 Message.Response 转为 Message.Assistant，如果不是则返回 null
+ * 移植自 koog 的 Message.Response.asAssistantMessageOrNull()
+ */
+fun com.lhzkml.jasmine.core.prompt.model.Message.Response.asAssistantOrNull(): com.lhzkml.jasmine.core.prompt.model.Message.Assistant? =
+    this as? com.lhzkml.jasmine.core.prompt.model.Message.Assistant
+
+/**
+ * 将 Message.Response 强制转为 Message.Assistant
+ * 移植自 koog 的 Message.Response.asAssistantMessage()
+ */
+fun com.lhzkml.jasmine.core.prompt.model.Message.Response.asAssistant(): com.lhzkml.jasmine.core.prompt.model.Message.Assistant =
+    this as com.lhzkml.jasmine.core.prompt.model.Message.Assistant
+
+/**
+ * 获取最新的 token 用量（从 prompt 中读取）
+ * 移植自 koog 的 latestTokenUsage() (从 prompt.latestTokenUsage 读取)
+ */
+suspend fun AgentGraphContext.latestTokenUsageFromPrompt(): Int {
+    return session.prompt.latestTokenUsage
 }

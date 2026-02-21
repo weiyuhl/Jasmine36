@@ -32,4 +32,27 @@ data class ReceivedToolResult(
     val toolDescription: String?,
     val content: String,
     val resultKind: ToolResultKind
-)
+) {
+    /**
+     * 转换为 Message.Tool.Result
+     * 移植自 koog 的 ReceivedToolResult.toMessage()
+     */
+    fun toMessage(): com.lhzkml.jasmine.core.prompt.model.Message.Tool.Result =
+        com.lhzkml.jasmine.core.prompt.model.Message.Tool.Result(
+            id = id,
+            tool = tool,
+            content = content
+        )
+}
+
+/**
+ * PromptBuilder.ToolMessageBuilder 的 ReceivedToolResult 扩展
+ * 移植自 koog 的 PromptBuilder.ToolMessageBuilder.result(ReceivedToolResult)
+ *
+ * 将 ReceivedToolResult 转换为 Message.Tool.Result 并添加到 prompt 中
+ */
+fun com.lhzkml.jasmine.core.prompt.model.PromptBuilder.ToolMessageBuilder.result(
+    result: ReceivedToolResult
+) {
+    result(result.toMessage())
+}

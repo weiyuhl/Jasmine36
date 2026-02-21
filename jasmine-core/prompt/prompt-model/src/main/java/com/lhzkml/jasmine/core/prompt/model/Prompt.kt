@@ -95,6 +95,19 @@ val Prompt.typedMessages: List<Message>
     get() = messages.map { it.toMessage() }
 
 /**
+ * 最近一条响应消息的 token 用量
+ * 移植自 koog 的 Prompt.latestTokenUsage
+ *
+ * 遍历消息列表，找到最后一条 assistant 消息对应的 ResponseMetaInfo 中的 totalTokensCount。
+ * 如果没有响应消息，返回 0。
+ */
+val Prompt.latestTokenUsage: Int
+    get() = typedMessages
+        .lastOrNull { it is Message.Response }
+        ?.let { (it as? Message.Response)?.metaInfo?.totalTokensCount }
+        ?: 0
+
+/**
  * 从 Message 列表构建 Prompt
  */
 fun Prompt.Companion.fromMessages(

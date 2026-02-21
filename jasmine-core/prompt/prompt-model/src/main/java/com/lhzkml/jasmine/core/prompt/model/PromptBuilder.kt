@@ -93,6 +93,14 @@ class PromptBuilder internal constructor(
             )
         }
 
+        /**
+         * 添加 Message.Tool.Call 对象
+         * 移植自 koog ToolMessageBuilder.call(Message.Tool.Call)
+         */
+        fun call(toolCall: Message.Tool.Call) {
+            call(toolCall.id ?: "", toolCall.tool, toolCall.content)
+        }
+
         /** 添加工具结果消息 */
         fun result(callId: String, name: String, content: String) {
             this@PromptBuilder.messages.add(
@@ -103,6 +111,45 @@ class PromptBuilder internal constructor(
         /** 添加 ToolResult 对象 */
         fun result(toolResult: ToolResult) {
             this@PromptBuilder.messages.add(ChatMessage.toolResult(toolResult))
+        }
+
+        /**
+         * 添加 Message.Tool.Result 对象
+         * 移植自 koog ToolMessageBuilder.result(Message.Tool.Result)
+         *
+         * 包含自动合成缺失 tool call 的逻辑:
+         * 如果对应的 tool call 不存在于消息列表中，会自动合成一个。
+         */
+        fun result(toolResult: Message.Tool.Result) {
+            val existingCallIndex = this@PromptBuilder.messages
+                .indexOfLast { msg ->
+                    msg.role == "assistant" &&
+                    msg.toolCalls?.any { it.id == toolResult.id } == true
+                }
+
+            val resultChatMessage = ChatMessage.toolResult(
+                ToolResult(
+                    callId = toolResult.id ?: "",
+                    name = toolResult.tool,
+                    content = toolResult.content
+                )
+            )
+
+            if (existingCallIndex != -1) {
+                this@PromptBuilder.messages.add(existingCallIndex + 1, resultChatMessage)
+            } else {
+                if (toolResult.id != null) {
+                    val synthesizedCall = ChatMessage.assistantWithToolCalls(
+                        listOf(ToolCall(
+                            id = toolResult.id,
+                            name = toolResult.tool,
+                            arguments = "Synthesized call for result"
+                        ))
+                    )
+                    this@PromptBuilder.messages.add(synthesizedCall)
+                }
+                this@PromptBuilder.messages.add(resultChatMessage)
+            }
         }
     }
 

@@ -693,12 +693,27 @@ private suspend fun <T : LLMSession, R> T.use(block: suspend (T) -> R): R {
 /**
  * 用 TLDR 摘要替换历史消息
  * 参考 koog 的 replaceHistoryWithTLDR
+ *
+ * @param strategy 压缩策略
+ * @param preserveMemory 是否保留记忆相关消息
+ * @param listener 压缩过程事件监听器
  */
 suspend fun LLMWriteSession.replaceHistoryWithTLDR(
     strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory,
+    preserveMemory: Boolean = true,
     listener: CompressionEventListener? = null
 ) {
-    strategy.compress(this, listener)
+    // 如果需要保留记忆，过滤出记忆相关消息
+    val memoryMessages = if (preserveMemory) {
+        prompt.messages.filter { message ->
+            message.content.contains("Here are the relevant facts from memory") ||
+                message.content.contains("Memory feature is not enabled")
+        }
+    } else {
+        emptyList()
+    }
+
+    strategy.compress(this, listener, memoryMessages)
 }
 
 /**
@@ -706,9 +721,10 @@ suspend fun LLMWriteSession.replaceHistoryWithTLDR(
  */
 suspend fun LLMWriteSession.compressIfNeeded(
     strategy: HistoryCompressionStrategy.TokenBudget,
+    preserveMemory: Boolean = true,
     listener: CompressionEventListener? = null
 ) {
     if (strategy.shouldCompress(prompt.messages)) {
-        replaceHistoryWithTLDR(strategy, listener = listener)
+        replaceHistoryWithTLDR(strategy, preserveMemory, listener)
     }
 }

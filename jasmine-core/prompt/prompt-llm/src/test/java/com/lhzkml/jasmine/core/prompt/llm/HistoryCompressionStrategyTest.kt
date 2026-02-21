@@ -301,7 +301,7 @@ class HistoryCompressionStrategyTest {
     @Test
     fun `splitHistoryBySystemMessages splits correctly`() {
         val strategy = object : HistoryCompressionStrategy() {
-            override suspend fun compress(session: LLMWriteSession, listener: CompressionEventListener?) {}
+            override suspend fun compress(session: LLMWriteSession, listener: CompressionEventListener?, memoryMessages: List<ChatMessage>) {}
             fun testSplit(messages: List<ChatMessage>) = splitHistoryBySystemMessages(messages)
         }
 

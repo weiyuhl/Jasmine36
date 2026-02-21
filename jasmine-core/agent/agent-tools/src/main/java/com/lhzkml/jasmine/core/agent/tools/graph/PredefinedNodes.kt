@@ -163,13 +163,7 @@ fun GraphStrategyBuilder<*, *>.nodeLLMSendToolResult(
 ): AgentNodeDelegate<ReceivedToolResult, ChatResult> {
     return node(name) { result ->
         session.appendPrompt {
-            message(ChatMessage.toolResult(
-                com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                    callId = result.id,
-                    name = result.tool,
-                    content = result.content
-                )
-            ))
+            tool { result(result) }
         }
         session.requestLLM()
     }
@@ -186,15 +180,9 @@ fun GraphStrategyBuilder<*, *>.nodeLLMSendMultipleToolResults(
     name: String? = null
 ): AgentNodeDelegate<List<ReceivedToolResult>, ChatResult> {
     return node(name) { results ->
-        for (result in results) {
-            session.appendPrompt {
-                message(ChatMessage.toolResult(
-                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                        callId = result.id,
-                        name = result.tool,
-                        content = result.content
-                    )
-                ))
+        session.appendPrompt {
+            tool {
+                results.forEach { result(it) }
             }
         }
         session.requestLLM()
@@ -211,15 +199,9 @@ fun GraphStrategyBuilder<*, *>.nodeLLMSendMultipleToolResultsStreaming(
     name: String? = null
 ): AgentNodeDelegate<List<ReceivedToolResult>, ChatResult> {
     return node(name) { results ->
-        for (result in results) {
-            session.appendPrompt {
-                message(ChatMessage.toolResult(
-                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                        callId = result.id,
-                        name = result.tool,
-                        content = result.content
-                    )
-                ))
+        session.appendPrompt {
+            tool {
+                results.forEach { result(it) }
             }
         }
 
@@ -338,13 +320,15 @@ fun <T> GraphStrategyBuilder<*, *>.nodeLLMRequestStructured(
  * 输出: T (透传输入)
  *
  * @param strategy 压缩策略，默认 WholeHistory
+ * @param preserveMemory 是否保留记忆相关消息，默认 true
  */
 fun <T> GraphStrategyBuilder<*, *>.nodeLLMCompressHistory(
     name: String? = null,
-    strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory
+    strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory,
+    preserveMemory: Boolean = true
 ): AgentNodeDelegate<T, T> {
     return node(name) { input ->
-        session.replaceHistoryWithTLDR(strategy)
+        session.replaceHistoryWithTLDR(strategy, preserveMemory)
         input
     }
 }
@@ -360,15 +344,9 @@ fun GraphStrategyBuilder<*, *>.nodeLLMSendToolResultOnlyCallingTools(
     name: String? = null
 ): AgentNodeDelegate<List<ReceivedToolResult>, ChatResult> {
     return node(name) { results ->
-        for (result in results) {
-            session.appendPrompt {
-                message(ChatMessage.toolResult(
-                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                        callId = result.id,
-                        name = result.tool,
-                        content = result.content
-                    )
-                ))
+        session.appendPrompt {
+            tool {
+                results.forEach { result(it) }
             }
         }
         session.requestLLMOnlyCallingTools()
@@ -386,15 +364,9 @@ fun GraphStrategyBuilder<*, *>.nodeLLMSendMultipleToolResultsMultiple(
     name: String? = null
 ): AgentNodeDelegate<List<ReceivedToolResult>, List<ChatResult>> {
     return node(name) { results ->
-        for (result in results) {
-            session.appendPrompt {
-                message(ChatMessage.toolResult(
-                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                        callId = result.id,
-                        name = result.tool,
-                        content = result.content
-                    )
-                ))
+        session.appendPrompt {
+            tool {
+                results.forEach { result(it) }
             }
         }
         session.requestLLMMultiple()
@@ -412,15 +384,9 @@ fun GraphStrategyBuilder<*, *>.nodeLLMSendMultipleToolResultsOnlyCallingTools(
     name: String? = null
 ): AgentNodeDelegate<List<ReceivedToolResult>, List<ChatResult>> {
     return node(name) { results ->
-        for (result in results) {
-            session.appendPrompt {
-                message(ChatMessage.toolResult(
-                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                        callId = result.id,
-                        name = result.tool,
-                        content = result.content
-                    )
-                ))
+        session.appendPrompt {
+            tool {
+                results.forEach { result(it) }
             }
         }
         session.requestLLMMultipleOnlyCallingTools()
@@ -446,15 +412,9 @@ fun GraphStrategyBuilder<*, *>.nodeExecuteMultipleToolsAndSendResults(
         } else {
             toolCalls.map { environment.executeTool(it) }
         }
-        for (result in results) {
-            session.appendPrompt {
-                message(ChatMessage.toolResult(
-                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                        callId = result.id,
-                        name = result.tool,
-                        content = result.content
-                    )
-                ))
+        session.appendPrompt {
+            tool {
+                results.forEach { result(it) }
             }
         }
         session.requestLLMMultiple()
