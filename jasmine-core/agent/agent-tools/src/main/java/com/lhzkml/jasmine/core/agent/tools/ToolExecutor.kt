@@ -233,8 +233,14 @@ class ToolExecutor(
             }
         }
 
+        // 到达最大迭代次数，给模型一次无工具的总结机会
+        session.appendPrompt {
+            user("你已经进行了 $maxIterations 轮工具调用。请根据目前收集到的信息，直接给出总结回复，不要再调用工具。")
+        }
+        val finalResult = session.requestLLMWithoutTools()
+        totalUsage = totalUsage.add(finalResult.usage)
         return ChatResult(
-            content = "Error: Exceeded maximum tool call iterations ($maxIterations)",
+            content = finalResult.content,
             usage = totalUsage, finishReason = "max_iterations"
         )
     }
@@ -365,8 +371,14 @@ class ToolExecutor(
             }
         }
 
+        // 到达最大迭代次数，给模型一次无工具的流式总结机会
+        session.appendPrompt {
+            user("你已经进行了 $maxIterations 轮工具调用。请根据目前收集到的信息，直接给出总结回复，不要再调用工具。")
+        }
+        val finalResult = session.requestLLMStreamWithoutTools(onChunk, onThinking)
+        totalUsage = totalUsage.add(finalResult.usage)
         return StreamResult(
-            content = "Error: Exceeded maximum tool call iterations ($maxIterations)",
+            content = finalResult.content,
             usage = totalUsage, finishReason = "max_iterations"
         )
     }
