@@ -86,12 +86,47 @@ class ChatRequestTest {
     }
 
     @Test
-    fun `tools null when not provided`() {
+    fun `tools omitted when not provided with explicitNulls false`() {
+        val jsonNoNulls = Json { encodeDefaults = true; explicitNulls = false }
         val request = ChatRequest(model = "test", messages = emptyList())
-        val jsonStr = json.encodeToString(ChatRequest.serializer(), request)
+        val jsonStr = jsonNoNulls.encodeToString(ChatRequest.serializer(), request)
         val obj = Json.parseToJsonElement(jsonStr).jsonObject
-        val toolsElement = obj["tools"]
-        assertTrue("tools should be null", toolsElement is kotlinx.serialization.json.JsonNull)
+        // With explicitNulls = false, null fields should be omitted entirely
+        assertFalse("tools should not be present in JSON", obj.containsKey("tools"))
+        assertFalse("tool_choice should not be present in JSON", obj.containsKey("tool_choice"))
+        assertFalse("temperature should not be present in JSON", obj.containsKey("temperature"))
+    }
+
+    @Test
+    fun `full request serialization with tools`() {
+        val params = kotlinx.serialization.json.buildJsonObject {
+            put("type", kotlinx.serialization.json.JsonPrimitive("object"))
+            put("properties", kotlinx.serialization.json.buildJsonObject {
+                put("path", kotlinx.serialization.json.buildJsonObject {
+                    put("type", kotlinx.serialization.json.JsonPrimitive("string"))
+                })
+            })
+        }
+        val request = ChatRequest(
+            model = "deepseek-ai/DeepSeek-V3.2",
+            messages = listOf(msg("system", "You are an agent"), msg("user", "list files")),
+            stream = true,
+            tools = listOf(
+                OpenAIToolDef(function = OpenAIFunctionDef(name = "list_directory", description = "List dir", parameters = params))
+            ),
+            toolChoice = null
+        )
+        val jsonStr = json.encodeToString(ChatRequest.serializer(), request)
+
+        // Verify tool_choice is omitted when null (with explicitNulls = false)
+        val jsonNoNulls = Json { encodeDefaults = true; explicitNulls = false }
+        val jsonStrNoNulls = jsonNoNulls.encodeToString(ChatRequest.serializer(), request)
+        val objNoNulls = Json.parseToJsonElement(jsonStrNoNulls).jsonObject
+        assertFalse("tool_choice should be omitted when null", objNoNulls.containsKey("tool_choice"))
+
+        // Verify tools array is present even with explicitNulls = false
+        assertTrue("tools should be array", objNoNulls["tools"] is kotlinx.serialization.json.JsonArray)
+        assertEquals(1, (objNoNulls["tools"] as kotlinx.serialization.json.JsonArray).size)
     }
 
     @Test

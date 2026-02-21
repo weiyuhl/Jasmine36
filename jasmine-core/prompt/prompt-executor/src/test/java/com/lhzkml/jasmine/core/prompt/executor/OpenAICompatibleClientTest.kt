@@ -3,6 +3,9 @@ package com.lhzkml.jasmine.core.prompt.executor
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
+import com.lhzkml.jasmine.core.prompt.model.ToolParameterDescriptor
+import com.lhzkml.jasmine.core.prompt.model.ToolParameterType
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -11,6 +14,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -19,6 +23,7 @@ class OpenAICompatibleClientTest {
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
+        explicitNulls = false
     }
 
     private fun createMockClient(handler: MockRequestHandler): HttpClient {
@@ -392,6 +397,90 @@ class OpenAICompatibleClientTest {
         val result = client.chatStreamWithUsage(listOf(ChatMessage.user("hi")), "model") {}
         assertEquals("Hi", result.content)
         assertNull(result.usage)
+        client.close()
+    }
+
+    // ========== tools 序列化验证 ==========
+
+    @Test
+    fun `request body contains tools when tools are provided`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}]}")
+            appendLine()
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
+        var capturedBody = ""
+        val mockHttp = createMockClient { request ->
+            capturedBody = request.body.toByteArray().decodeToString()
+            respond(
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
+            )
+        }
+
+        val tools = listOf(
+            ToolDescriptor(
+                name = "read_file",
+                description = "Read a file",
+                requiredParameters = listOf(
+                    ToolParameterDescriptor("path", "File path", ToolParameterType.StringType)
+                )
+            ),
+            ToolDescriptor(
+                name = "list_directory",
+                description = "List directory contents",
+                requiredParameters = listOf(
+                    ToolParameterDescriptor("path", "Directory path", ToolParameterType.StringType)
+                )
+            )
+        )
+
+        val client = createDeepSeekClient(mockHttp)
+        client.chat(listOf(ChatMessage.user("hi")), "model", tools = tools)
+
+        // Verify tools are in the request body
+        assertTrue("Request body should contain tools field: $capturedBody", capturedBody.contains("\"tools\""))
+        assertTrue("Request body should contain read_file tool: $capturedBody", capturedBody.contains("\"read_file\""))
+        assertTrue("Request body should contain list_directory tool: $capturedBody", capturedBody.contains("\"list_directory\""))
+        assertTrue("Request body should contain function type: $capturedBody", capturedBody.contains("\"type\":\"function\""))
+
+        // Parse and verify structure
+        val parsed = json.parseToJsonElement(capturedBody).jsonObject
+        val toolsArray = parsed["tools"]
+        assertNotNull("tools should not be null in request", toolsArray)
+        assertTrue("tools should be a JSON array", toolsArray is kotlinx.serialization.json.JsonArray)
+        assertEquals("should have 2 tools", 2, (toolsArray as kotlinx.serialization.json.JsonArray).size)
+
+        client.close()
+    }
+
+    @Test
+    fun `request body omits tools when no tools provided`() = runTest {
+        val sseBody = buildString {
+            appendLine("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}]}")
+            appendLine()
+            appendLine("data: [DONE]")
+            appendLine()
+        }
+
+        var capturedBody = ""
+        val mockHttp = createMockClient { request ->
+            capturedBody = request.body.toByteArray().decodeToString()
+            respond(
+                content = sseBody,
+                headers = headersOf(HttpHeaders.ContentType, "text/event-stream")
+            )
+        }
+
+        val client = createDeepSeekClient(mockHttp)
+        client.chat(listOf(ChatMessage.user("hi")), "model")
+
+        val parsed = json.parseToJsonElement(capturedBody).jsonObject
+        // With explicitNulls = false, tools field should be omitted entirely
+        assertFalse("tools should not be present when empty", parsed.containsKey("tools"))
+
         client.close()
     }
 }

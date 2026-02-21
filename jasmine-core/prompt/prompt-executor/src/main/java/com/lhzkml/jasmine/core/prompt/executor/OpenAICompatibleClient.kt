@@ -64,6 +64,7 @@ abstract class OpenAICompatibleClient(
     internal val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
+        explicitNulls = false
     }
 
     internal val httpClient: HttpClient = httpClient ?: HttpClient(OkHttp) {
