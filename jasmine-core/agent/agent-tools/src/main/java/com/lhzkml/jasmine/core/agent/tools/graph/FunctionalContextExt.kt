@@ -456,3 +456,41 @@ suspend fun AgentGraphContext.executeSingleTool(
 fun AgentGraphContext.latestTokenUsage(lastResult: ChatResult? = null): Int? {
     return lastResult?.usage?.totalTokens
 }
+
+
+// ========== Message 类型的扩展函数 ==========
+// 移植自 koog 的类型化消息系统
+
+/**
+ * 追加用户消息并请求 LLM，返回 Message.Response
+ */
+suspend fun AgentGraphContext.requestLLMAsMessage(
+    message: String
+): com.lhzkml.jasmine.core.prompt.model.Message.Response {
+    session.appendPrompt { user(message) }
+    return session.requestLLMAsMessage()
+}
+
+/**
+ * 追加用户消息并请求 LLM（不带工具），返回 Message.Response
+ */
+suspend fun AgentGraphContext.requestLLMWithoutToolsAsMessage(
+    message: String
+): com.lhzkml.jasmine.core.prompt.model.Message.Response {
+    session.appendPrompt { user(message) }
+    return session.requestLLMWithoutToolsAsMessage()
+}
+
+/**
+ * 追加 Message 类型的消息到 prompt
+ */
+fun AgentGraphContext.appendMessage(message: com.lhzkml.jasmine.core.prompt.model.Message) {
+    session.appendMessage(message)
+}
+
+/**
+ * 批量追加 Message 类型的消息到 prompt
+ */
+fun AgentGraphContext.appendMessages(messages: List<com.lhzkml.jasmine.core.prompt.model.Message>) {
+    session.appendMessages(messages)
+}

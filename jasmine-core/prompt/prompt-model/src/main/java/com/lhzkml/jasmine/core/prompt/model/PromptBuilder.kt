@@ -66,6 +66,22 @@ class PromptBuilder internal constructor(
         messages.addAll(msgs)
     }
 
+    /** 添加 Message 类型的消息 */
+    fun message(msg: Message) {
+        messages.add(msg.toChatMessage())
+    }
+
+    /** 批量添加 Message 类型的消息 */
+    @JvmName("addTypedMessages")
+    fun messages(msgs: List<Message>) {
+        messages.addAll(msgs.map { it.toChatMessage() })
+    }
+
+    /** 添加推理/思考消息 */
+    fun reasoning(content: String) {
+        messages.add(ChatMessage("assistant", content))
+    }
+
     /** 工具消息构建器 */
     @PromptDSL
     inner class ToolMessageBuilder {

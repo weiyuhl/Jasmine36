@@ -1,6 +1,8 @@
 package com.lhzkml.jasmine.core.agent.tools.snapshot
 
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.Message
+import com.lhzkml.jasmine.core.prompt.model.toMessage
 
 /**
  * Agent 检查点数据
@@ -31,6 +33,10 @@ data class AgentCheckpoint(
     /** 是否为墓碑检查点（标记已终止的会话） */
     fun isTombstone(): Boolean =
         properties?.get(PersistenceUtils.TOMBSTONE_CHECKPOINT_NAME) == "true"
+
+    /** 类型化消息历史（惰性转换） */
+    val typedMessageHistory: List<Message>
+        get() = messageHistory.map { it.toMessage() }
 
     companion object {
         /** 创建墓碑检查点 */

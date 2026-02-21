@@ -62,3 +62,96 @@ data class ChatMessage(
     fun withMetadata(meta: JsonObject): ChatMessage =
         copy(metadata = meta)
 }
+
+/**
+ * 将 ChatMessage 转换为 Message 密封类
+ * 移植自 koog 的类型化消息系统
+ */
+fun ChatMessage.toMessage(): Message {
+    return when (role) {
+        "system" -> Message.System(
+            content = content,
+            metaInfo = RequestMetaInfo(timestamp = timestamp, metadata = metadata)
+        )
+        "user" -> Message.User(
+            content = content,
+            metaInfo = RequestMetaInfo(timestamp = timestamp, metadata = metadata)
+        )
+        "assistant" -> Message.Assistant(
+            content = content,
+            metaInfo = ResponseMetaInfo(
+                timestamp = timestamp,
+                metadata = metadata
+            ),
+            finishReason = finishReason
+        )
+        "tool" -> Message.Tool.Result(
+            id = toolCallId,
+            tool = toolName ?: "",
+            content = content,
+            metaInfo = RequestMetaInfo(timestamp = timestamp, metadata = metadata)
+        )
+        else -> Message.User(
+            content = content,
+            metaInfo = RequestMetaInfo(timestamp = timestamp, metadata = metadata)
+        )
+    }
+}
+
+/**
+ * 将 Message 转换为 ChatMessage
+ */
+fun Message.toChatMessage(): ChatMessage {
+    return when (this) {
+        is Message.System -> ChatMessage.system(content).let {
+            if (metaInfo.timestamp != null || metaInfo.metadata != null) {
+                it.copy(timestamp = metaInfo.timestamp, metadata = metaInfo.metadata)
+            } else it
+        }
+        is Message.User -> ChatMessage.user(content).let {
+            if (metaInfo.timestamp != null || metaInfo.metadata != null) {
+                it.copy(timestamp = metaInfo.timestamp, metadata = metaInfo.metadata)
+            } else it
+        }
+        is Message.Assistant -> ChatMessage(
+            role = "assistant",
+            content = content,
+            timestamp = metaInfo.timestamp,
+            finishReason = finishReason,
+            metadata = metaInfo.metadata
+        )
+        is Message.Reasoning -> ChatMessage(
+            role = "assistant",
+            content = content,
+            timestamp = metaInfo.timestamp,
+            metadata = metaInfo.metadata
+        )
+        is Message.Tool.Call -> ChatMessage(
+            role = "assistant",
+            content = content,
+            timestamp = metaInfo.timestamp,
+            toolCalls = listOf(ToolCall(id = id ?: "", name = tool, arguments = content)),
+            finishReason = "tool_calls",
+            metadata = metaInfo.metadata
+        )
+        is Message.Tool.Result -> ChatMessage(
+            role = "tool",
+            content = content,
+            timestamp = metaInfo.timestamp,
+            toolCallId = id,
+            toolName = tool,
+            metadata = metaInfo.metadata
+        )
+    }
+}
+
+/**
+ * 批量将 ChatMessage 列表转换为 Message 列表
+ */
+fun List<ChatMessage>.toMessages(): List<Message> = map { it.toMessage() }
+
+/**
+ * 批量将 Message 列表转换为 ChatMessage 列表
+ */
+@JvmName("messagesToChatMessages")
+fun List<Message>.toChatMessages(): List<ChatMessage> = map { it.toChatMessage() }

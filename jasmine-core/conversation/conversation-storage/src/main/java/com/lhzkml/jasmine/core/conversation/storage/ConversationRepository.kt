@@ -6,7 +6,10 @@ import com.lhzkml.jasmine.core.conversation.storage.entity.ConversationEntity
 import com.lhzkml.jasmine.core.conversation.storage.entity.MessageEntity
 import com.lhzkml.jasmine.core.conversation.storage.entity.UsageEntity
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.Message
 import com.lhzkml.jasmine.core.prompt.model.Usage
+import com.lhzkml.jasmine.core.prompt.model.toChatMessage
+import com.lhzkml.jasmine.core.prompt.model.toMessage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -170,6 +173,38 @@ class ConversationRepository(context: Context) {
     fun observeMessages(conversationId: String): Flow<List<ChatMessage>> {
         return dao.observeMessages(conversationId).map { list ->
             list.map { it.toChatMessage() }
+        }
+    }
+
+    // ========== Message 类型的消息管理 ==========
+
+    /**
+     * 添加 Message 类型的消息到对话
+     */
+    suspend fun addTypedMessage(conversationId: String, message: Message) {
+        addMessage(conversationId, message.toChatMessage())
+    }
+
+    /**
+     * 批量添加 Message 类型的消息
+     */
+    suspend fun addTypedMessages(conversationId: String, messages: List<Message>) {
+        addMessages(conversationId, messages.map { it.toChatMessage() })
+    }
+
+    /**
+     * 获取对话的所有消息（Message 类型）
+     */
+    suspend fun getTypedMessages(conversationId: String): List<Message> {
+        return getMessages(conversationId).map { it.toMessage() }
+    }
+
+    /**
+     * 实时观察对话消息（Message 类型）
+     */
+    fun observeTypedMessages(conversationId: String): Flow<List<Message>> {
+        return observeMessages(conversationId).map { list ->
+            list.map { it.toMessage() }
         }
     }
 

@@ -336,3 +336,43 @@ fun <TFrom, TTo> EdgeBuilder<TFrom, ReceivedToolResult, TTo>.onToolResult(
         result.tool == toolName && block(result)
     }
 }
+
+
+// ========== Message.Response 版本的边条件 ==========
+// 移植自 koog 的类型化消息系统
+
+/**
+ * 当 Message.Response 是 Assistant 消息时匹配
+ * 移植自 koog 的 onAssistantMessage (Message.Response 版本)
+ */
+infix fun <TFrom, TTo> EdgeBuilder<TFrom, com.lhzkml.jasmine.core.prompt.model.Message.Response, TTo>.onAssistant(
+    block: suspend (com.lhzkml.jasmine.core.prompt.model.Message.Assistant) -> Boolean
+): EdgeBuilder<TFrom, com.lhzkml.jasmine.core.prompt.model.Message.Response, TTo> {
+    return onCondition { response ->
+        response is com.lhzkml.jasmine.core.prompt.model.Message.Assistant && block(response)
+    }
+}
+
+/**
+ * 当 Message.Response 是 Tool.Call 消息时匹配
+ * 移植自 koog 的 onToolCall (Message.Response 版本)
+ */
+infix fun <TFrom, TTo> EdgeBuilder<TFrom, com.lhzkml.jasmine.core.prompt.model.Message.Response, TTo>.onToolCallMessage(
+    block: suspend (com.lhzkml.jasmine.core.prompt.model.Message.Tool.Call) -> Boolean
+): EdgeBuilder<TFrom, com.lhzkml.jasmine.core.prompt.model.Message.Response, TTo> {
+    return onCondition { response ->
+        response is com.lhzkml.jasmine.core.prompt.model.Message.Tool.Call && block(response)
+    }
+}
+
+/**
+ * 当 Message.Response 是 Reasoning 消息时匹配
+ * 移植自 koog 的 onReasoningMessage (Message.Response 版本)
+ */
+infix fun <TFrom, TTo> EdgeBuilder<TFrom, com.lhzkml.jasmine.core.prompt.model.Message.Response, TTo>.onReasoning(
+    block: suspend (com.lhzkml.jasmine.core.prompt.model.Message.Reasoning) -> Boolean
+): EdgeBuilder<TFrom, com.lhzkml.jasmine.core.prompt.model.Message.Response, TTo> {
+    return onCondition { response ->
+        response is com.lhzkml.jasmine.core.prompt.model.Message.Reasoning && block(response)
+    }
+}

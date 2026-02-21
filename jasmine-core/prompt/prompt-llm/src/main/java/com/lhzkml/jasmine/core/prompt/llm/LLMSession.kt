@@ -2,11 +2,15 @@ package com.lhzkml.jasmine.core.prompt.llm
 
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
+import com.lhzkml.jasmine.core.prompt.model.Message
 import com.lhzkml.jasmine.core.prompt.model.Prompt
 import com.lhzkml.jasmine.core.prompt.model.PromptBuilder
 import com.lhzkml.jasmine.core.prompt.model.ToolChoice
 import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.prompt
+import com.lhzkml.jasmine.core.prompt.model.toChatMessage
+import com.lhzkml.jasmine.core.prompt.model.toAssistantMessage
+import com.lhzkml.jasmine.core.prompt.model.toMessages
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -225,6 +229,31 @@ sealed class LLMSession(
             onChunk = onChunk,
             onThinking = onThinking
         )
+    }
+
+    // ========== Message 类型的 LLM 请求 ==========
+
+    /**
+     * 发送请求给 LLM，返回 Message.Response
+     * 移植自 koog 的类型化消息系统
+     */
+    open suspend fun requestLLMAsMessage(): Message.Response {
+        return requestLLM().toAssistantMessage()
+    }
+
+    /**
+     * 发送请求给 LLM（不带工具），返回 Message.Response
+     */
+    open suspend fun requestLLMWithoutToolsAsMessage(): Message.Response {
+        return requestLLMWithoutTools().toAssistantMessage()
+    }
+
+    /**
+     * 发送请求给 LLM，返回完整的 Message.Response 列表
+     * 包含 thinking + assistant + tool calls
+     */
+    open suspend fun requestLLMAsMessages(): List<Message.Response> {
+        return requestLLM().toMessages()
     }
 
     // ========== 结构化输出 ==========
@@ -493,6 +522,26 @@ class LLMWriteSession(
     fun changeModel(newModel: String) {
         checkActive()
         model = newModel
+    }
+
+    // ========== Message 类型的 Prompt 操作 ==========
+
+    /**
+     * 追加 Message 类型的消息到 prompt
+     */
+    fun appendMessage(message: Message) {
+        checkActive()
+        appendPrompt { message(message.toChatMessage()) }
+    }
+
+    /**
+     * 批量追加 Message 类型的消息到 prompt
+     */
+    fun appendMessages(messages: List<Message>) {
+        checkActive()
+        appendPrompt {
+            messages.forEach { message(it.toChatMessage()) }
+        }
     }
 
     // ========== LLM 请求（自动追加响应到 prompt） ==========

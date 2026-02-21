@@ -533,3 +533,39 @@ fun <T> GraphStrategyBuilder<*, *>.nodeLLMRequestStreamingAndSendResults(
         listOf(chatResult)
     }
 }
+
+
+// ========== Message 类型的预定义节点 ==========
+// 移植自 koog 的类型化消息系统
+
+/**
+ * LLM 请求节点 -- 返回 Message.Response
+ * 移植自 koog 的 nodeLLMRequest (Message 版本)
+ *
+ * 输入: String (用户消息)
+ * 输出: Message.Response (类型化 LLM 响应)
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMRequestAsMessage(
+    name: String? = null
+): AgentNodeDelegate<String, com.lhzkml.jasmine.core.prompt.model.Message.Response> {
+    return node(name) { message ->
+        session.appendPrompt { user(message) }
+        session.requestLLMAsMessage()
+    }
+}
+
+/**
+ * LLM 请求节点 -- 返回完整的 Message.Response 列表
+ * 包含 thinking + assistant + tool calls
+ *
+ * 输入: String (用户消息)
+ * 输出: List<Message.Response> (类型化 LLM 响应列表)
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMRequestAsMessages(
+    name: String? = null
+): AgentNodeDelegate<String, List<com.lhzkml.jasmine.core.prompt.model.Message.Response>> {
+    return node(name) { message ->
+        session.appendPrompt { user(message) }
+        session.requestLLMAsMessages()
+    }
+}

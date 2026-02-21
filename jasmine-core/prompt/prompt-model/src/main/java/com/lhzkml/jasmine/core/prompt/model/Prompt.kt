@@ -85,3 +85,28 @@ sealed class ToolChoice {
     /** LLM 必须调用指定工具 */
     data class Named(val toolName: String) : ToolChoice()
 }
+
+
+/**
+ * Message 类型的消息列表（惰性转换）
+ * 移植自 koog 的类型化消息系统
+ */
+val Prompt.typedMessages: List<Message>
+    get() = messages.map { it.toMessage() }
+
+/**
+ * 从 Message 列表构建 Prompt
+ */
+fun Prompt.Companion.fromMessages(
+    messages: List<Message>,
+    id: String,
+    samplingParams: SamplingParams = SamplingParams.DEFAULT,
+    maxTokens: Int? = null,
+    toolChoice: ToolChoice? = null
+): Prompt = Prompt(
+    messages = messages.map { it.toChatMessage() },
+    id = id,
+    samplingParams = samplingParams,
+    maxTokens = maxTokens,
+    toolChoice = toolChoice
+)
