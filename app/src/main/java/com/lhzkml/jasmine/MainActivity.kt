@@ -38,7 +38,6 @@ import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
 import com.lhzkml.jasmine.core.prompt.llm.WorkspaceContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.SystemInfoContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.CurrentTimeContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.AvailableToolsContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.AgentPromptContextProvider
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
@@ -153,17 +152,18 @@ class MainActivity : AppCompatActivity() {
      * 刷新系统上下文收集器
      * 根据当前设置注册/注销上下文提供者，发送消息时自动拼接到 system prompt。
      */
-    private fun refreshContextCollector(toolNames: List<String> = emptyList()) {
+    private fun refreshContextCollector(toolBriefs: List<AgentPromptContextProvider.ToolBrief> = emptyList()) {
         contextCollector.clear()
 
         val isAgent = ProviderManager.isAgentMode(this)
         val wsPath = ProviderManager.getWorkspacePath(this)
 
-        // Agent 模式：注入结构化行为指引提示词
+        // Agent 模式：注入结构化行为指引提示词（包含动态工具列表）
         if (isAgent) {
             contextCollector.register(AgentPromptContextProvider(
                 agentName = "Jasmine",
-                workspacePath = wsPath
+                workspacePath = wsPath,
+                toolDescriptors = toolBriefs
             ))
         }
 
@@ -177,11 +177,6 @@ class MainActivity : AppCompatActivity() {
 
         // 当前时间
         contextCollector.register(CurrentTimeContextProvider())
-
-        // 可用工具列表
-        if (toolNames.isNotEmpty()) {
-            contextCollector.register(AvailableToolsContextProvider(toolNames))
-        }
     }
 
     /**
@@ -1103,8 +1098,20 @@ class MainActivity : AppCompatActivity() {
 
         currentJob = CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 刷新上下文收集器（工作区、系统信息、时间等）
-                refreshContextCollector()
+                val toolsEnabled = ProviderManager.isToolsEnabled(this@MainActivity)
+
+                // Agent 模式：先构建工具注册表，再刷新上下文（确保工具列表包含在 system prompt 中）
+                val registry = if (toolsEnabled) {
+                    val r = buildToolRegistry()
+                    loadMcpToolsInto(r)
+                    r
+                } else null
+
+                // 刷新上下文收集器（工作区、系统信息、时间、工具列表等）
+                val toolBriefs = registry?.descriptors()?.map {
+                    AgentPromptContextProvider.ToolBrief(it.name, it.description)
+                } ?: emptyList()
+                refreshContextCollector(toolBriefs)
 
                 if (currentConversationId == null) {
                     val title = if (message.length > 20) message.substring(0, 20) + "..." else message
@@ -1122,6 +1129,13 @@ class MainActivity : AppCompatActivity() {
                     val systemMsg = ChatMessage.system(systemPrompt)
                     messageHistory.add(systemMsg)
                     conversationRepo.addMessage(currentConversationId!!, systemMsg)
+                } else {
+                    // 已有对话：更新 system prompt 中的动态上下文（工具列表、时间等）
+                    val basePrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
+                    val updatedSystemPrompt = contextCollector.buildSystemPrompt(basePrompt)
+                    if (messageHistory.isNotEmpty() && messageHistory[0].role == "system") {
+                        messageHistory[0] = ChatMessage.system(updatedSystemPrompt)
+                    }
                 }
 
                 messageHistory.add(userMsg)
@@ -1152,17 +1166,11 @@ class MainActivity : AppCompatActivity() {
                 // 重置中间过程日志收集器
                 agentLogBuilder = StringBuilder()
 
-                val toolsEnabled = ProviderManager.isToolsEnabled(this@MainActivity)
-
                 // 构建快照/持久化（所有模式通用，每轮对话结束后创建检查点）
                 persistence = buildPersistence()
 
-                if (toolsEnabled) {
+                if (toolsEnabled && registry != null) {
                     // Agent 模式：使用 ToolExecutor 自动循环
-                    val registry = buildToolRegistry()
-                    loadMcpToolsInto(registry)
-                    // 将可用工具列表注入上下文收集器
-                    contextCollector.register(AvailableToolsContextProvider(registry.descriptors().map { it.name }))
                     val listener = object : AgentEventListener {
                         var thinkingStarted = false
                         override suspend fun onToolCallStart(toolName: String, arguments: String) {

@@ -71,7 +71,7 @@ class WorkspaceContextProvider(private val workspacePath: String) : SystemContex
         if (workspacePath.isBlank()) return ""
         return "<workspace>\n" +
             "当前工作区路径: $workspacePath\n" +
-            "你可以使用文件工具（read_file, write_file, edit_file, list_directory, search_by_regex, execute_shell_command）来操作该工作区内的文件。\n" +
+            "你可以使用工具来操作该工作区内的文件、执行命令、搜索内容等。\n" +
             "所有路径使用相对路径即可（相对于工作区根目录），例如用 \".\" 列出根目录，用 \"file.txt\" 读取文件。也支持绝对路径。\n" +
             "</workspace>"
     }
@@ -125,29 +125,50 @@ class AvailableToolsContextProvider(private val toolNames: List<String>) : Syste
  *
  * 参考 IDE Agent 的提示词结构，为 LLM 提供身份、能力、规则、工具使用指南等。
  * 只在 Agent 模式下注入。
+ *
+ * 工具列表从 ToolRegistry 动态获取，不再硬编码，确保新增工具自动同步。
+ *
+ * @param agentName Agent 名称
+ * @param workspacePath 工作区路径
+ * @param toolDescriptors 当前注册的工具描述列表（name + description），由调用方从 ToolRegistry 获取
  */
 class AgentPromptContextProvider(
     private val agentName: String = "Jasmine",
-    private val workspacePath: String = ""
+    private val workspacePath: String = "",
+    private val toolDescriptors: List<ToolBrief> = emptyList()
 ) : SystemContextProvider {
+
+    /**
+     * 工具简要信息，用于生成提示词
+     */
+    data class ToolBrief(val name: String, val description: String)
+
     override val name = "agent_prompt"
     override fun getContextSection(): String = buildString {
         appendLine("<identity>")
         appendLine("你是 $agentName，一个运行在 Android 设备上的 AI Agent 助手。")
-        appendLine("你可以通过工具来读写文件、执行命令、搜索内容，帮助用户完成编程和文件管理任务。")
+        appendLine("你可以通过工具来完成各种任务，包括文件操作、命令执行、网络搜索、APK/DEX 编辑、数学计算等。")
+        appendLine("你拥有的所有工具都会通过 function calling 机制提供给你，请充分利用它们。")
         appendLine("</identity>")
         appendLine()
-        appendLine("<capabilities>")
-        appendLine("- 读取、创建、编辑文件")
-        appendLine("- 列出目录内容，支持深度遍历和 glob 过滤")
-        appendLine("- 正则搜索文件内容")
-        appendLine("- 执行 shell 命令")
-        appendLine("- 网络搜索和网页抓取（如果已启用）")
-        appendLine("- 数学计算")
-        appendLine("- 获取当前时间")
-        appendLine("</capabilities>")
-        appendLine()
+
+        // 动态生成可用工具列表
+        if (toolDescriptors.isNotEmpty()) {
+            appendLine("<available_tools count=\"${toolDescriptors.size}\">")
+            // 按功能分组显示
+            val groups = groupTools(toolDescriptors)
+            for ((groupName, tools) in groups) {
+                appendLine("[$groupName] (${tools.size} 个)")
+                for (tool in tools) {
+                    appendLine("  - ${tool.name}: ${tool.description.take(120)}")
+                }
+            }
+            appendLine("</available_tools>")
+            appendLine()
+        }
+
         appendLine("<rules>")
+        appendLine("- 你拥有上面列出的所有工具，请根据用户需求选择合适的工具")
         appendLine("- 使用工具时，路径参数使用相对路径（相对于工作区根目录）")
         appendLine("- 用 \".\" 表示工作区根目录")
         appendLine("- 不要猜测文件内容，先用 read_file 或 list_directory 查看")
@@ -155,17 +176,34 @@ class AgentPromptContextProvider(
         appendLine("- 一次工具调用失败时，分析错误原因，尝试换一种方式")
         appendLine("- 回复用户时使用简洁清晰的语言")
         appendLine("- 如果用户使用中文提问，用中文回复")
+        appendLine("- 当用户询问你有哪些工具时，根据 <available_tools> 中的完整列表回答")
         appendLine("</rules>")
-        appendLine()
-        appendLine("<tool_usage_guide>")
-        appendLine("- list_directory: path 参数用 \".\" 列出根目录，depth 控制深度，filter 用 glob 模式如 \"*.kt\"")
-        appendLine("- read_file: path 参数直接用文件名如 \"README.md\"，支持 startLine/endLine 行范围")
-        appendLine("- write_file: 写入或覆盖文件，path + content 参数")
-        appendLine("- edit_file: 精确替换文件内容，需要 path + oldContent + newContent")
-        appendLine("- search_by_regex: 正则搜索，pattern 参数为正则表达式，path 为搜索目录")
-        appendLine("- execute_shell_command: 执行 shell 命令，需要用户确认")
-        appendLine("</tool_usage_guide>")
     }.trimEnd()
+
+    companion object {
+        /**
+         * 将工具按前缀/功能分组
+         */
+        fun groupTools(tools: List<ToolBrief>): Map<String, List<ToolBrief>> {
+            val groups = linkedMapOf<String, MutableList<ToolBrief>>()
+            for (tool in tools) {
+                val group = when {
+                    tool.name.startsWith("calculator_") || tool.name == "calculate" ||
+                        tool.name == "convert_base" || tool.name == "convert_unit" ||
+                        tool.name == "statistics" -> "计算器"
+                    tool.name == "get_current_time" -> "时间"
+                    tool.name.startsWith("dex_") || tool.name.startsWith("apk_") -> "DEX/APK 编辑"
+                    tool.name.startsWith("web_") -> "网络搜索"
+                    tool.name.startsWith("fetch_url") -> "URL 抓取"
+                    tool.name == "execute_shell_command" -> "命令执行"
+                    tool.name == "attempt_completion" -> "Agent 控制"
+                    else -> "文件操作"
+                }
+                groups.getOrPut(group) { mutableListOf() }.add(tool)
+            }
+            return groups
+        }
+    }
 }
 
 /**
