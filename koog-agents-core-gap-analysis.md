@@ -9,7 +9,7 @@
 
 | jasmine-core 文件 | 对应 koog 源 | 状态 |
 |---|---|---|
-| ToolResultKind.kt | environment/ToolResultKind.kt + ReceivedToolResult | 完整 |
+| ToolResultKind.kt | environment/ToolResultKind.kt + ReceivedToolResult | 完整 (含toMessage + PromptBuilder扩展) |
 | AgentState.kt | agent/AIAgent.Companion.State | 完整 |
 | ToolCalls.kt | agent/AIAgentSimpleStrategies.ToolCalls | 完整 |
 | AgentEnvironment.kt | environment/AIAgentEnvironment + GenericAgentEnvironment | 完整 |
@@ -25,7 +25,7 @@
 | AgentStrategy.kt | agent/entity/AIAgentGraphStrategy | 完整 |
 | AgentSubgraph.kt | agent/entity/AIAgentSubgraph | 完整 |
 | PredefinedStrategies.kt | agent/AIAgentSimpleStrategies (singleRunStrategy 3种模式 + stream版) | 完整 |
-| HistoryCompressionStrategy.kt | dsl/extension/HistoryCompressionStrategies.kt | 完整 (jasmine额外增加了TokenBudget) |
+| HistoryCompressionStrategy.kt | dsl/extension/HistoryCompressionStrategies.kt | 完整 (jasmine额外增加了TokenBudget, 含preserveMemory/memoryMessages) |
 | LLMSession.kt 中的 LLM Actions | dsl/extension/AIAgentLLMActions.kt | 完整 |
 
 ---
@@ -437,14 +437,33 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 |---|---|
 | ChatMessage.kt | toMessage(), toChatMessage(), toMessages(), toChatMessages() 互转方法 |
 | ChatResult.kt | toAssistantMessage(), toMessages() 转换方法 |
-| Prompt.kt | typedMessages 属性, fromMessages() 工厂方法 |
-| PromptBuilder.kt | message(Message), messages(List<Message>), reasoning() |
+| Prompt.kt | typedMessages 属性, latestTokenUsage 属性, fromMessages() 工厂方法 |
+| PromptBuilder.kt | message(Message), messages(List<Message>), reasoning(), ToolMessageBuilder.call(Message.Tool.Call), ToolMessageBuilder.result(Message.Tool.Result) (含自动合成缺失tool call逻辑) |
 | LLMSession.kt | requestLLMAsMessage(), requestLLMWithoutToolsAsMessage(), requestLLMAsMessages(), appendMessage(), appendMessages() |
 | AgentEdge.kt | onAssistant, onToolCallMessage, onReasoning 边条件 (Message.Response 版本) |
-| FunctionalContextExt.kt | requestLLMAsMessage(), requestLLMWithoutToolsAsMessage(), appendMessage(), appendMessages() |
+| FunctionalContextExt.kt | requestLLMAsMessage(), requestLLMWithoutToolsAsMessage(), appendMessage(), appendMessages(), onAssistantMessage(Message.Response), onMultipleToolCallMessages, onMultipleAssistantMessages(typed), containsToolCalls(typed), extractToolCallMessages, asAssistantOrNull, asAssistant, latestTokenUsageFromPrompt |
 | PredefinedNodes.kt | nodeLLMRequestAsMessage, nodeLLMRequestAsMessages |
 | AgentCheckpoint.kt | typedMessageHistory 属性 |
 | ConversationRepository.kt | addTypedMessage(), addTypedMessages(), getTypedMessages(), observeTypedMessages() |
+| ToolResultKind.kt | ReceivedToolResult.toMessage(), PromptBuilder.ToolMessageBuilder.result(ReceivedToolResult) 扩展 |
+| HistoryCompressionStrategy.kt | compress() 添加 memoryMessages 参数, composeMessageHistory() 添加 memoryMessages 参数 |
+| LLMSession.kt (replaceHistoryWithTLDR) | 添加 preserveMemory 参数 (过滤记忆消息) |
+
+### review 修复 (第二轮)
+
+| 修复项 | 说明 |
+|---|---|
+| Prompt.latestTokenUsage | 从 typedMessages 中读取最后一条 Response 的 totalTokensCount |
+| ToolMessageBuilder.call(Message.Tool.Call) | 移植自 koog，支持直接传入 Message.Tool.Call |
+| ToolMessageBuilder.result(Message.Tool.Result) | 移植自 koog，含自动合成缺失 tool call 逻辑 |
+| ReceivedToolResult.toMessage() | 移植自 koog，转换为 Message.Tool.Result |
+| PromptBuilder.ToolMessageBuilder.result(ReceivedToolResult) | 移植自 koog，扩展函数 |
+| HistoryCompressionStrategy.compress + memoryMessages | 移植自 koog，支持保留记忆消息 |
+| replaceHistoryWithTLDR + preserveMemory | 移植自 koog，过滤 memory 相关消息 |
+| compressHistory + preserveMemory | 移植自 koog，FunctionalContextExt 和 PredefinedNodes 同步更新 |
+| sendMultipleToolResults 返回值 | 对齐 koog，返回 List<ChatResult> (调用 requestLLMMultiple) |
+| PredefinedNodes 统一使用 tool DSL | 所有 tool result 发送改为 tool { result(it) } DSL |
+| Message.Response 版本扩展函数 | onAssistantMessage, onMultipleToolCallMessages, onMultipleAssistantMessages, containsToolCalls, extractToolCallMessages, asAssistantOrNull, asAssistant, latestTokenUsageFromPrompt |
 
 ### 简化决策
 
