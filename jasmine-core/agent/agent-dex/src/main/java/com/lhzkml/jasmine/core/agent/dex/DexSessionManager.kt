@@ -14,11 +14,24 @@ object DexSessionManager {
 
     private val sessions = ConcurrentHashMap<String, DexSession>()
 
+    /** 工作区基础路径，用于解析相对路径 */
+    var basePath: String? = null
+
+    /**
+     * 解析 APK 路径：如果是相对路径，则基于 basePath 解析为绝对路径
+     */
+    private fun resolveApkPath(apkPath: String): String {
+        val file = File(apkPath)
+        if (file.isAbsolute) return apkPath
+        val base = basePath ?: return apkPath
+        return File(base, apkPath).absolutePath
+    }
+
     /**
      * 列出 APK 中的 DEX 文件
      */
     fun listDexFiles(apkPath: String): List<String> {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val dexFiles = mutableListOf<String>()
@@ -40,7 +53,7 @@ object DexSessionManager {
      */
     fun openSession(apkPath: String, dexFiles: List<String>): DexSession {
         val sessionId = UUID.randomUUID().toString().take(8)
-        val session = DexSession(sessionId, apkPath, dexFiles)
+        val session = DexSession(sessionId, resolveApkPath(apkPath), dexFiles)
         session.load()
         sessions[sessionId] = session
         return session
@@ -85,7 +98,7 @@ object DexSessionManager {
         limit: Int = 100,
         offset: Int = 0
     ): ApkFileListResult {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val allFiles = mutableListOf<ApkFileEntry>()
@@ -121,7 +134,7 @@ object DexSessionManager {
         maxBytes: Int = 0,
         offset: Int = 0
     ): String {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val zipFile = ZipFile(apkFile)
@@ -157,7 +170,7 @@ object DexSessionManager {
         maxResults: Int = 50,
         contextLines: Int = 2
     ): List<ApkSearchResult> {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val binaryExtensions = setOf("dex", "so", "png", "jpg", "gif", "webp", "ogg", "mp3", "mp4", "ttf", "otf")
@@ -209,7 +222,7 @@ object DexSessionManager {
      * 删除 APK 内文件
      */
     fun deleteFileFromApk(apkPath: String, filePath: String): String {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val tempApk = File(apkFile.parent, "${apkFile.nameWithoutExtension}_modified.apk")
@@ -250,7 +263,7 @@ object DexSessionManager {
         content: String,
         isBase64: Boolean = false
     ): String {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val bytes = if (isBase64) {
@@ -297,7 +310,7 @@ object DexSessionManager {
      * 列出 APK 资源文件
      */
     fun listResources(apkPath: String, filter: String? = null): List<String> {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val resources = mutableListOf<String>()
@@ -322,7 +335,7 @@ object DexSessionManager {
      * 如果是文本格式则直接返回，否则返回提示
      */
     fun getManifest(apkPath: String, maxChars: Int = 0, offset: Int = 0): ManifestResult {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val zipFile = ZipFile(apkFile)
@@ -411,7 +424,7 @@ object DexSessionManager {
      * 从 resources.arsc 中搜索字符串资源
      */
     fun searchArscStrings(apkPath: String, pattern: String, limit: Int = 50): List<String> {
-        val apkFile = File(apkPath)
+        val apkFile = File(resolveApkPath(apkPath))
         if (!apkFile.exists()) throw IllegalArgumentException("APK not found: $apkPath")
 
         val results = mutableListOf<String>()

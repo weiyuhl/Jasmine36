@@ -10,8 +10,17 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.lhzkml.jasmine.core.agent.dex.DexSessionManager
 import java.io.File
 import java.util.zip.ZipFile
+
+/** 解析 APK 路径：如果是相对路径，基于 DexSessionManager.basePath 解析 */
+private fun resolveApkPath(apkPath: String): String {
+    val file = File(apkPath)
+    if (file.isAbsolute) return apkPath
+    val base = DexSessionManager.basePath ?: return apkPath
+    return File(base, apkPath).absolutePath
+}
 
 /**
  * 解析二进制 AndroidManifest.xml，返回结构化信息
@@ -34,7 +43,7 @@ object ApkParseManifestTool : Tool() {
             ?: return "Error: Missing parameter 'apkPath'"
 
         return try {
-            val apkFile = File(apkPath)
+            val apkFile = File(resolveApkPath(apkPath))
             if (!apkFile.exists()) return "Error: APK not found: $apkPath"
 
             val zipFile = ZipFile(apkFile)
@@ -123,7 +132,7 @@ object ApkSearchManifestTool : Tool() {
         }
 
         return try {
-            val apkFile = File(apkPath)
+            val apkFile = File(resolveApkPath(apkPath))
             if (!apkFile.exists()) return "Error: APK not found: $apkPath"
 
             val zipFile = ZipFile(apkFile)
@@ -172,7 +181,7 @@ object ApkParseArscTool : Tool() {
             ?: return "Error: Missing parameter 'apkPath'"
 
         return try {
-            val apkFile = File(apkPath)
+            val apkFile = File(resolveApkPath(apkPath))
             if (!apkFile.exists()) return "Error: APK not found: $apkPath"
 
             val zipFile = ZipFile(apkFile)
