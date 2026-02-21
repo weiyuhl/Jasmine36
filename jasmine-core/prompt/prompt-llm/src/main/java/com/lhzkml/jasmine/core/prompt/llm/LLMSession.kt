@@ -460,10 +460,19 @@ class LLMWriteSession(
 
     /**
      * 删除末尾 N 条消息
+     * 移植自 koog 的 AIAgentLLMWriteSession.dropLastNMessages
+     *
+     * @param n 要删除的消息数
+     * @param preserveSystem 是否保留 system 消息，默认 true
      */
-    fun dropLastNMessages(n: Int) {
+    fun dropLastNMessages(n: Int, preserveSystem: Boolean = true) {
         checkActive()
-        prompt = prompt.withMessages { it.dropLast(n) }
+        prompt = prompt.withMessages { messages ->
+            val threshold = messages.size - n
+            messages.filterIndexed { index, msg ->
+                index < threshold || (preserveSystem && msg.role == "system")
+            }
+        }
     }
 
     /**

@@ -465,6 +465,12 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 | PredefinedNodes 统一使用 tool DSL | 所有 tool result 发送改为 tool { result(it) } DSL |
 | Message.Response 版本扩展函数 | onAssistantMessage, onMultipleToolCallMessages, onMultipleAssistantMessages, containsToolCalls, extractToolCallMessages, asAssistantOrNull, asAssistant, latestTokenUsageFromPrompt |
 
+### review 修复 (第三轮 -- koog 全面对比)
+
+| 修复项 | 说明 |
+|---|---|
+| LLMWriteSession.dropLastNMessages + preserveSystem | 对齐 koog，添加 preserveSystemMessages 参数 (默认 true)，过滤时保留 system 消息 |
+
 ### 简化决策
 
 | koog 特性 | jasmine 处理 |
