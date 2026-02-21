@@ -202,12 +202,12 @@ jasmine 的 AgentSubgraph 没有工具过滤能力，所有子图共享同一个
 
 ### 高优先级 (实用性强，移植难度低)
 
-1. FunctionalContext 扩展函数 -- 大幅提升 functionalStrategy 的易用性
+1. FunctionalContext 扩展函数 -- 大幅提升 functionalStrategy 的易用性 [已完成 863b411]
 2. nodeLLMRequestForceOneTool -- LLMSession 已有 setToolChoiceNamed()
 3. nodeLLMRequestOnlyCallingTools -- LLMSession 已有 setToolChoiceRequired()
 4. nodeLLMRequestStructured -- LLMSession 已有 requestLLMStructured()
 5. nodeLLMCompressHistory -- HistoryCompressionStrategy 已完整
-6. ToolSelectionStrategy (ALL/NONE/Tools) -- 简单过滤
+6. ToolSelectionStrategy (ALL/NONE/Tools) -- 简单过滤 [已完成 863b411]
 
 ### 中优先级 (有价值，需要一定工作量)
 
