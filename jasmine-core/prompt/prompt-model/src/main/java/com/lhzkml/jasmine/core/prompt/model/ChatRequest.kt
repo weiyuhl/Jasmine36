@@ -18,7 +18,9 @@ data class ChatRequest(
     @SerialName("max_tokens")
     val maxTokens: Int? = null,
     val stream: Boolean = false,
-    val tools: List<OpenAIToolDef>? = null
+    val tools: List<OpenAIToolDef>? = null,
+    @SerialName("tool_choice")
+    val toolChoice: kotlinx.serialization.json.JsonElement? = null
 )
 
 /**

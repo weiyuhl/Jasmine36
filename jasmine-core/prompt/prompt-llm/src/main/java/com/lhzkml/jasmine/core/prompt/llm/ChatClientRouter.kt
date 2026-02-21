@@ -185,7 +185,7 @@ class ChatClientRouter(
     ): StreamResult {
         val resolved = resolve(providerId)
         return resolved.client.chatStreamWithUsageAndThinking(
-            messages, resolved.modelOverride ?: model, maxTokens, samplingParams, tools, onChunk, onThinking
+            messages, resolved.modelOverride ?: model, maxTokens, samplingParams, tools, toolChoice = null, onChunk, onThinking
         )
     }
 

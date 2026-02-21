@@ -211,12 +211,12 @@ jasmine 的 AgentSubgraph 没有工具过滤能力，所有子图共享同一个
 
 ### 中优先级 (有价值，需要一定工作量)
 
-7. onIsInstance 边条件 -- 通用类型过滤
-8. onToolCall(tool) / onToolNotCalled(tool) -- 按工具名过滤
-9. onMultipleToolCalls / onMultipleAssistantMessages -- 需要支持 List 类型节点
-10. nodeLLMRequestMultiple -- 需要 LLMSession 新增 requestLLMMultiple()
-11. ExecutionPointNode -- checkpoint/rollback
-12. ToolSelectionStrategy.AutoSelectForTask -- 需要结构化输出
+7. onIsInstance 边条件 -- 通用类型过滤 [已完成]
+8. onToolCall(tool) / onToolNotCalled(tool) -- 按工具名过滤 [已完成]
+9. onMultipleToolCalls / onMultipleAssistantMessages -- 需要支持 List 类型节点 [已完成]
+10. nodeLLMRequestMultiple -- 需要 LLMSession 新增 requestLLMMultiple() [已完成]
+11. ExecutionPointNode -- checkpoint/rollback [已完成]
+12. ToolSelectionStrategy.AutoSelectForTask -- 需要结构化输出 [已完成]
 
 ### 低优先级 (依赖架构变更或使用场景有限)
 

@@ -18,25 +18,29 @@ class ToolExecutorTest {
 
         override suspend fun chat(
             messages: List<ChatMessage>, model: String, maxTokens: Int?,
-            samplingParams: SamplingParams?, tools: List<ToolDescriptor>
-        ) = chatWithUsage(messages, model, maxTokens, samplingParams, tools).content
+            samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+            toolChoice: ToolChoice?
+        ) = chatWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice).content
 
         override suspend fun chatWithUsage(
             messages: List<ChatMessage>, model: String, maxTokens: Int?,
-            samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+            samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+            toolChoice: ToolChoice?
         ): ChatResult { callCount++; return responses.removeAt(0) }
 
         override fun chatStream(
             messages: List<ChatMessage>, model: String, maxTokens: Int?,
-            samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+            samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+            toolChoice: ToolChoice?
         ): Flow<String> = flowOf("")
 
         override suspend fun chatStreamWithUsage(
             messages: List<ChatMessage>, model: String, maxTokens: Int?,
             samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+            toolChoice: ToolChoice?,
             onChunk: suspend (String) -> Unit
         ): StreamResult {
-            val r = chatWithUsage(messages, model, maxTokens, samplingParams, tools)
+            val r = chatWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice)
             if (r.content.isNotEmpty()) onChunk(r.content)
             return StreamResult(r.content, r.usage, r.finishReason, r.toolCalls)
         }

@@ -227,7 +227,8 @@ class GraphAgentTest {
             model: String,
             maxTokens: Int?,
             samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>,
+            toolChoice: ToolChoice?
         ): String = "fake"
 
         override suspend fun chatWithUsage(
@@ -235,7 +236,8 @@ class GraphAgentTest {
             model: String,
             maxTokens: Int?,
             samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>,
+            toolChoice: ToolChoice?
         ): ChatResult = ChatResult(content = "fake", usage = Usage(0, 0, 0))
 
         override fun chatStream(
@@ -243,7 +245,8 @@ class GraphAgentTest {
             model: String,
             maxTokens: Int?,
             samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>,
+            toolChoice: ToolChoice?
         ): Flow<String> = flowOf("fake")
 
         override suspend fun chatStreamWithUsage(
@@ -252,6 +255,7 @@ class GraphAgentTest {
             maxTokens: Int?,
             samplingParams: SamplingParams?,
             tools: List<ToolDescriptor>,
+            toolChoice: ToolChoice?,
             onChunk: suspend (String) -> Unit
         ): StreamResult = StreamResult(content = "fake", usage = Usage(0, 0, 0))
 

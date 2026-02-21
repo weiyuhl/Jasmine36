@@ -204,6 +204,136 @@ class LLMSession(
     }
 
     /**
+     * 强制 LLM 只能调用工具（不能生成纯文本）
+     * 移植自 koog 的 requestLLMOnlyCallingTools，使用 ToolChoice.Required。
+     *
+     * @return LLM 响应结果（通常包含 tool_calls）
+     */
+    suspend fun requestLLMOnlyCallingTools(): ChatResult {
+        checkActive()
+        val result = client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools,
+            toolChoice = ToolChoice.Required
+        )
+        appendPrompt {
+            if (result.hasToolCalls) {
+                assistantWithToolCalls(result.toolCalls, result.content)
+            } else {
+                assistant(result.content)
+            }
+        }
+        return result
+    }
+
+    /**
+     * 强制 LLM 使用指定工具
+     * 移植自 koog 的 requestLLMForceOneTool，使用 ToolChoice.Named。
+     *
+     * @param toolName 强制使用的工具名称
+     * @return LLM 响应结果
+     */
+    suspend fun requestLLMForceOneTool(toolName: String): ChatResult {
+        checkActive()
+        val result = client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools,
+            toolChoice = ToolChoice.Named(toolName)
+        )
+        appendPrompt {
+            if (result.hasToolCalls) {
+                assistantWithToolCalls(result.toolCalls, result.content)
+            } else {
+                assistant(result.content)
+            }
+        }
+        return result
+    }
+
+    /**
+     * 请求 LLM 返回多个响应
+     * 移植自 koog 的 requestLLMMultiple。
+     *
+     * koog 的 requestLLMMultiple() 返回 List<Message.Response>，
+     * jasmine 的 ChatResult 已经包含多个 toolCalls，
+     * 因此这里返回 List<ChatResult>，其中第一个元素是主响应。
+     *
+     * 对于支持多 choice 的模型，可以返回多个 ChatResult。
+     * 当前实现返回单个 ChatResult 的列表（与 koog 行为一致：大多数模型只返回一个响应）。
+     *
+     * @return LLM 响应结果列表
+     */
+    suspend fun requestLLMMultiple(): List<ChatResult> {
+        checkActive()
+        val result = client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools
+        )
+        appendPrompt {
+            if (result.hasToolCalls) {
+                assistantWithToolCalls(result.toolCalls, result.content)
+            } else {
+                assistant(result.content)
+            }
+        }
+        return listOf(result)
+    }
+
+    /**
+     * 请求 LLM 返回多个响应，且只能调用工具
+     * 移植自 koog 的 requestLLMMultipleOnlyCallingTools
+     *
+     * @return LLM 响应结果列表
+     */
+    suspend fun requestLLMMultipleOnlyCallingTools(): List<ChatResult> {
+        checkActive()
+        val result = client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = tools,
+            toolChoice = ToolChoice.Required
+        )
+        appendPrompt {
+            if (result.hasToolCalls) {
+                assistantWithToolCalls(result.toolCalls, result.content)
+            } else {
+                assistant(result.content)
+            }
+        }
+        return listOf(result)
+    }
+
+    /**
+     * 请求 LLM 返回多个响应（不带工具）
+     * 移植自 koog 的 requestLLMMultipleWithoutTools
+     *
+     * @return LLM 响应结果列表
+     */
+    suspend fun requestLLMMultipleWithoutTools(): List<ChatResult> {
+        checkActive()
+        val result = client.chatWithUsage(
+            messages = prompt.messages,
+            model = model,
+            maxTokens = prompt.maxTokens,
+            samplingParams = prompt.samplingParams,
+            tools = emptyList()
+        )
+        appendPrompt { assistant(result.content) }
+        return listOf(result)
+    }
+
+    /**
      * 流式请求 LLM（带工具），自动追加 response
      */
     suspend fun requestLLMStream(

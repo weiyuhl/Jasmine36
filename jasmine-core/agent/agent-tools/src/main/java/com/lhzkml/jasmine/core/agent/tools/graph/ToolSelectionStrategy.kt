@@ -45,4 +45,27 @@ sealed interface ToolSelectionStrategy {
      * @param names 允许使用的工具名称集合
      */
     data class ByName(val names: Set<String>) : ToolSelectionStrategy
+
+    /**
+     * 根据子任务描述自动选择相关工具
+     * 移植自 koog 的 ToolSelectionStrategy.AutoSelectForTask。
+     *
+     * 使用 LLM 结构化输出来分析子任务描述，从可用工具列表中选择相关的工具。
+     * 这确保了不必要的工具被排除，优化子图的工具集。
+     *
+     * 使用方式：
+     * ```kotlin
+     * val strategy = graphStrategy<String, String>("file-ops") {
+     *     toolSelection = ToolSelectionStrategy.AutoSelectForTask(
+     *         subtaskDescription = "Read and analyze source code files"
+     *     )
+     *     // ...
+     * }
+     * ```
+     *
+     * @param subtaskDescription 子任务描述，LLM 根据此描述选择相关工具
+     */
+    data class AutoSelectForTask(
+        val subtaskDescription: String
+    ) : ToolSelectionStrategy
 }

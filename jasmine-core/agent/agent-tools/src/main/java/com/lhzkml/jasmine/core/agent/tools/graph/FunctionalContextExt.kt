@@ -119,10 +119,7 @@ suspend fun AgentGraphContext.requestLLMForceOneTool(
     toolName: String
 ): ChatResult {
     session.appendPrompt { user(message) }
-    session.setToolChoiceNamed(toolName)
-    val result = session.requestLLM()
-    session.setToolChoiceAuto()
-    return result
+    return session.requestLLMForceOneTool(toolName)
 }
 
 /**
@@ -136,10 +133,7 @@ suspend fun AgentGraphContext.requestLLMOnlyCallingTools(
     message: String
 ): ChatResult {
     session.appendPrompt { user(message) }
-    session.setToolChoiceRequired()
-    val result = session.requestLLM()
-    session.setToolChoiceAuto()
-    return result
+    return session.requestLLMOnlyCallingTools()
 }
 
 // ========== 响应判断 ==========
@@ -283,4 +277,100 @@ fun AgentGraphContext.estimateTokenUsage(): Int {
         // 粗略估算: 每4个字符约1个token
         (msg.content.length / 4) + 4
     }
+}
+
+// ========== 中优先级扩展函数 ==========
+// 移植自 koog 的 AIAgentFunctionalContextExt.kt
+
+/**
+ * 追加用户消息并请求 LLM 返回多个响应
+ * 移植自 koog 的 AIAgentFunctionalContext.requestLLMMultiple
+ *
+ * @param message 用户消息内容
+ * @return LLM 响应结果列表
+ */
+suspend fun AgentGraphContext.requestLLMMultiple(
+    message: String
+): List<ChatResult> {
+    session.appendPrompt { user(message) }
+    return session.requestLLMMultiple()
+}
+
+/**
+ * 如果 LLM 响应列表包含工具调用，执行 action
+ * 移植自 koog 的 AIAgentFunctionalContext.onMultipleToolCalls
+ *
+ * @param results LLM 响应列表
+ * @param action 当响应包含工具调用时执行的操作
+ */
+inline fun AgentGraphContext.onMultipleToolCalls(
+    results: List<ChatResult>,
+    action: (List<ChatResult>) -> Unit
+) {
+    val toolCallResults = results.filter { it.hasToolCalls }
+    if (toolCallResults.isNotEmpty()) {
+        action(toolCallResults)
+    }
+}
+
+/**
+ * 如果 LLM 响应列表包含纯助手消息，执行 action
+ * 移植自 koog 的 AIAgentFunctionalContext.onMultipleAssistantMessages
+ *
+ * @param results LLM 响应列表
+ * @param action 当响应包含纯助手消息时执行的操作
+ */
+inline fun AgentGraphContext.onMultipleAssistantMessages(
+    results: List<ChatResult>,
+    action: (List<ChatResult>) -> Unit
+) {
+    val assistantResults = results.filter { !it.hasToolCalls }
+    if (assistantResults.isNotEmpty()) {
+        action(assistantResults)
+    }
+}
+
+/**
+ * 检查响应列表是否包含工具调用
+ * 移植自 koog 的 containsToolCalls
+ *
+ * @param results LLM 响应列表
+ * @return 是否包含工具调用
+ */
+fun containsToolCalls(results: List<ChatResult>): Boolean {
+    return results.any { it.hasToolCalls }
+}
+
+/**
+ * 从响应列表中提取所有工具调用
+ * 移植自 koog 的 extractToolCalls
+ *
+ * @param results LLM 响应列表
+ * @return 所有工具调用的列表
+ */
+fun extractToolCalls(results: List<ChatResult>): List<ToolCall> {
+    return results.flatMap { it.toolCalls }
+}
+
+/**
+ * 发送多个工具结果并获取多响应
+ *
+ * @param results 工具执行结果列表
+ * @return LLM 多响应结果列表
+ */
+suspend fun AgentGraphContext.sendMultipleToolResultsMultiple(
+    results: List<ReceivedToolResult>
+): List<ChatResult> {
+    for (result in results) {
+        session.appendPrompt {
+            message(ChatMessage.toolResult(
+                com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                    callId = result.id,
+                    name = result.tool,
+                    content = result.content
+                )
+            ))
+        }
+    }
+    return session.requestLLMMultiple()
 }

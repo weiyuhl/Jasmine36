@@ -5,6 +5,7 @@ import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
+import com.lhzkml.jasmine.core.prompt.model.ToolChoice
 import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +26,7 @@ class ChatClientRouterTest {
         override suspend fun chat(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): String {
             lastModel = model
             return response
@@ -34,7 +35,7 @@ class ChatClientRouterTest {
         override suspend fun chatWithUsage(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): ChatResult {
             lastModel = model
             return ChatResult(content = response, usage = Usage(10, 5, 15))
@@ -43,13 +44,13 @@ class ChatClientRouterTest {
         override fun chatStream(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): Flow<String> = flowOf(response)
 
         override suspend fun chatStreamWithUsage(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>,
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?,
             onChunk: suspend (String) -> Unit
         ): StreamResult {
             onChunk(response)

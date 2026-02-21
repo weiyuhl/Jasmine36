@@ -5,6 +5,7 @@ import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
+import com.lhzkml.jasmine.core.prompt.model.ToolChoice
 import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import kotlinx.coroutines.delay
@@ -25,13 +26,13 @@ class MultiChatClientTest {
         override suspend fun chat(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
-        ): String = chatWithUsage(messages, model, maxTokens, samplingParams, tools).content
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
+        ): String = chatWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice).content
 
         override suspend fun chatWithUsage(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): ChatResult {
             if (delayMs > 0) delay(delayMs)
             if (shouldFail) throw RuntimeException("模拟失败: ${provider.name}")
@@ -41,13 +42,13 @@ class MultiChatClientTest {
         override fun chatStream(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): Flow<String> = flowOf(response)
 
         override suspend fun chatStreamWithUsage(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>,
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?,
             onChunk: suspend (String) -> Unit
         ): StreamResult {
             onChunk(response)

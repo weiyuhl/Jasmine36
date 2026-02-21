@@ -1,8 +1,12 @@
 package com.lhzkml.jasmine.core.agent.tools.graph
 
+import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
+import com.lhzkml.jasmine.core.prompt.llm.StructuredResponse
+import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ToolCall
+import kotlinx.serialization.KSerializer
 
 /**
  * 预定义节点工厂函数
@@ -234,5 +238,229 @@ fun GraphStrategyBuilder<*, *>.nodeLLMSendMultipleToolResultsStreaming(
             toolCalls = streamResult.toolCalls,
             thinking = streamResult.thinking
         )
+    }
+}
+
+// ========== 中优先级预定义节点 ==========
+// 移植自 koog 的 AIAgentNodes.kt
+
+/**
+ * 强制只能调用工具的 LLM 请求节点
+ * 移植自 koog 的 nodeLLMRequestOnlyCallingTools
+ *
+ * 输入: String (用户消息)
+ * 输出: ChatResult (LLM 响应，ToolChoice.Required)
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMRequestOnlyCallingTools(
+    name: String? = null
+): AgentNodeDelegate<String, ChatResult> {
+    return node(name) { message ->
+        session.appendPrompt { user(message) }
+        session.requestLLMOnlyCallingTools()
+    }
+}
+
+/**
+ * 强制使用指定工具的 LLM 请求节点
+ * 移植自 koog 的 nodeLLMRequestForceOneTool
+ *
+ * 输入: String (用户消息)
+ * 输出: ChatResult (LLM 响应，ToolChoice.Named)
+ *
+ * @param toolName 强制使用的工具名称
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMRequestForceOneTool(
+    name: String? = null,
+    toolName: String
+): AgentNodeDelegate<String, ChatResult> {
+    return node(name) { message ->
+        session.appendPrompt { user(message) }
+        session.requestLLMForceOneTool(toolName)
+    }
+}
+
+/**
+ * 多响应 LLM 请求节点
+ * 移植自 koog 的 nodeLLMRequestMultiple
+ *
+ * 输入: String (用户消息)
+ * 输出: List<ChatResult> (LLM 响应列表)
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMRequestMultiple(
+    name: String? = null
+): AgentNodeDelegate<String, List<ChatResult>> {
+    return node(name) { message ->
+        session.appendPrompt { user(message) }
+        session.requestLLMMultiple()
+    }
+}
+
+/**
+ * 多响应 + 只能调用工具的 LLM 请求节点
+ * 移植自 koog 的 nodeLLMRequestMultipleOnlyCallingTools
+ *
+ * 输入: String (用户消息)
+ * 输出: List<ChatResult> (LLM 响应列表，ToolChoice.Required)
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMRequestMultipleOnlyCallingTools(
+    name: String? = null
+): AgentNodeDelegate<String, List<ChatResult>> {
+    return node(name) { message ->
+        session.appendPrompt { user(message) }
+        session.requestLLMMultipleOnlyCallingTools()
+    }
+}
+
+/**
+ * 结构化输出 LLM 请求节点
+ * 移植自 koog 的 nodeLLMRequestStructured
+ *
+ * 输入: String (用户消息)
+ * 输出: Result<StructuredResponse<T>> (结构化响应)
+ *
+ * @param serializer 目标类型的序列化器
+ * @param examples 可选的示例列表
+ */
+fun <T> GraphStrategyBuilder<*, *>.nodeLLMRequestStructured(
+    name: String? = null,
+    serializer: KSerializer<T>,
+    examples: List<T> = emptyList()
+): AgentNodeDelegate<String, Result<StructuredResponse<T>>> {
+    return node(name) { message ->
+        session.appendPrompt { user(message) }
+        session.requestLLMStructured(serializer, examples)
+    }
+}
+
+/**
+ * 历史压缩节点
+ * 移植自 koog 的 nodeLLMCompressHistory
+ *
+ * 压缩当前对话历史后透传输入。
+ *
+ * 输入: T (任意类型)
+ * 输出: T (透传输入)
+ *
+ * @param strategy 压缩策略，默认 WholeHistory
+ */
+fun <T> GraphStrategyBuilder<*, *>.nodeLLMCompressHistory(
+    name: String? = null,
+    strategy: HistoryCompressionStrategy = HistoryCompressionStrategy.WholeHistory
+): AgentNodeDelegate<T, T> {
+    return node(name) { input ->
+        session.replaceHistoryWithTLDR(strategy)
+        input
+    }
+}
+
+/**
+ * 发送工具结果 + 强制只能调用工具的节点
+ * 移植自 koog 的 nodeLLMSendToolResultOnlyCallingTools
+ *
+ * 输入: List<ReceivedToolResult> (工具执行结果列表)
+ * 输出: ChatResult (LLM 响应，ToolChoice.Required)
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMSendToolResultOnlyCallingTools(
+    name: String? = null
+): AgentNodeDelegate<List<ReceivedToolResult>, ChatResult> {
+    return node(name) { results ->
+        for (result in results) {
+            session.appendPrompt {
+                message(ChatMessage.toolResult(
+                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                        callId = result.id,
+                        name = result.tool,
+                        content = result.content
+                    )
+                ))
+            }
+        }
+        session.requestLLMOnlyCallingTools()
+    }
+}
+
+/**
+ * 发送多个工具结果并获取多响应的节点
+ * 移植自 koog 的 nodeLLMSendMultipleToolResults (返回 List<Message.Response> 版本)
+ *
+ * 输入: List<ReceivedToolResult> (工具执行结果列表)
+ * 输出: List<ChatResult> (LLM 多响应)
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMSendMultipleToolResultsMultiple(
+    name: String? = null
+): AgentNodeDelegate<List<ReceivedToolResult>, List<ChatResult>> {
+    return node(name) { results ->
+        for (result in results) {
+            session.appendPrompt {
+                message(ChatMessage.toolResult(
+                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                        callId = result.id,
+                        name = result.tool,
+                        content = result.content
+                    )
+                ))
+            }
+        }
+        session.requestLLMMultiple()
+    }
+}
+
+/**
+ * 发送多个工具结果 + 强制只能调用工具的节点
+ * 移植自 koog 的 nodeLLMSendMultipleToolResultsOnlyCallingTools
+ *
+ * 输入: List<ReceivedToolResult> (工具执行结果列表)
+ * 输出: List<ChatResult> (LLM 多响应，ToolChoice.Required)
+ */
+fun GraphStrategyBuilder<*, *>.nodeLLMSendMultipleToolResultsOnlyCallingTools(
+    name: String? = null
+): AgentNodeDelegate<List<ReceivedToolResult>, List<ChatResult>> {
+    return node(name) { results ->
+        for (result in results) {
+            session.appendPrompt {
+                message(ChatMessage.toolResult(
+                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                        callId = result.id,
+                        name = result.tool,
+                        content = result.content
+                    )
+                ))
+            }
+        }
+        session.requestLLMMultipleOnlyCallingTools()
+    }
+}
+
+/**
+ * 执行多工具并发送结果给 LLM 的节点
+ * 移植自 koog 的 nodeExecuteMultipleToolsAndSendResults
+ *
+ * 输入: List<ToolCall> (工具调用请求列表)
+ * 输出: List<ChatResult> (LLM 多响应)
+ *
+ * @param parallelTools 是否并行执行工具，默认 false
+ */
+fun GraphStrategyBuilder<*, *>.nodeExecuteMultipleToolsAndSendResults(
+    name: String? = null,
+    parallelTools: Boolean = false
+): AgentNodeDelegate<List<ToolCall>, List<ChatResult>> {
+    return node(name) { toolCalls ->
+        val results = if (parallelTools) {
+            environment.executeTools(toolCalls)
+        } else {
+            toolCalls.map { environment.executeTool(it) }
+        }
+        for (result in results) {
+            session.appendPrompt {
+                message(ChatMessage.toolResult(
+                    com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                        callId = result.id,
+                        name = result.tool,
+                        content = result.content
+                    )
+                ))
+            }
+        }
+        session.requestLLMMultiple()
     }
 }

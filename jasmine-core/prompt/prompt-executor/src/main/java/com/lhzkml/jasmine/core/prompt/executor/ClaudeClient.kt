@@ -147,17 +147,19 @@ open class ClaudeClient(
 
     override suspend fun chat(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?
     ): String {
-        return chatWithUsage(messages, model, maxTokens, samplingParams, tools).content
+        return chatWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice).content
     }
 
     override suspend fun chatWithUsage(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?
     ): ChatResult {
         val content = StringBuilder()
-        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
+        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice) { chunk ->
             content.append(chunk)
         }
         return ChatResult(
@@ -171,9 +173,10 @@ open class ClaudeClient(
 
     override fun chatStream(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?
     ): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice) { chunk ->
             emit(chunk)
         }
     }
@@ -181,12 +184,14 @@ open class ClaudeClient(
     override suspend fun chatStreamWithUsage(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?,
         onChunk: suspend (String) -> Unit
-    ): StreamResult = chatStreamWithThinking(messages, model, maxTokens, samplingParams, tools, onChunk, {})
+    ): StreamResult = chatStreamWithThinking(messages, model, maxTokens, samplingParams, tools, toolChoice, onChunk, {})
 
     override suspend fun chatStreamWithThinking(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?,
         onChunk: suspend (String) -> Unit,
         onThinking: suspend (String) -> Unit
     ): StreamResult {

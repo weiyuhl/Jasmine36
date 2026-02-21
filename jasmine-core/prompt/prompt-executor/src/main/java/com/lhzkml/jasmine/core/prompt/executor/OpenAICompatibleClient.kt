@@ -20,6 +20,7 @@ import com.lhzkml.jasmine.core.prompt.model.OpenAIToolCallDef
 import com.lhzkml.jasmine.core.prompt.model.OpenAIToolDef
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.ToolCall
+import com.lhzkml.jasmine.core.prompt.model.ToolChoice
 import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import io.ktor.client.*
@@ -117,20 +118,40 @@ abstract class OpenAICompatibleClient(
 
     // ========== ChatClient 实现 ==========
 
+    /**
+     * 将 ToolChoice 转换为 OpenAI API 的 tool_choice JSON 格式
+     */
+    protected fun convertToolChoice(toolChoice: ToolChoice?): kotlinx.serialization.json.JsonElement? {
+        return when (toolChoice) {
+            null -> null
+            is ToolChoice.Auto -> kotlinx.serialization.json.JsonPrimitive("auto")
+            is ToolChoice.Required -> kotlinx.serialization.json.JsonPrimitive("required")
+            is ToolChoice.None -> kotlinx.serialization.json.JsonPrimitive("none")
+            is ToolChoice.Named -> kotlinx.serialization.json.buildJsonObject {
+                put("type", kotlinx.serialization.json.JsonPrimitive("function"))
+                put("function", kotlinx.serialization.json.buildJsonObject {
+                    put("name", kotlinx.serialization.json.JsonPrimitive(toolChoice.toolName))
+                })
+            }
+        }
+    }
+
     override suspend fun chat(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?
     ): String {
-        return chatWithUsage(messages, model, maxTokens, samplingParams, tools).content
+        return chatWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice).content
     }
 
     override suspend fun chatWithUsage(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?
     ): ChatResult {
         // 通过流式实现非流式：收集所有 chunk 拼接为完整结果
         val content = StringBuilder()
-        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
+        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice) { chunk ->
             content.append(chunk)
         }
         return ChatResult(
@@ -144,20 +165,23 @@ abstract class OpenAICompatibleClient(
 
     override fun chatStream(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?
     ): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { emit(it) }
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice) { emit(it) }
     }
 
     override suspend fun chatStreamWithUsage(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?,
         onChunk: suspend (String) -> Unit
-    ): StreamResult = chatStreamWithThinking(messages, model, maxTokens, samplingParams, tools, onChunk, {})
+    ): StreamResult = chatStreamWithThinking(messages, model, maxTokens, samplingParams, tools, toolChoice, onChunk, {})
 
     override suspend fun chatStreamWithThinking(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?,
         onChunk: suspend (String) -> Unit,
         onThinking: suspend (String) -> Unit
     ): StreamResult {
@@ -170,7 +194,8 @@ abstract class OpenAICompatibleClient(
                     temperature = samplingParams?.temperature,
                     topP = samplingParams?.topP,
                     maxTokens = maxTokens,
-                    tools = convertTools(tools)
+                    tools = convertTools(tools),
+                    toolChoice = convertToolChoice(toolChoice)
                 )
                 val statement = httpClient.preparePost("${baseUrl}${chatPath}") {
                     contentType(ContentType.Application.Json)

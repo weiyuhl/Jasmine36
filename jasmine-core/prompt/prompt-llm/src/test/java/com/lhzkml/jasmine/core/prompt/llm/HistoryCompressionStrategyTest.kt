@@ -21,13 +21,13 @@ class HistoryCompressionStrategyTest {
         override suspend fun chat(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): String = "mock"
 
         override suspend fun chatWithUsage(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): ChatResult {
             lastMessages = messages
             callCount++
@@ -44,13 +44,14 @@ class HistoryCompressionStrategyTest {
         override fun chatStream(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): Flow<String> = emptyFlow()
 
         override suspend fun chatStreamWithUsage(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>, onChunk: suspend (String) -> Unit
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?,
+            onChunk: suspend (String) -> Unit
         ): StreamResult = StreamResult("mock")
 
         override suspend fun listModels(): List<ModelInfo> = emptyList()

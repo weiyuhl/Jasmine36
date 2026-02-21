@@ -2,11 +2,21 @@ package com.lhzkml.jasmine.core.agent.tools.graph
 
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceError
 import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
+import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
+
+/**
+ * AutoSelectForTask 工具选择结果
+ * 用于 LLM 返回的结构化工具选择响应。
+ */
+@kotlinx.serialization.Serializable
+internal data class SelectedToolNames(val tools: List<String>)
 
 /**
  * Agent 子图
  * 移植自 koog 的 AIAgentSubgraph，包含起始节点和结束节点，
  * 按照边的连接关系依次执行节点。
+ *
+ * 实现 ExecutionPointNode 接口，支持 checkpoint/rollback 场景。
  *
  * @param name 子图名称
  * @param start 起始节点
@@ -20,9 +30,33 @@ class AgentSubgraph<TInput, TOutput>(
     val finish: FinishNode<TOutput>,
     private val maxIterations: Int = 100,
     private val toolSelectionStrategy: ToolSelectionStrategy = ToolSelectionStrategy.ALL
-) {
+) : ExecutionPointNode {
     /** 子图中所有注册的节点（用于元数据/追踪） */
     internal val nodes = mutableListOf<AgentNode<*, *>>()
+
+    // ========== ExecutionPointNode 实现 ==========
+    // 移植自 koog 的 AIAgentSubgraph
+
+    private var forcedNode: AgentNode<*, *>? = null
+    private var forcedInput: Any? = null
+
+    override fun getExecutionPoint(): ExecutionPoint? {
+        val node = forcedNode ?: return null
+        return ExecutionPoint(node, forcedInput)
+    }
+
+    override fun resetExecutionPoint() {
+        forcedNode = null
+        forcedInput = null
+    }
+
+    override fun enforceExecutionPoint(node: AgentNode<*, *>, input: Any?) {
+        if (forcedNode != null) {
+            throw IllegalStateException("Forced node is already set to ${forcedNode!!.name}")
+        }
+        forcedNode = node
+        forcedInput = input
+    }
 
     init {
         nodes.add(start)
@@ -48,10 +82,18 @@ class AgentSubgraph<TInput, TOutput>(
 
         // 根据 ToolSelectionStrategy 过滤工具
         val originalTools = context.session.tools
-        context.session.tools = selectTools(originalTools)
+        context.session.tools = selectTools(originalTools, context)
 
         var currentNode: AgentNode<*, *> = start
         var currentInput: Any? = input
+
+        // 检查是否有强制执行点（checkpoint/rollback）
+        val executionPoint = getExecutionPoint()
+        if (executionPoint != null) {
+            currentNode = executionPoint.node
+            currentInput = executionPoint.input
+            resetExecutionPoint()
+        }
 
         try {
             var iterations = 0
@@ -122,8 +164,9 @@ class AgentSubgraph<TInput, TOutput>(
      * 根据 ToolSelectionStrategy 过滤工具列表
      * 移植自 koog 的 AIAgentSubgraph.selectTools
      */
-    private fun selectTools(
-        allTools: List<com.lhzkml.jasmine.core.prompt.model.ToolDescriptor>
+    private suspend fun selectTools(
+        allTools: List<com.lhzkml.jasmine.core.prompt.model.ToolDescriptor>,
+        context: AgentGraphContext
     ): List<com.lhzkml.jasmine.core.prompt.model.ToolDescriptor> {
         return when (toolSelectionStrategy) {
             is ToolSelectionStrategy.ALL -> allTools
@@ -133,6 +176,54 @@ class AgentSubgraph<TInput, TOutput>(
                 val nameSet = toolSelectionStrategy.names
                 allTools.filter { it.name in nameSet }
             }
+            is ToolSelectionStrategy.AutoSelectForTask -> {
+                autoSelectTools(allTools, context, toolSelectionStrategy)
+            }
         }
+    }
+
+    /**
+     * 使用 LLM 自动选择与子任务相关的工具
+     * 移植自 koog 的 AIAgentSubgraph.selectTools(AutoSelectForTask 分支)
+     */
+    private suspend fun autoSelectTools(
+        allTools: List<com.lhzkml.jasmine.core.prompt.model.ToolDescriptor>,
+        context: AgentGraphContext,
+        strategy: ToolSelectionStrategy.AutoSelectForTask
+    ): List<com.lhzkml.jasmine.core.prompt.model.ToolDescriptor> {
+        // 保存当前 prompt 状态
+        val initialPrompt = context.session.prompt
+
+        // 压缩历史以减少 token 消耗
+        context.session.replaceHistoryWithTLDR()
+
+        // 构建工具选择提示
+        val toolListText = allTools.joinToString("\n") { tool ->
+            "- ${tool.name}: ${tool.description}"
+        }
+        val selectionPrompt = buildString {
+            appendLine("Given the following available tools:")
+            appendLine(toolListText)
+            appendLine()
+            appendLine("Select the tools that are relevant for the following subtask:")
+            appendLine(strategy.subtaskDescription)
+            appendLine()
+            appendLine("Return a JSON object with a single field \"tools\" containing a list of selected tool names.")
+        }
+
+        context.session.appendPrompt { user(selectionPrompt) }
+
+        val result = context.session.requestLLMStructured<SelectedToolNames>(
+            examples = listOf(
+                SelectedToolNames(emptyList()),
+                SelectedToolNames(allTools.map { it.name }.take(3))
+            )
+        )
+
+        // 恢复原始 prompt
+        context.session.rewritePrompt { initialPrompt }
+
+        val selectedNames = result.getOrNull()?.data?.tools?.toSet() ?: return allTools
+        return allTools.filter { it.name in selectedNames }
     }
 }

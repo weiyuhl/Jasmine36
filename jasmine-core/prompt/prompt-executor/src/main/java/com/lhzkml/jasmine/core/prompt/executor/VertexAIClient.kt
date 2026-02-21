@@ -201,15 +201,17 @@ class VertexAIClient(
 
     override suspend fun chat(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
-    ): String = chatWithUsage(messages, model, maxTokens, samplingParams, tools).content
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?
+    ): String = chatWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice).content
 
     override suspend fun chatWithUsage(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?
     ): ChatResult {
         val content = StringBuilder()
-        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk ->
+        val streamResult = chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice) { chunk ->
             content.append(chunk)
         }
         return ChatResult(
@@ -222,14 +224,16 @@ class VertexAIClient(
 
     override fun chatStream(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
-        samplingParams: SamplingParams?, tools: List<ToolDescriptor>
+        samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?
     ): Flow<String> = flow {
-        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools) { chunk -> emit(chunk) }
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice) { chunk -> emit(chunk) }
     }
 
     override suspend fun chatStreamWithUsage(
         messages: List<ChatMessage>, model: String, maxTokens: Int?,
         samplingParams: SamplingParams?, tools: List<ToolDescriptor>,
+        toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice?,
         onChunk: suspend (String) -> Unit
     ): StreamResult {
         return com.lhzkml.jasmine.core.prompt.llm.executeWithRetry(retryConfig) {

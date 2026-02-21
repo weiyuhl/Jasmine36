@@ -22,13 +22,13 @@ class LLMSessionTest {
         override suspend fun chat(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): String = response
 
         override suspend fun chatWithUsage(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): ChatResult {
             lastMessages = messages
             lastTools = tools
@@ -44,13 +44,14 @@ class LLMSessionTest {
         override fun chatStream(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?
         ): Flow<String> = emptyFlow()
 
         override suspend fun chatStreamWithUsage(
             messages: List<ChatMessage>, model: String,
             maxTokens: Int?, samplingParams: SamplingParams?,
-            tools: List<ToolDescriptor>, onChunk: suspend (String) -> Unit
+            tools: List<ToolDescriptor>, toolChoice: ToolChoice?,
+            onChunk: suspend (String) -> Unit
         ): StreamResult {
             lastMessages = messages
             lastTools = tools

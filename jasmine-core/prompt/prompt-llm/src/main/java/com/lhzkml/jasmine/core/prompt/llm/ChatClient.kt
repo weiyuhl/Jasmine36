@@ -6,6 +6,7 @@ import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
 import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.ToolCall
+import com.lhzkml.jasmine.core.prompt.model.ToolChoice
 import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import kotlinx.coroutines.flow.Flow
@@ -42,7 +43,8 @@ interface ChatClient : AutoCloseable {
         model: String,
         maxTokens: Int? = null,
         samplingParams: SamplingParams? = null,
-        tools: List<ToolDescriptor> = emptyList()
+        tools: List<ToolDescriptor> = emptyList(),
+        toolChoice: ToolChoice? = null
     ): String
 
     /**
@@ -53,7 +55,8 @@ interface ChatClient : AutoCloseable {
         model: String,
         maxTokens: Int? = null,
         samplingParams: SamplingParams? = null,
-        tools: List<ToolDescriptor> = emptyList()
+        tools: List<ToolDescriptor> = emptyList(),
+        toolChoice: ToolChoice? = null
     ): ChatResult
 
     /**
@@ -64,7 +67,8 @@ interface ChatClient : AutoCloseable {
         model: String,
         maxTokens: Int? = null,
         samplingParams: SamplingParams? = null,
-        tools: List<ToolDescriptor> = emptyList()
+        tools: List<ToolDescriptor> = emptyList(),
+        toolChoice: ToolChoice? = null
     ): Flow<String>
 
     /**
@@ -76,6 +80,7 @@ interface ChatClient : AutoCloseable {
         maxTokens: Int? = null,
         samplingParams: SamplingParams? = null,
         tools: List<ToolDescriptor> = emptyList(),
+        toolChoice: ToolChoice? = null,
         onChunk: suspend (String) -> Unit
     ): StreamResult
 
@@ -105,6 +110,7 @@ interface ThinkingChatClient : ChatClient {
         maxTokens: Int? = null,
         samplingParams: SamplingParams? = null,
         tools: List<ToolDescriptor> = emptyList(),
+        toolChoice: ToolChoice? = null,
         onChunk: suspend (String) -> Unit,
         onThinking: suspend (String) -> Unit
     ): StreamResult
@@ -119,12 +125,13 @@ suspend fun ChatClient.chatStreamWithUsageAndThinking(
     maxTokens: Int? = null,
     samplingParams: SamplingParams? = null,
     tools: List<ToolDescriptor> = emptyList(),
+    toolChoice: ToolChoice? = null,
     onChunk: suspend (String) -> Unit,
     onThinking: suspend (String) -> Unit = {}
 ): StreamResult {
     return if (this is ThinkingChatClient) {
-        chatStreamWithThinking(messages, model, maxTokens, samplingParams, tools, onChunk, onThinking)
+        chatStreamWithThinking(messages, model, maxTokens, samplingParams, tools, toolChoice, onChunk, onThinking)
     } else {
-        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, onChunk)
+        chatStreamWithUsage(messages, model, maxTokens, samplingParams, tools, toolChoice, onChunk)
     }
 }
