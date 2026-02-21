@@ -64,9 +64,13 @@ class ToolExecutor(
     private val maxIterations: Int = 10,
     private val compressionStrategy: HistoryCompressionStrategy.TokenBudget? = null,
     private val eventListener: AgentEventListener? = null,
-    private val tracing: Tracing? = null
+    private val tracing: Tracing? = null,
+    private val maxToolResultLength: Int = MAX_TOOL_RESULT_LENGTH
 ) {
     // ========== Prompt + LLMSession 方式 ==========
+
+    // 迭代次数 holder，用于在内部循环和外部之间传递
+    private class IterationHolder(var count: Int = 0)
 
     /**
      * 使用 Prompt 执行 agent loop（非流式）
@@ -75,6 +79,7 @@ class ToolExecutor(
     suspend fun execute(prompt: Prompt, model: String): ChatResult {
         val runId = tracing?.newRunId() ?: ""
         val session = LLMWriteSession(client, model, prompt, registry.descriptors())
+        val iterHolder = IterationHolder()
 
         tracing?.emit(TraceEvent.AgentStarting(
             eventId = tracing.newEventId(), runId = runId,
@@ -82,11 +87,11 @@ class ToolExecutor(
         ))
 
         return try {
-            val result = session.use { executeLoop(it, runId) }
+            val result = session.use { executeLoop(it, runId, iterHolder) }
             tracing?.emit(TraceEvent.AgentCompleted(
                 eventId = tracing.newEventId(), runId = runId,
                 agentId = prompt.id, result = result.content.take(100),
-                totalIterations = result.usage?.totalTokens ?: 0
+                totalIterations = iterHolder.count
             ))
             result
         } catch (e: Exception) {
@@ -108,6 +113,7 @@ class ToolExecutor(
     ): StreamResult {
         val runId = tracing?.newRunId() ?: ""
         val session = LLMWriteSession(client, model, prompt, registry.descriptors())
+        val iterHolder = IterationHolder()
 
         tracing?.emit(TraceEvent.AgentStarting(
             eventId = tracing.newEventId(), runId = runId,
@@ -115,11 +121,11 @@ class ToolExecutor(
         ))
 
         return try {
-            val result = session.use { executeStreamLoop(it, onChunk, runId) }
+            val result = session.use { executeStreamLoop(it, onChunk, runId, iterHolder) }
             tracing?.emit(TraceEvent.AgentCompleted(
                 eventId = tracing.newEventId(), runId = runId,
                 agentId = prompt.id, result = result.content.take(100),
-                totalIterations = result.usage?.totalTokens ?: 0
+                totalIterations = iterHolder.count
             ))
             result
         } catch (e: Exception) {
@@ -131,13 +137,14 @@ class ToolExecutor(
         }
     }
 
-    private suspend fun executeLoop(session: LLMWriteSession, runId: String = ""): ChatResult {
+    private suspend fun executeLoop(session: LLMWriteSession, runId: String = "", iterHolder: IterationHolder = IterationHolder()): ChatResult {
         var totalUsage = Usage(0, 0, 0)
         var iterations = 0
 
         while (iterations < maxIterations) {
             coroutineContext.ensureActive()
             iterations++
+            iterHolder.count = iterations
 
             // 自动压缩检查
             compressionStrategy?.let {
@@ -221,7 +228,7 @@ class ToolExecutor(
                         toolArgs = call.arguments, result = toolResult.content.take(200)
                     ))
 
-                    session.appendPrompt { message(ChatMessage.toolResult(toolResult)) }
+                    session.appendPrompt { message(ChatMessage.toolResult(truncateToolResult(toolResult))) }
                 } catch (e: Exception) {
                     tracing?.emit(TraceEvent.ToolCallFailed(
                         eventId = tracing.newEventId(), runId = runId,
@@ -248,7 +255,8 @@ class ToolExecutor(
     private suspend fun executeStreamLoop(
         session: LLMWriteSession,
         onChunk: suspend (String) -> Unit,
-        runId: String = ""
+        runId: String = "",
+        iterHolder: IterationHolder = IterationHolder()
     ): StreamResult {
         var totalUsage = Usage(0, 0, 0)
         var iterations = 0
@@ -263,6 +271,7 @@ class ToolExecutor(
         while (iterations < maxIterations) {
             coroutineContext.ensureActive()
             iterations++
+            iterHolder.count = iterations
 
             // 自动压缩检查
             compressionStrategy?.let {
@@ -359,7 +368,7 @@ class ToolExecutor(
                         toolArgs = call.arguments, result = toolResult.content.take(200)
                     ))
 
-                    session.appendPrompt { message(ChatMessage.toolResult(toolResult)) }
+                    session.appendPrompt { message(ChatMessage.toolResult(truncateToolResult(toolResult))) }
                 } catch (e: Exception) {
                     tracing?.emit(TraceEvent.ToolCallFailed(
                         eventId = tracing.newEventId(), runId = runId,
@@ -436,6 +445,18 @@ class ToolExecutor(
     companion object {
         /** attempt_completion 工具名 */
         const val COMPLETION_TOOL_NAME = "attempt_completion"
+        /** 工具结果最大字符数，超过则截断 */
+        const val MAX_TOOL_RESULT_LENGTH = 8000
+    }
+
+    /**
+     * 截断过长的工具结果，避免 prompt 膨胀
+     */
+    private fun truncateToolResult(result: com.lhzkml.jasmine.core.prompt.model.ToolResult): com.lhzkml.jasmine.core.prompt.model.ToolResult {
+        if (result.content.length <= maxToolResultLength) return result
+        val truncated = result.content.take(maxToolResultLength) +
+            "\n\n[结果已截断，原始长度: ${result.content.length} 字符，显示前 $maxToolResultLength 字符]"
+        return result.copy(content = truncated)
     }
 
     /**
