@@ -10,10 +10,10 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
 
 /**
  * 图 Agent
- * 参考 koog 的 GraphAIAgent，基于图策略执行 Agent。
+ * 移植自 koog 的 GraphAIAgent，基于图策略执行 Agent。
  *
  * 与 ToolExecutor（简单 while 循环）不同，GraphAgent 按照
- * 节点 → 边 → 节点的图结构执行，支持条件分支、子图嵌套等。
+ * 节点 -> 边 -> 节点的图结构执行，支持条件分支、子图嵌套等。
  *
  * 使用方式：
  * ```kotlin
@@ -52,6 +52,7 @@ class GraphAgent<TInput, TOutput>(
     suspend fun run(prompt: Prompt, input: TInput): TOutput? {
         val runId = tracing?.newRunId() ?: ""
         val session = LLMSession(client, model, prompt, toolRegistry.descriptors())
+        val environment = GenericAgentEnvironment(agentId, toolRegistry)
 
         tracing?.emit(TraceEvent.AgentStarting(
             eventId = tracing.newEventId(), runId = runId,
@@ -65,6 +66,7 @@ class GraphAgent<TInput, TOutput>(
             model = model,
             session = session,
             toolRegistry = toolRegistry,
+            environment = environment,
             tracing = tracing
         )
 
@@ -90,14 +92,6 @@ class GraphAgent<TInput, TOutput>(
     /**
      * 带回调的执行方式
      * 通过 context.storage 传递回调函数，供流式策略使用。
-     *
-     * @param prompt 初始提示词
-     * @param input Agent 输入
-     * @param onChunk 流式文本回调（可选）
-     * @param onThinking 思考内容回调（可选）
-     * @param onToolCallStart 工具调用开始回调（可选）
-     * @param onToolCallResult 工具调用结果回调（可选）
-     * @return Agent 输出
      */
     suspend fun runWithCallbacks(
         prompt: Prompt,
@@ -112,6 +106,7 @@ class GraphAgent<TInput, TOutput>(
     ): TOutput? {
         val runId = tracing?.newRunId() ?: ""
         val session = LLMSession(client, model, prompt, toolRegistry.descriptors())
+        val environment = GenericAgentEnvironment(agentId, toolRegistry)
 
         tracing?.emit(TraceEvent.AgentStarting(
             eventId = tracing.newEventId(), runId = runId,
@@ -125,6 +120,7 @@ class GraphAgent<TInput, TOutput>(
             model = model,
             session = session,
             toolRegistry = toolRegistry,
+            environment = environment,
             tracing = tracing
         )
 

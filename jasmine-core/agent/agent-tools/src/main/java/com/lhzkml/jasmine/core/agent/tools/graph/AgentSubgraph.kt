@@ -5,7 +5,7 @@ import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
 
 /**
  * Agent 子图
- * 参考 koog 的 AIAgentSubgraph，包含起始节点和结束节点，
+ * 移植自 koog 的 AIAgentSubgraph，包含起始节点和结束节点，
  * 按照边的连接关系依次执行节点。
  *
  * @param name 子图名称

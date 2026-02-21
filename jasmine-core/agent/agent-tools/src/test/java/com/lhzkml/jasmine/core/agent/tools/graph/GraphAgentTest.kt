@@ -34,10 +34,12 @@ class GraphAgentTest {
 
         val client = FakeChatClient()
         val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
+        val registry = ToolRegistry()
         val ctx = AgentGraphContext(
             agentId = "test", runId = "r1",
             client = client, model = "test",
-            session = session, toolRegistry = ToolRegistry(),
+            session = session, toolRegistry = registry,
+            environment = GenericAgentEnvironment("test", registry),
             tracing = tracing
         )
 
@@ -64,11 +66,13 @@ class GraphAgentTest {
         }
 
         val client = FakeChatClient()
+        val registry = ToolRegistry()
         val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
         val ctx = AgentGraphContext(
             agentId = "test", runId = "r1",
             client = client, model = "test",
-            session = session, toolRegistry = ToolRegistry()
+            session = session, toolRegistry = registry,
+            environment = GenericAgentEnvironment("test", registry)
         )
 
         val result = strategy.subgraph.execute(ctx, 5)
@@ -84,11 +88,13 @@ class GraphAgentTest {
         }
 
         val client = FakeChatClient()
+        val registry = ToolRegistry()
         val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
         val ctx = AgentGraphContext(
             agentId = "test", runId = "r1",
             client = client, model = "test",
-            session = session, toolRegistry = ToolRegistry()
+            session = session, toolRegistry = registry,
+            environment = GenericAgentEnvironment("test", registry)
         )
 
         strategy.subgraph.execute(ctx, "input")
@@ -111,11 +117,13 @@ class GraphAgentTest {
         }
 
         val client = FakeChatClient()
+        val registry = ToolRegistry()
         val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
         val ctx = AgentGraphContext(
             agentId = "test", runId = "r1",
             client = client, model = "test",
-            session = session, toolRegistry = ToolRegistry(),
+            session = session, toolRegistry = registry,
+            environment = GenericAgentEnvironment("test", registry),
             tracing = tracing
         )
 
@@ -146,11 +154,13 @@ class GraphAgentTest {
         }
 
         val client = FakeChatClient()
+        val registry = ToolRegistry()
         val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
         val ctx = AgentGraphContext(
             agentId = "test", runId = "r1",
             client = client, model = "test",
-            session = session, toolRegistry = ToolRegistry()
+            session = session, toolRegistry = registry,
+            environment = GenericAgentEnvironment("test", registry)
         )
 
         assertEquals("positive: 5", strategy.subgraph.execute(ctx, 5))
@@ -194,11 +204,13 @@ class GraphAgentTest {
         }
 
         val client = FakeChatClient()
+        val registry = ToolRegistry()
         val session = LLMSession(client, "test", prompt("t") { system("hi") }, emptyList())
         val ctx = AgentGraphContext(
             agentId = "test", runId = "r1",
             client = client, model = "test",
-            session = session, toolRegistry = ToolRegistry()
+            session = session, toolRegistry = registry,
+            environment = GenericAgentEnvironment("test", registry)
         )
 
         val result = strategy.subgraph.execute(ctx, "hello")

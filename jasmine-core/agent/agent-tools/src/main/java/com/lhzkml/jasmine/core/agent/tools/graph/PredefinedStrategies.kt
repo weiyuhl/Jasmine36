@@ -2,15 +2,16 @@ package com.lhzkml.jasmine.core.agent.tools.graph
 
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
+import com.lhzkml.jasmine.core.prompt.model.ToolCall
 
 /**
  * 预定义图策略
- * 参考 koog 的 AIAgentSimpleStrategies.kt，提供开箱即用的 Agent 执行策略。
+ * 移植自 koog 的 AIAgentSimpleStrategies.kt，提供开箱即用的 Agent 执行策略。
  *
- * koog 的 singleRunStrategy 流程：
- *   Start → CallLLM → [有 tool_calls?] → ExecuteTool → SendToolResult → [循环或结束]
- *
- * jasmine 的实现使用 LLMSession + ToolRegistry 完成同样的流程。
+ * koog 的 singleRunStrategy 支持三种模式：
+ * - SEQUENTIAL: 多工具调用顺序执行
+ * - PARALLEL: 多工具调用并行执行
+ * - SINGLE_RUN_SEQUENTIAL: 单工具调用顺序执行
  */
 object PredefinedStrategies {
 
@@ -18,9 +19,9 @@ object PredefinedStrategies {
      * 节点生命周期回调 key 常量
      * 通过 context.storage 传递
      */
-    const val KEY_ON_NODE_ENTER = "onNodeEnter"   // suspend (nodeName: String) -> Unit
-    const val KEY_ON_NODE_EXIT = "onNodeExit"      // suspend (nodeName: String, success: Boolean) -> Unit
-    const val KEY_ON_EDGE = "onEdge"               // suspend (from: String, to: String, label: String) -> Unit
+    const val KEY_ON_NODE_ENTER = "onNodeEnter"
+    const val KEY_ON_NODE_EXIT = "onNodeExit"
+    const val KEY_ON_EDGE = "onEdge"
 
     private suspend fun AgentGraphContext.fireNodeEnter(name: String) {
         @Suppress("UNCHECKED_CAST")
@@ -41,202 +42,310 @@ object PredefinedStrategies {
     }
 
     /**
-     * 单轮执行策略（对应 koog 的 singleRunStrategy）
+     * 单轮执行策略
+     * 移植自 koog 的 singleRunStrategy，支持三种工具调用模式。
      *
-     * 流程：
-     *   nodeStart → nodeLLMRequest → [tool_calls] → nodeExecuteTool → nodeSendToolResult → [循环]
-     *                              → [assistant]  → nodeFinish
-     *
-     * @param maxToolIterations 最大工具调用循环次数，防止死循环
+     * @param runMode 工具调用模式，默认 SEQUENTIAL
      */
-    fun singleRunStrategy(maxToolIterations: Int = 10): AgentStrategy<String, String> {
-        return graphStrategy("single_run") {
+    fun singleRunStrategy(
+        runMode: ToolCalls = ToolCalls.SEQUENTIAL
+    ): AgentStrategy<String, String> {
+        return when (runMode) {
+            ToolCalls.SEQUENTIAL -> singleRunWithMultipleTools(parallelTools = false)
+            ToolCalls.PARALLEL -> singleRunWithMultipleTools(parallelTools = true)
+            ToolCalls.SINGLE_RUN_SEQUENTIAL -> singleRunSingleTool()
+        }
+    }
 
-            // 节点1: 发送用户消息给 LLM
+    /**
+     * 支持多工具调用的单轮策略（顺序或并行）
+     * 移植自 koog 的 singleRunWithParallelAbility
+     */
+    private fun singleRunWithMultipleTools(parallelTools: Boolean): AgentStrategy<String, String> {
+        return graphStrategy("single_run_sequential") {
+
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequest") { input ->
                 fireNodeEnter("nodeLLMRequest")
                 session.appendPrompt { user(input) }
                 val result = session.requestLLM()
-                if (result.hasToolCalls) {
-                    fireEdge("nodeLLMRequest", "nodeExecuteTool", "tool_calls ×${result.toolCalls.size}")
-                } else {
-                    fireEdge("nodeLLMRequest", "Finish", "assistant")
-                }
                 fireNodeExit("nodeLLMRequest")
                 result
             }
 
-            // 节点2: 执行工具调用
-            val nodeExecuteTool = node<ChatResult, List<Pair<String, String>>>("nodeExecuteTool") { result ->
-                fireNodeEnter("nodeExecuteTool")
-                val toolResults = mutableListOf<Pair<String, String>>()
-                for (call in result.toolCalls) {
+            val nodeExecuteTools = node<ChatResult, List<ReceivedToolResult>>("nodeExecuteTools") { result ->
+                fireNodeEnter("nodeExecuteTools")
+                val toolCalls = result.toolCalls.map { call ->
+                    ToolCall(id = call.id, name = call.name, arguments = call.arguments)
+                }
+                for (call in toolCalls) {
                     @Suppress("UNCHECKED_CAST")
                     val onStart = get<suspend (String, String) -> Unit>("onToolCallStart")
                     onStart?.invoke(call.name, call.arguments)
-
-                    val toolResult = toolRegistry.execute(call)
-
-                    @Suppress("UNCHECKED_CAST")
-                    val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
-                    onResult?.invoke(call.name, toolResult.content)
-
-                    toolResults.add(call.id to toolResult.content)
-                    session.appendPrompt { message(ChatMessage.toolResult(toolResult)) }
                 }
-                fireEdge("nodeExecuteTool", "nodeSendToolResult", "${toolResults.size} 个结果")
-                fireNodeExit("nodeExecuteTool")
-                toolResults
+                val results = if (parallelTools) {
+                    environment.executeTools(toolCalls)
+                } else {
+                    toolCalls.map { call ->
+                        val toolResult = environment.executeTool(call)
+                        @Suppress("UNCHECKED_CAST")
+                        val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
+                        onResult?.invoke(call.name, toolResult.content)
+                        toolResult
+                    }
+                }
+                if (parallelTools) {
+                    for (r in results) {
+                        @Suppress("UNCHECKED_CAST")
+                        val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
+                        onResult?.invoke(r.tool, r.content)
+                    }
+                }
+                fireNodeExit("nodeExecuteTools")
+                results
             }
 
-            // 节点3: 发送工具结果给 LLM，获取新回复
-            val nodeSendToolResult = node<List<Pair<String, String>>, ChatResult>("nodeSendToolResult") { _ ->
-                fireNodeEnter("nodeSendToolResult")
-                // 工具结果已在 nodeExecuteTool 中追加到 prompt
-                val result = session.requestLLM()
-                if (result.hasToolCalls) {
-                    fireEdge("nodeSendToolResult", "nodeExecuteTool", "继续调用 ×${result.toolCalls.size}")
-                } else {
-                    fireEdge("nodeSendToolResult", "Finish", "assistant")
+            val nodeSendToolResults = node<List<ReceivedToolResult>, ChatResult>("nodeSendToolResults") { results ->
+                fireNodeEnter("nodeSendToolResults")
+                for (r in results) {
+                    session.appendPrompt {
+                        message(ChatMessage.toolResult(
+                            com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                                callId = r.id, name = r.tool, content = r.content
+                            )
+                        ))
+                    }
                 }
-                fireNodeExit("nodeSendToolResult")
+                val llmResult = session.requestLLM()
+                fireNodeExit("nodeSendToolResults")
+                llmResult
+            }
+
+            edge(nodeStart, nodeLLMRequest)
+            conditionalEdge(nodeLLMRequest, nodeExecuteTools) { r -> if (r.hasToolCalls) r else null }
+            conditionalEdge(nodeLLMRequest, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
+            edge(nodeExecuteTools, nodeSendToolResults)
+            conditionalEdge(nodeSendToolResults, nodeExecuteTools) { r -> if (r.hasToolCalls) r else null }
+            conditionalEdge(nodeSendToolResults, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
+        }
+    }
+
+    /**
+     * 单工具调用的单轮策略
+     * 移植自 koog 的 singleRunModeStrategy
+     */
+    private fun singleRunSingleTool(): AgentStrategy<String, String> {
+        return graphStrategy("single_run") {
+
+            val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequest") { input ->
+                fireNodeEnter("nodeLLMRequest")
+                session.appendPrompt { user(input) }
+                val result = session.requestLLM()
+                fireNodeExit("nodeLLMRequest")
                 result
             }
 
-            // 边：Start → LLMRequest
+            val nodeExecuteTool = node<ChatResult, ReceivedToolResult>("nodeExecuteTool") { result ->
+                fireNodeEnter("nodeExecuteTool")
+                val call = result.toolCalls.first()
+                val toolCall = ToolCall(id = call.id, name = call.name, arguments = call.arguments)
+                @Suppress("UNCHECKED_CAST")
+                val onStart = get<suspend (String, String) -> Unit>("onToolCallStart")
+                onStart?.invoke(call.name, call.arguments)
+                val toolResult = environment.executeTool(toolCall)
+                @Suppress("UNCHECKED_CAST")
+                val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
+                onResult?.invoke(call.name, toolResult.content)
+                fireNodeExit("nodeExecuteTool")
+                toolResult
+            }
+
+            val nodeSendToolResult = node<ReceivedToolResult, ChatResult>("nodeSendToolResult") { result ->
+                fireNodeEnter("nodeSendToolResult")
+                session.appendPrompt {
+                    message(ChatMessage.toolResult(
+                        com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                            callId = result.id, name = result.tool, content = result.content
+                        )
+                    ))
+                }
+                val llmResult = session.requestLLM()
+                fireNodeExit("nodeSendToolResult")
+                llmResult
+            }
+
             edge(nodeStart, nodeLLMRequest)
-
-            // 边：LLMRequest → ExecuteTool（当有 tool_calls 时）
-            conditionalEdge(nodeLLMRequest, nodeExecuteTool) { result ->
-                if (result.hasToolCalls) result else null
-            }
-
-            // 边：LLMRequest → Finish（当无 tool_calls 时，返回文本内容）
-            conditionalEdge(nodeLLMRequest, nodeFinish) { result ->
-                if (!result.hasToolCalls) result.content else null
-            }
-
-            // 边：ExecuteTool → SendToolResult
+            conditionalEdge(nodeLLMRequest, nodeExecuteTool) { r -> if (r.hasToolCalls) r else null }
+            conditionalEdge(nodeLLMRequest, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
             edge(nodeExecuteTool, nodeSendToolResult)
-
-            // 边：SendToolResult → ExecuteTool（当 LLM 继续请求工具时）
-            conditionalEdge(nodeSendToolResult, nodeExecuteTool) { result ->
-                if (result.hasToolCalls) result else null
-            }
-
-            // 边：SendToolResult → Finish（当 LLM 返回最终文本时）
-            conditionalEdge(nodeSendToolResult, nodeFinish) { result ->
-                if (!result.hasToolCalls) result.content else null
-            }
+            conditionalEdge(nodeSendToolResult, nodeExecuteTool) { r -> if (r.hasToolCalls) r else null }
+            conditionalEdge(nodeSendToolResult, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
         }
     }
 
     /**
      * 单轮流式执行策略
-     *
-     * 与 singleRunStrategy 类似，但 LLM 请求使用流式输出。
-     * 通过 context.storage 传递 onChunk 回调。
-     *
-     * 使用方式：
-     * ```kotlin
-     * context.put("onChunk", onChunk)
-     * context.put("onThinking", onThinking)
-     * ```
+     * @param runMode 工具调用模式
      */
-    fun singleRunStreamStrategy(): AgentStrategy<String, String> {
+    fun singleRunStreamStrategy(
+        runMode: ToolCalls = ToolCalls.SEQUENTIAL
+    ): AgentStrategy<String, String> {
+        return when (runMode) {
+            ToolCalls.SEQUENTIAL -> singleRunStreamWithMultipleTools(parallelTools = false)
+            ToolCalls.PARALLEL -> singleRunStreamWithMultipleTools(parallelTools = true)
+            ToolCalls.SINGLE_RUN_SEQUENTIAL -> singleRunStreamSingleTool()
+        }
+    }
+
+    private fun singleRunStreamWithMultipleTools(parallelTools: Boolean): AgentStrategy<String, String> {
         return graphStrategy("single_run_stream") {
 
-            // 节点1: 流式发送用户消息给 LLM
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequestStream") { input ->
                 fireNodeEnter("nodeLLMRequest")
                 session.appendPrompt { user(input) }
-
                 @Suppress("UNCHECKED_CAST")
                 val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
                 @Suppress("UNCHECKED_CAST")
                 val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
-
                 val streamResult = session.requestLLMStream(onChunk, onThinking)
-                // 转换为 ChatResult 以复用相同的边条件
                 val result = ChatResult(
-                    content = streamResult.content,
-                    usage = streamResult.usage,
+                    content = streamResult.content, usage = streamResult.usage,
                     finishReason = streamResult.finishReason,
-                    toolCalls = streamResult.toolCalls,
-                    thinking = streamResult.thinking
+                    toolCalls = streamResult.toolCalls, thinking = streamResult.thinking
                 )
-                if (result.hasToolCalls) {
-                    fireEdge("nodeLLMRequest", "nodeExecuteTool", "tool_calls ×${result.toolCalls.size}")
-                } else {
-                    fireEdge("nodeLLMRequest", "Finish", "assistant")
-                }
                 fireNodeExit("nodeLLMRequest")
                 result
             }
 
-            // 节点2: 执行工具调用
-            val nodeExecuteTool = node<ChatResult, List<Pair<String, String>>>("nodeExecuteTool") { result ->
-                fireNodeEnter("nodeExecuteTool")
-                val toolResults = mutableListOf<Pair<String, String>>()
-                for (call in result.toolCalls) {
+            val nodeExecuteTools = node<ChatResult, List<ReceivedToolResult>>("nodeExecuteTools") { result ->
+                fireNodeEnter("nodeExecuteTools")
+                val toolCalls = result.toolCalls.map { call ->
+                    ToolCall(id = call.id, name = call.name, arguments = call.arguments)
+                }
+                for (call in toolCalls) {
                     @Suppress("UNCHECKED_CAST")
                     val onStart = get<suspend (String, String) -> Unit>("onToolCallStart")
                     onStart?.invoke(call.name, call.arguments)
-
-                    val toolResult = toolRegistry.execute(call)
-
-                    @Suppress("UNCHECKED_CAST")
-                    val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
-                    onResult?.invoke(call.name, toolResult.content)
-
-                    toolResults.add(call.id to toolResult.content)
-                    session.appendPrompt { message(ChatMessage.toolResult(toolResult)) }
                 }
-                fireEdge("nodeExecuteTool", "nodeSendToolResult", "${toolResults.size} 个结果")
-                fireNodeExit("nodeExecuteTool")
-                toolResults
+                val results = if (parallelTools) {
+                    environment.executeTools(toolCalls)
+                } else {
+                    toolCalls.map { call ->
+                        val toolResult = environment.executeTool(call)
+                        @Suppress("UNCHECKED_CAST")
+                        val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
+                        onResult?.invoke(call.name, toolResult.content)
+                        toolResult
+                    }
+                }
+                if (parallelTools) {
+                    for (r in results) {
+                        @Suppress("UNCHECKED_CAST")
+                        val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
+                        onResult?.invoke(r.tool, r.content)
+                    }
+                }
+                fireNodeExit("nodeExecuteTools")
+                results
             }
 
-            // 节点3: 流式发送工具结果给 LLM
-            val nodeSendToolResult = node<List<Pair<String, String>>, ChatResult>("nodeSendToolResultStream") { _ ->
-                fireNodeEnter("nodeSendToolResult")
+            val nodeSendToolResults = node<List<ReceivedToolResult>, ChatResult>("nodeSendToolResultsStream") { results ->
+                fireNodeEnter("nodeSendToolResults")
+                for (r in results) {
+                    session.appendPrompt {
+                        message(ChatMessage.toolResult(
+                            com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                                callId = r.id, name = r.tool, content = r.content
+                            )
+                        ))
+                    }
+                }
                 @Suppress("UNCHECKED_CAST")
                 val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
                 @Suppress("UNCHECKED_CAST")
                 val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+                val streamResult = session.requestLLMStream(onChunk, onThinking)
+                val llmResult = ChatResult(
+                    content = streamResult.content, usage = streamResult.usage,
+                    finishReason = streamResult.finishReason,
+                    toolCalls = streamResult.toolCalls, thinking = streamResult.thinking
+                )
+                fireNodeExit("nodeSendToolResults")
+                llmResult
+            }
 
+            edge(nodeStart, nodeLLMRequest)
+            conditionalEdge(nodeLLMRequest, nodeExecuteTools) { r -> if (r.hasToolCalls) r else null }
+            conditionalEdge(nodeLLMRequest, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
+            edge(nodeExecuteTools, nodeSendToolResults)
+            conditionalEdge(nodeSendToolResults, nodeExecuteTools) { r -> if (r.hasToolCalls) r else null }
+            conditionalEdge(nodeSendToolResults, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
+        }
+    }
+
+    private fun singleRunStreamSingleTool(): AgentStrategy<String, String> {
+        return graphStrategy("single_run_stream") {
+
+            val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequestStream") { input ->
+                fireNodeEnter("nodeLLMRequest")
+                session.appendPrompt { user(input) }
+                @Suppress("UNCHECKED_CAST")
+                val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
+                @Suppress("UNCHECKED_CAST")
+                val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
                 val streamResult = session.requestLLMStream(onChunk, onThinking)
                 val result = ChatResult(
-                    content = streamResult.content,
-                    usage = streamResult.usage,
+                    content = streamResult.content, usage = streamResult.usage,
                     finishReason = streamResult.finishReason,
-                    toolCalls = streamResult.toolCalls,
-                    thinking = streamResult.thinking
+                    toolCalls = streamResult.toolCalls, thinking = streamResult.thinking
                 )
-                if (result.hasToolCalls) {
-                    fireEdge("nodeSendToolResult", "nodeExecuteTool", "继续调用 ×${result.toolCalls.size}")
-                } else {
-                    fireEdge("nodeSendToolResult", "Finish", "assistant")
-                }
-                fireNodeExit("nodeSendToolResult")
+                fireNodeExit("nodeLLMRequest")
                 result
             }
 
-            // 边
+            val nodeExecuteTool = node<ChatResult, ReceivedToolResult>("nodeExecuteTool") { result ->
+                fireNodeEnter("nodeExecuteTool")
+                val call = result.toolCalls.first()
+                val toolCall = ToolCall(id = call.id, name = call.name, arguments = call.arguments)
+                @Suppress("UNCHECKED_CAST")
+                val onStart = get<suspend (String, String) -> Unit>("onToolCallStart")
+                onStart?.invoke(call.name, call.arguments)
+                val toolResult = environment.executeTool(toolCall)
+                @Suppress("UNCHECKED_CAST")
+                val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
+                onResult?.invoke(call.name, toolResult.content)
+                fireNodeExit("nodeExecuteTool")
+                toolResult
+            }
+
+            val nodeSendToolResult = node<ReceivedToolResult, ChatResult>("nodeSendToolResultStream") { result ->
+                fireNodeEnter("nodeSendToolResult")
+                session.appendPrompt {
+                    message(ChatMessage.toolResult(
+                        com.lhzkml.jasmine.core.prompt.model.ToolResult(
+                            callId = result.id, name = result.tool, content = result.content
+                        )
+                    ))
+                }
+                @Suppress("UNCHECKED_CAST")
+                val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
+                @Suppress("UNCHECKED_CAST")
+                val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+                val streamResult = session.requestLLMStream(onChunk, onThinking)
+                val llmResult = ChatResult(
+                    content = streamResult.content, usage = streamResult.usage,
+                    finishReason = streamResult.finishReason,
+                    toolCalls = streamResult.toolCalls, thinking = streamResult.thinking
+                )
+                fireNodeExit("nodeSendToolResult")
+                llmResult
+            }
+
             edge(nodeStart, nodeLLMRequest)
-            conditionalEdge(nodeLLMRequest, nodeExecuteTool) { result ->
-                if (result.hasToolCalls) result else null
-            }
-            conditionalEdge(nodeLLMRequest, nodeFinish) { result ->
-                if (!result.hasToolCalls) result.content else null
-            }
+            conditionalEdge(nodeLLMRequest, nodeExecuteTool) { r -> if (r.hasToolCalls) r else null }
+            conditionalEdge(nodeLLMRequest, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
             edge(nodeExecuteTool, nodeSendToolResult)
-            conditionalEdge(nodeSendToolResult, nodeExecuteTool) { result ->
-                if (result.hasToolCalls) result else null
-            }
-            conditionalEdge(nodeSendToolResult, nodeFinish) { result ->
-                if (!result.hasToolCalls) result.content else null
-            }
+            conditionalEdge(nodeSendToolResult, nodeExecuteTool) { r -> if (r.hasToolCalls) r else null }
+            conditionalEdge(nodeSendToolResult, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
         }
     }
 }

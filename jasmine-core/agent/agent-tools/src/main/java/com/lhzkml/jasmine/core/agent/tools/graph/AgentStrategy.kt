@@ -5,7 +5,7 @@ import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
 
 /**
  * Agent 策略
- * 参考 koog 的 AIAgentGraphStrategy，是子图的特殊形式，
+ * 移植自 koog 的 AIAgentGraphStrategy，是子图的特殊形式，
  * 代表 Agent 的顶层执行策略。
  *
  * 策略 = 子图 + 策略级别的追踪事件

@@ -8,7 +8,7 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
 
 /**
  * Agent 图执行上下文
- * 参考 koog 的 AIAgentGraphContext / AIAgentContext，
+ * 移植自 koog 的 AIAgentGraphContext / AIAgentContext，
  * 提供节点执行时需要的所有资源。
  *
  * @param agentId Agent 唯一标识
@@ -17,6 +17,7 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
  * @param model 模型名称
  * @param session LLM 会话（累积式 prompt）
  * @param toolRegistry 工具注册表
+ * @param environment Agent 环境（工具执行、问题报告）
  * @param tracing 追踪系统（可选）
  * @param storage 自定义存储（节点间共享数据）
  */
@@ -27,6 +28,7 @@ class AgentGraphContext(
     val model: String,
     val session: LLMSession,
     val toolRegistry: ToolRegistry,
+    val environment: AgentEnvironment,
     val tracing: Tracing? = null,
     val storage: MutableMap<String, Any?> = mutableMapOf()
 ) {
@@ -45,5 +47,23 @@ class AgentGraphContext(
     /** 便捷方法：向 storage 存值 */
     fun put(key: String, value: Any?) {
         storage[key] = value
+    }
+
+    /**
+     * 创建上下文的副本（用于并行节点执行等场景）
+     * 移植自 koog 的 AIAgentGraphContext.fork()
+     */
+    fun fork(): AgentGraphContext {
+        return AgentGraphContext(
+            agentId = agentId,
+            runId = runId,
+            client = client,
+            model = model,
+            session = session,
+            toolRegistry = toolRegistry,
+            environment = environment,
+            tracing = tracing,
+            storage = storage.toMutableMap()
+        )
     }
 }

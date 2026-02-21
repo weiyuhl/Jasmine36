@@ -60,6 +60,7 @@ import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
 import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMPlanner
 import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMWithCriticPlanner
 import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
+import com.lhzkml.jasmine.core.agent.tools.graph.GenericAgentEnvironment
 import com.lhzkml.jasmine.core.agent.tools.graph.GraphAgent
 import com.lhzkml.jasmine.core.agent.tools.graph.PredefinedStrategies
 import com.lhzkml.jasmine.core.agent.tools.event.EventHandler
@@ -1232,6 +1233,9 @@ class MainActivity : AppCompatActivity() {
                                 model = config.model,
                                 session = planSession,
                                 toolRegistry = registry,
+                                environment = GenericAgentEnvironment(
+                                    currentConversationId ?: "planner", registry
+                                ),
                                 tracing = tracing
                             )
 
