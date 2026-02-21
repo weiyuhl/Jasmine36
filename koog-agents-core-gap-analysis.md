@@ -414,7 +414,51 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 | SubgraphMetadata | 无 | 节点映射元数据 |
 | Utils (Option, RWLock, MutexCheck) | 无 | 通用工具类 |
 | TerminationTool (NAME="__terminate__") | ToolExecutor.COMPLETION_TOOL_NAME="attempt_completion" | 名称不同，功能类似 |
-| Message 类型层次 (Assistant, Reasoning, Tool.Call) | ChatMessage/ChatResult 扁平结构 | koog 用密封类层次，jasmine 用角色字符串 |
+| Message 类型层次 (Assistant, Reasoning, Tool.Call) | Message 密封类层次 + ChatMessage 互转 | 已完成移植 |
+
+---
+
+## 十一.一、已完成移植 -- Message 类型层次 (密封类层次)
+
+来源: `koog prompt-model/message/Message.kt` + `ContentPart.kt` + `MessageMetaInfo`
+目标: `jasmine prompt-model/` (3 个新文件 + 5 个修改文件)
+
+### 新增文件
+
+| 文件 | 说明 |
+|---|---|
+| MessageRole.kt | 消息角色枚举 (System, User, Assistant, Reasoning, Tool) |
+| MessageMetaInfo.kt | 消息元数据 (RequestMetaInfo, ResponseMetaInfo) |
+| Message.kt | Message 密封接口 + User/System/Assistant/Reasoning/Tool.Call/Tool.Result |
+
+### 修改文件
+
+| 文件 | 新增内容 |
+|---|---|
+| ChatMessage.kt | toMessage(), toChatMessage(), toMessages(), toChatMessages() 互转方法 |
+| ChatResult.kt | toAssistantMessage(), toMessages() 转换方法 |
+| Prompt.kt | typedMessages 属性, fromMessages() 工厂方法 |
+| PromptBuilder.kt | message(Message), messages(List<Message>), reasoning() |
+| LLMSession.kt | requestLLMAsMessage(), requestLLMWithoutToolsAsMessage(), requestLLMAsMessages(), appendMessage(), appendMessages() |
+| AgentEdge.kt | onAssistant, onToolCallMessage, onReasoning 边条件 (Message.Response 版本) |
+| FunctionalContextExt.kt | requestLLMAsMessage(), requestLLMWithoutToolsAsMessage(), appendMessage(), appendMessages() |
+| PredefinedNodes.kt | nodeLLMRequestAsMessage, nodeLLMRequestAsMessages |
+| AgentCheckpoint.kt | typedMessageHistory 属性 |
+| ConversationRepository.kt | addTypedMessage(), addTypedMessages(), getTypedMessages(), observeTypedMessages() |
+
+### 简化决策
+
+| koog 特性 | jasmine 处理 |
+|---|---|
+| ContentPart (Text/Image/Video/Audio/File) | 只保留文本内容，不移植多媒体附件 |
+| kotlinx.datetime.Instant | 使用 Long 时间戳 |
+| ResponseMetaInfo.additionalInfo (deprecated) | 不移植 |
+| Message.hasAttachments() / hasOnlyTextContent() | 不移植 (依赖 ContentPart.Attachment) |
+
+### 测试
+
+- MessageTest -- 28 个测试 (角色、类型层次、属性验证)
+- MessageConversionTest -- 22 个测试 (ChatMessage/ChatResult <-> Message 互转、往返一致性)
 
 ---
 
@@ -447,6 +491,7 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 17. LLM Session 读写分离 (LLMSession sealed base + LLMReadSession + LLMWriteSession) [已完成]
 18. AgentStorage 类型化并发安全存储 (AgentStorageKey + Mutex) [已完成]
 19. AgentExecutionInfo / AgentNodePath 执行路径追踪 [已完成]
+20. Message 类型层次 (密封类层次 + ChatMessage 互转 + 全模块集成) [已完成]
 
 ### 低优先级 (依赖架构变更或使用场景有限) -- 不移植
 
