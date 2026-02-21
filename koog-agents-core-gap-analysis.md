@@ -35,35 +35,44 @@
 来源: `koog dsl/extension/AIAgentNodes.kt`
 目标: `jasmine PredefinedNodes.kt`
 
-jasmine 已有 10 个节点，koog 共有约 24 个节点。以下 14 个缺失:
+jasmine 已有 10+8 个节点（原始 10 个 + Task 26 移植 8 个），koog 共有约 24 个节点。
+
+已移植的节点（Task 26 新增）:
+
+| 节点名 | 状态 | 功能说明 |
+|---|---|---|
+| nodeLLMRequestOnlyCallingTools | [已完成] | 追加用户消息，强制LLM只能调用工具(ToolChoice.Required) |
+| nodeLLMRequestMultiple | [已完成] | 追加用户消息，获取多个LLM响应 |
+| nodeLLMRequestMultipleOnlyCallingTools | [已完成] | 多响应 + 只能调用工具 |
+| nodeLLMRequestForceOneTool | [已完成] | 强制LLM使用指定工具(ToolChoice.Named) |
+| nodeLLMCompressHistory | [已完成] | 历史压缩节点，压缩后透传输入 |
+| nodeLLMRequestStructured | [已完成] | 请求LLM返回结构化JSON输出 |
+| nodeExecuteMultipleToolsAndSendResults | [已完成] | 执行多工具并发送结果给LLM |
+| nodeLLMSendToolResultOnlyCallingTools | [已完成] | 发送工具结果 + 强制只能调用工具 |
+| nodeLLMSendMultipleToolResultsMultiple | [已完成] | 发送多工具结果，获取多响应 |
+| nodeLLMSendMultipleToolResultsOnlyCallingTools | [已完成] | 发送多工具结果 + 强制只能调用工具 |
+
+仍未移植（低优先级 / 架构差异大）:
 
 | 节点名 | koog 函数签名 | 功能说明 |
 |---|---|---|
-| nodeLLMRequestOnlyCallingTools | `(String) -> Message.Response` | 追加用户消息，强制LLM只能调用工具(不能生成文本) |
-| nodeLLMRequestMultiple | `(String) -> List<Message.Response>` | 追加用户消息，获取多个LLM响应(含多个tool call + assistant) |
-| nodeLLMRequestMultipleOnlyCallingTools | `(String) -> List<Message.Response>` | 多响应 + 只能调用工具 |
-| nodeLLMRequestForceOneTool | `(String, ToolDescriptor) -> Message.Response` | 强制LLM使用指定工具 |
-| nodeLLMModerateMessage | `(Message) -> ModeratedMessage` | 内容审核节点，用指定模型审核消息 |
-| nodeLLMRequestStructured | `(String) -> Result<StructuredResponse<T>>` | 请求LLM返回结构化JSON输出 |
+| nodeLLMModerateMessage | `(Message) -> ModeratedMessage` | 内容审核节点，需要 moderate() API |
 | nodeLLMRequestStreaming (Flow) | `(String) -> Flow<StreamFrame>` | Flow-based流式请求(koog用Flow，jasmine用回调) |
-| nodeLLMCompressHistory | `(T) -> T` | 历史压缩节点，压缩后透传输入 |
 | nodeLLMRequestStreamingAndSendResults | `(T) -> List<Message.Response>` | 流式请求并自动收集结果更新prompt |
-| nodeExecuteSingleTool | `(ToolArg) -> SafeTool.Result<TResult>` | 直接调用指定工具(不经过LLM选择) |
-| nodeSetStructuredOutput | `(TInput) -> TInput` | 设置结构化输出schema后透传输入 |
-| nodeExecuteMultipleToolsAndSendResults | `(List<ToolCall>) -> List<Message.Response>` | 执行多工具并发送结果给LLM |
-| nodeLLMSendToolResultOnlyCallingTools | `(List<ReceivedToolResult>) -> Message.Response` | 发送工具结果 + 强制只能调用工具 |
-| nodeLLMSendMultipleToolResultsOnlyCallingTools | `(List<ReceivedToolResult>) -> List<Message.Response>` | 发送多工具结果 + 强制只能调用工具 |
+| nodeExecuteSingleTool | `(ToolArg) -> SafeTool.Result<TResult>` | 直接调用指定工具(依赖SafeTool类型系统) |
+| nodeSetStructuredOutput | `(TInput) -> TInput` | 设置结构化输出schema(需要StructuredOutputConfig) |
+| nodeDoNothing | `(T) -> T` | 透传节点 |
+| nodeUpdatePrompt | `(T) -> T` | 修改prompt后透传 |
+| nodeLLMSendMessageOnlyCallingTools | `(String) -> Message.Response` | 同nodeLLMRequestOnlyCallingTools，koog别名 |
+| nodeLLMSendMessageForceOneTool | `(String) -> Message.Response` | 同nodeLLMRequestForceOneTool，koog别名 |
 
-### 移植难度评估
+### 移植难度评估（仍未移植的项目）
 
-- nodeLLMRequestForceOneTool: 需要 LLMSession 支持 tool_choice=named，jasmine 已有 setToolChoiceNamed()，可移植
-- nodeLLMRequestOnlyCallingTools: 需要 LLMSession 支持 tool_choice=required，jasmine 已有 setToolChoiceRequired()，可移植
-- nodeLLMRequestMultiple: koog 的 requestLLMMultiple() 返回 List<Message.Response>，jasmine 的 requestLLM() 返回单个 ChatResult。需要新增 requestLLMMultiple() 到 LLMSession
 - nodeLLMModerateMessage: 需要 moderate() API，jasmine 没有，需要新增
-- nodeLLMRequestStructured: jasmine LLMSession 已有 requestLLMStructured()，可直接移植
 - nodeLLMRequestStreaming (Flow): koog 用 Kotlin Flow，jasmine 用回调式。架构差异较大
 - nodeExecuteSingleTool: 依赖 SafeTool 类型系统，jasmine 没有。需要适配
-- nodeSetStructuredOutput: 需要 StructuredRequestConfig，jasmine 没有完整的结构化输出配置系统
+- nodeSetStructuredOutput: 需要 StructuredOutputConfig，jasmine 没有完整的结构化输出配置系统
+- nodeDoNothing / nodeUpdatePrompt: 简单，可随时移植
 
 ---
 
