@@ -23,7 +23,7 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
  * @param environment Agent 环境（工具执行、问题报告）
  * @param tracing 追踪系统（可选）
  * @param pipeline Feature/Pipeline 系统（可选，移植自 koog）
- * @param storage 自定义存储（节点间共享数据）
+ * @param storage 并发安全的类型化存储（节点间共享数据，移植自 koog 的 AIAgentStorage）
  */
 class AgentGraphContext(
     val agentId: String,
@@ -36,7 +36,7 @@ class AgentGraphContext(
     val environment: AgentEnvironment,
     val tracing: Tracing? = null,
     val pipeline: AgentPipeline? = null,
-    val storage: MutableMap<String, Any?> = mutableMapOf()
+    val storage: AgentStorage = AgentStorage()
 ) {
     /** 当前策略名称 */
     var strategyName: String = ""
@@ -46,20 +46,23 @@ class AgentGraphContext(
     var iterations: Int = 0
         internal set
 
-    /** 便捷方法：从 storage 取值 */
-    @Suppress("UNCHECKED_CAST")
-    fun <T> get(key: String): T? = storage[key] as? T
+    /**
+     * 便捷方法：从 storage 取值（suspend 版本，类型化 key）
+     * 移植自 koog 的 AIAgentStorage.get
+     */
+    suspend fun <T : Any> get(key: AgentStorageKey<T>): T? = storage.get(key)
 
-    /** 便捷方法：向 storage 存值 */
-    fun put(key: String, value: Any?) {
-        storage[key] = value
-    }
+    /**
+     * 便捷方法：向 storage 存值（suspend 版本，类型化 key）
+     * 移植自 koog 的 AIAgentStorage.set
+     */
+    suspend fun <T : Any> put(key: AgentStorageKey<T>, value: T) = storage.set(key, value)
 
     /**
      * 创建上下文的副本（用于并行节点执行等场景）
      * 移植自 koog 的 AIAgentGraphContext.fork()
      */
-    fun fork(): AgentGraphContext {
+    suspend fun fork(): AgentGraphContext {
         return AgentGraphContext(
             agentId = agentId,
             runId = runId,
@@ -71,7 +74,7 @@ class AgentGraphContext(
             environment = environment,
             tracing = tracing,
             pipeline = pipeline,
-            storage = storage.toMutableMap()
+            storage = storage.copy()
         )
     }
 }

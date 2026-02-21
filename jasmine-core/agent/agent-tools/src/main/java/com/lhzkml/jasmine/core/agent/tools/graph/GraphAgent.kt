@@ -151,14 +151,16 @@ class GraphAgent<TInput, TOutput>(
             pipeline = pipeline
         )
 
-        // 通过 storage 传递回调
-        onChunk?.let { context.put("onChunk", it) }
-        onThinking?.let { context.put("onThinking", it) }
-        onToolCallStart?.let { context.put("onToolCallStart", it) }
-        onToolCallResult?.let { context.put("onToolCallResult", it) }
-        onNodeEnter?.let { context.put(PredefinedStrategies.KEY_ON_NODE_ENTER, it) }
-        onNodeExit?.let { context.put(PredefinedStrategies.KEY_ON_NODE_EXIT, it) }
-        onEdge?.let { context.put(PredefinedStrategies.KEY_ON_EDGE, it) }
+        // 通过 storage 传递回调（类型化 AgentStorageKey）
+        kotlinx.coroutines.runBlocking {
+            onChunk?.let { context.storage.set(PredefinedStrategies.KEY_ON_CHUNK, it) }
+            onThinking?.let { context.storage.set(PredefinedStrategies.KEY_ON_THINKING, it) }
+            onToolCallStart?.let { context.storage.set(PredefinedStrategies.KEY_ON_TOOL_CALL_START, it) }
+            onToolCallResult?.let { context.storage.set(PredefinedStrategies.KEY_ON_TOOL_CALL_RESULT, it) }
+            onNodeEnter?.let { context.storage.set(PredefinedStrategies.KEY_ON_NODE_ENTER, it) }
+            onNodeExit?.let { context.storage.set(PredefinedStrategies.KEY_ON_NODE_EXIT, it) }
+            onEdge?.let { context.storage.set(PredefinedStrategies.KEY_ON_EDGE, it) }
+        }
 
         // 触发 Pipeline 事件
         pipeline?.onAgentStarting(

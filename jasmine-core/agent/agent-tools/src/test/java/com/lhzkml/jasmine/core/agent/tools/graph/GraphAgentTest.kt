@@ -158,13 +158,14 @@ class GraphAgentTest {
 
     @Test
     fun `context storage shared between nodes`() = runBlocking {
+        val testKey = AgentStorageKey<String>("key")
         val strategy = graphStrategy<String, String>("storage") {
             val writer = node<String, String>("writer") { input ->
-                put("key", input.uppercase())
+                storage.set(testKey, input.uppercase())
                 input
             }
             val reader = node<String, String>("reader") {
-                get<String>("key") ?: "not found"
+                storage.get(testKey) ?: "not found"
             }
             edge(nodeStart, writer)
             edge(writer, reader)

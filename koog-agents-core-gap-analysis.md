@@ -324,7 +324,48 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 
 ---
 
-## 九、架构差异 -- 不建议直接移植
+## 九、已完成移植 -- AgentStorage (类型化并发安全存储)
+
+来源: `koog agents-core/agent/entity/AIAgentStorage.kt`
+目标: `jasmine AgentStorage.kt` + `AgentGraphContext.kt` 重构
+
+将 jasmine 的 `MutableMap<String, Any?>` 替换为 koog 的类型化并发安全存储。
+
+### 架构对比
+
+| koog | jasmine (移植后) | 说明 |
+|---|---|---|
+| AIAgentStorageKey<T : Any>(name) | AgentStorageKey<T : Any>(name) | 类型化存储 key |
+| createStorageKey<T>(name) | createStorageKey<T>(name) | 工厂函数 |
+| AIAgentStorage (Mutex) | AgentStorage (Mutex) | 并发安全 key-value 存储 |
+
+### AgentStorage 方法
+
+| 方法 | 功能 | 状态 |
+|---|---|---|
+| set(key, value) | suspend, 类型安全设置值 | [已完成] |
+| get(key) | suspend, 返回 T? | [已完成] |
+| getValue(key) | suspend, 返回 T (不存在则抛异常) | [已完成] |
+| remove(key) | suspend, 返回被移除的值 | [已完成] |
+| toMap() | suspend, 快照 | [已完成] |
+| putAll(map) | suspend, 批量添加 | [已完成] |
+| clear() | suspend, 清空 | [已完成] |
+| copy() | internal suspend, 深拷贝 (用于 fork) | [已完成] |
+
+### 集成点更新
+
+- AgentGraphContext -- storage 类型从 MutableMap<String, Any?> 改为 AgentStorage
+- AgentGraphContext.get/put -- 改为 suspend 方法，使用 AgentStorageKey<T>
+- AgentGraphContext.fork() -- 改为 suspend，使用 storage.copy()
+- PredefinedStrategies -- 所有回调 key 从 String 常量改为 AgentStorageKey<T> (KEY_ON_CHUNK, KEY_ON_THINKING, KEY_ON_TOOL_CALL_START, KEY_ON_TOOL_CALL_RESULT, KEY_ON_NODE_ENTER, KEY_ON_NODE_EXIT, KEY_ON_EDGE)
+- PredefinedNodes -- 回调获取改为 storage.get(PredefinedStrategies.KEY_ON_CHUNK) 等
+- GraphAgent.runWithCallbacks -- 回调存储改为 storage.set(KEY, value)
+- Persistence -- 恢复信息存储改为 AgentStorageKey (KEY_RESTORED_NODE, KEY_RESTORED_INPUT)
+- GraphAgentTest -- 测试用例更新为使用 AgentStorageKey
+
+---
+
+## 十、架构差异 -- 不建议直接移植
 
 以下是 koog 和 jasmine 的架构设计差异，属于有意的简化，不建议直接移植:
 
@@ -333,7 +374,7 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 | SafeTool<TArgs, TResult> | 无 | koog 的 Tool 有类型化的 Args/Result，jasmine 的 Tool 是 execute(String)->String |
 | LLM Session 读写分离 (ReadSession/WriteSession) | LLMReadSession / LLMWriteSession | koog 分离读写权限，jasmine 已完成移植 |
 | AIAgentConfig / AIAgentConfigBase | 直接参数 | koog 用配置对象，jasmine 用构造函数参数 |
-| AIAgentStorage | MutableMap<String, Any?> | koog 有独立存储类，jasmine 直接用 Map |
+| AIAgentStorage | AgentStorage (AgentStorageKey + Mutex) | koog 有独立存储类，jasmine 已完成移植 |
 | AIAgentStateManager (Mutex) | ManagedAgent.state | koog 有 Mutex 保护的状态管理，jasmine 直接设置 |
 | AgentContextData / RollbackStrategy | 无 | checkpoint/rollback 机制 |
 | AgentExecutionInfo / AgentNodePath | 无 | 执行路径追踪 |
@@ -345,7 +386,7 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 
 ---
 
-## 十、移植优先级建议
+## 十一、移植优先级建议
 
 ### 高优先级 (实用性强，移植难度低) -- 全部已完成
 
@@ -372,12 +413,13 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 
 16. Feature/Pipeline 系统 (17个新文件，完整插件/事件/处理器管道) [已完成]
 17. LLM Session 读写分离 (LLMSession sealed base + LLMReadSession + LLMWriteSession) [已完成]
+18. AgentStorage 类型化并发安全存储 (AgentStorageKey + Mutex) [已完成]
 
 ### 低优先级 (依赖架构变更或使用场景有限) -- 不移植
 
-18. SafeTool 类型系统 -- 需要重构 Tool 基类，架构差异
-19. onSuccessful / onFailure -- 依赖 SafeTool.Result，jasmine 用 ToolResultKind 替代
-20. onAssistantMessageWithMedia -- 依赖 ContentPart.Attachment，jasmine 无附件概念
-21. nodeLLMModerateMessage -- 需要 moderate() API
-22. Flow-based streaming nodes -- 架构差异大，jasmine 用回调式
-23. nodeSetStructuredOutput -- 需要 StructuredOutputConfig
+19. SafeTool 类型系统 -- 需要重构 Tool 基类，架构差异
+20. onSuccessful / onFailure -- 依赖 SafeTool.Result，jasmine 用 ToolResultKind 替代
+21. onAssistantMessageWithMedia -- 依赖 ContentPart.Attachment，jasmine 无附件概念
+22. nodeLLMModerateMessage -- 需要 moderate() API
+23. Flow-based streaming nodes -- 架构差异大，jasmine 用回调式
+24. nodeSetStructuredOutput -- 需要 StructuredOutputConfig

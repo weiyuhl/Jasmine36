@@ -50,10 +50,8 @@ fun GraphStrategyBuilder<*, *>.nodeLLMRequestStreaming(
     return node(name) { message ->
         session.appendPrompt { user(message) }
 
-        @Suppress("UNCHECKED_CAST")
-        val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
-        @Suppress("UNCHECKED_CAST")
-        val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+        val onChunk: suspend (String) -> Unit = storage.get(PredefinedStrategies.KEY_ON_CHUNK) ?: {}
+        val onThinking: suspend (String) -> Unit = storage.get(PredefinedStrategies.KEY_ON_THINKING) ?: {}
 
         val streamResult = session.requestLLMStream(onChunk, onThinking)
         ChatResult(
@@ -225,10 +223,8 @@ fun GraphStrategyBuilder<*, *>.nodeLLMSendMultipleToolResultsStreaming(
             }
         }
 
-        @Suppress("UNCHECKED_CAST")
-        val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
-        @Suppress("UNCHECKED_CAST")
-        val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+        val onChunk: suspend (String) -> Unit = storage.get(PredefinedStrategies.KEY_ON_CHUNK) ?: {}
+        val onThinking: suspend (String) -> Unit = storage.get(PredefinedStrategies.KEY_ON_THINKING) ?: {}
 
         val streamResult = session.requestLLMStream(onChunk, onThinking)
         ChatResult(
@@ -521,10 +517,8 @@ fun <T> GraphStrategyBuilder<*, *>.nodeLLMRequestStreamingAndSendResults(
     name: String? = null
 ): AgentNodeDelegate<T, List<ChatResult>> {
     return node(name) { _ ->
-        @Suppress("UNCHECKED_CAST")
-        val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
-        @Suppress("UNCHECKED_CAST")
-        val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+        val onChunk: suspend (String) -> Unit = storage.get(PredefinedStrategies.KEY_ON_CHUNK) ?: {}
+        val onThinking: suspend (String) -> Unit = storage.get(PredefinedStrategies.KEY_ON_THINKING) ?: {}
 
         val streamResult = session.requestLLMStream(onChunk, onThinking)
         val chatResult = ChatResult(

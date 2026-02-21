@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.core.agent.tools.snapshot
 
 import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
+import com.lhzkml.jasmine.core.agent.tools.graph.AgentStorageKey
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 
 /**
@@ -20,6 +21,34 @@ class Persistence(
     private val provider: PersistenceStorageProvider<*>,
     private val autoCheckpoint: Boolean = true
 ) {
+    companion object {
+        val KEY_RESTORED_NODE = AgentStorageKey<String>("__restored_node__")
+        val KEY_RESTORED_INPUT = AgentStorageKey<String>("__restored_input__")
+
+        /** 禁用持久化 */
+        val DISABLED = Persistence(NoPersistenceStorageProvider(), autoCheckpoint = false)
+
+        /**
+         * 从检查点列表重建完整消息历史
+         * 取 systemPrompt + 按顺序拼接每个检查点的 user/assistant 消息。
+         *
+         * @param checkpoints 按时间排序的检查点列表
+         * @param systemPrompt 系统提示词
+         * @return 重建的完整消息历史
+         */
+        fun rebuildHistoryFromCheckpoints(
+            checkpoints: List<AgentCheckpoint>,
+            systemPrompt: String
+        ): List<ChatMessage> {
+            val rebuilt = mutableListOf<ChatMessage>()
+            rebuilt.add(ChatMessage.system(systemPrompt))
+            for (cp in checkpoints) {
+                rebuilt.addAll(cp.messageHistory)
+            }
+            return rebuilt
+        }
+    }
+
     private var currentVersion: Long = 0
 
     /**
@@ -95,8 +124,8 @@ class Persistence(
             prompt.withMessages { checkpoint.messageHistory }
         }
         // 存储恢复信息
-        context.put("__restored_node__", checkpoint.nodePath)
-        context.put("__restored_input__", checkpoint.lastInput)
+        context.storage.set(KEY_RESTORED_NODE, checkpoint.nodePath)
+        checkpoint.lastInput?.let { context.storage.set(KEY_RESTORED_INPUT, it) }
     }
 
     /**
@@ -175,8 +204,8 @@ class Persistence(
         context.session.rewritePrompt { prompt ->
             prompt.withMessages { messageHistory }
         }
-        context.put("__restored_node__", nodePath)
-        context.put("__restored_input__", input)
+        context.storage.set(KEY_RESTORED_NODE, nodePath)
+        input?.let { context.storage.set(KEY_RESTORED_INPUT, it) }
     }
 
     /**
@@ -243,28 +272,4 @@ class Persistence(
         return currentMessages.takeLast(currentMessages.size - checkpointMessages.size)
     }
 
-    companion object {
-        /** 禁用持久化 */
-        val DISABLED = Persistence(NoPersistenceStorageProvider(), autoCheckpoint = false)
-
-        /**
-         * 从检查点列表重建完整消息历史
-         * 取 systemPrompt + 按顺序拼接每个检查点的 user/assistant 消息。
-         *
-         * @param checkpoints 按时间排序的检查点列表
-         * @param systemPrompt 系统提示词
-         * @return 重建的完整消息历史
-         */
-        fun rebuildHistoryFromCheckpoints(
-            checkpoints: List<AgentCheckpoint>,
-            systemPrompt: String
-        ): List<ChatMessage> {
-            val rebuilt = mutableListOf<ChatMessage>()
-            rebuilt.add(ChatMessage.system(systemPrompt))
-            for (cp in checkpoints) {
-                rebuilt.addAll(cp.messageHistory)
-            }
-            return rebuilt
-        }
-    }
 }

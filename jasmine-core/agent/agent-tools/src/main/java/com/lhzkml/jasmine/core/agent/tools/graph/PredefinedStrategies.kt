@@ -16,36 +16,35 @@ import com.lhzkml.jasmine.core.prompt.model.ToolCall
 object PredefinedStrategies {
 
     /**
-     * 节点生命周期回调 key 常量
+     * 回调 key 常量（类型化 AgentStorageKey）
      * 通过 context.storage 传递
      */
-    const val KEY_ON_NODE_ENTER = "onNodeEnter"
-    const val KEY_ON_NODE_EXIT = "onNodeExit"
-    const val KEY_ON_EDGE = "onEdge"
+    val KEY_ON_CHUNK = AgentStorageKey<suspend (String) -> Unit>("onChunk")
+    val KEY_ON_THINKING = AgentStorageKey<suspend (String) -> Unit>("onThinking")
+    val KEY_ON_TOOL_CALL_START = AgentStorageKey<suspend (String, String) -> Unit>("onToolCallStart")
+    val KEY_ON_TOOL_CALL_RESULT = AgentStorageKey<suspend (String, String) -> Unit>("onToolCallResult")
+    val KEY_ON_NODE_ENTER = AgentStorageKey<suspend (String) -> Unit>("onNodeEnter")
+    val KEY_ON_NODE_EXIT = AgentStorageKey<suspend (String, Boolean) -> Unit>("onNodeExit")
+    val KEY_ON_EDGE = AgentStorageKey<suspend (String, String, String) -> Unit>("onEdge")
 
     private suspend fun AgentGraphContext.fireNodeEnter(name: String) {
-        @Suppress("UNCHECKED_CAST")
-        val cb = get<suspend (String) -> Unit>(KEY_ON_NODE_ENTER)
+        val cb = storage.get(KEY_ON_NODE_ENTER)
         cb?.invoke(name)
     }
 
     private suspend fun AgentGraphContext.fireNodeExit(name: String, success: Boolean = true) {
-        @Suppress("UNCHECKED_CAST")
-        val cb = get<suspend (String, Boolean) -> Unit>(KEY_ON_NODE_EXIT)
+        val cb = storage.get(KEY_ON_NODE_EXIT)
         cb?.invoke(name, success)
     }
 
     private suspend fun AgentGraphContext.fireEdge(from: String, to: String, label: String = "") {
-        @Suppress("UNCHECKED_CAST")
-        val cb = get<suspend (String, String, String) -> Unit>(KEY_ON_EDGE)
+        val cb = storage.get(KEY_ON_EDGE)
         cb?.invoke(from, to, label)
     }
 
     /**
      * 单轮执行策略
      * 移植自 koog 的 singleRunStrategy，支持三种工具调用模式。
-     *
-     * @param runMode 工具调用模式，默认 SEQUENTIAL
      */
     fun singleRunStrategy(
         runMode: ToolCalls = ToolCalls.SEQUENTIAL,
@@ -58,14 +57,9 @@ object PredefinedStrategies {
         }
     }
 
-    /**
-     * 支持多工具调用的单轮策略（顺序或并行）
-     * 移植自 koog 的 singleRunWithParallelAbility
-     */
     private fun singleRunWithMultipleTools(parallelTools: Boolean, toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL): AgentStrategy<String, String> {
         return graphStrategy("single_run_sequential") {
             this.toolSelection = toolSelection
-
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequest") { input ->
                 fireNodeEnter("nodeLLMRequest")
                 session.appendPrompt { user(input) }
@@ -73,55 +67,30 @@ object PredefinedStrategies {
                 fireNodeExit("nodeLLMRequest")
                 result
             }
-
             val nodeExecuteTools = node<ChatResult, List<ReceivedToolResult>>("nodeExecuteTools") { result ->
                 fireNodeEnter("nodeExecuteTools")
-                val toolCalls = result.toolCalls.map { call ->
-                    ToolCall(id = call.id, name = call.name, arguments = call.arguments)
-                }
-                for (call in toolCalls) {
-                    @Suppress("UNCHECKED_CAST")
-                    val onStart = get<suspend (String, String) -> Unit>("onToolCallStart")
-                    onStart?.invoke(call.name, call.arguments)
-                }
+                val toolCalls = result.toolCalls.map { call -> ToolCall(id = call.id, name = call.name, arguments = call.arguments) }
+                for (call in toolCalls) { storage.get(KEY_ON_TOOL_CALL_START)?.invoke(call.name, call.arguments) }
                 val results = if (parallelTools) {
                     environment.executeTools(toolCalls)
                 } else {
                     toolCalls.map { call ->
                         val toolResult = environment.executeTool(call)
-                        @Suppress("UNCHECKED_CAST")
-                        val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
-                        onResult?.invoke(call.name, toolResult.content)
+                        storage.get(KEY_ON_TOOL_CALL_RESULT)?.invoke(call.name, toolResult.content)
                         toolResult
                     }
                 }
-                if (parallelTools) {
-                    for (r in results) {
-                        @Suppress("UNCHECKED_CAST")
-                        val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
-                        onResult?.invoke(r.tool, r.content)
-                    }
-                }
+                if (parallelTools) { for (r in results) { storage.get(KEY_ON_TOOL_CALL_RESULT)?.invoke(r.tool, r.content) } }
                 fireNodeExit("nodeExecuteTools")
                 results
             }
-
             val nodeSendToolResults = node<List<ReceivedToolResult>, ChatResult>("nodeSendToolResults") { results ->
                 fireNodeEnter("nodeSendToolResults")
-                for (r in results) {
-                    session.appendPrompt {
-                        message(ChatMessage.toolResult(
-                            com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                                callId = r.id, name = r.tool, content = r.content
-                            )
-                        ))
-                    }
-                }
+                for (r in results) { session.appendPrompt { message(ChatMessage.toolResult(com.lhzkml.jasmine.core.prompt.model.ToolResult(callId = r.id, name = r.tool, content = r.content))) } }
                 val llmResult = session.requestLLM()
                 fireNodeExit("nodeSendToolResults")
                 llmResult
             }
-
             edge(nodeStart, nodeLLMRequest)
             conditionalEdge(nodeLLMRequest, nodeExecuteTools) { r -> if (r.hasToolCalls) r else null }
             conditionalEdge(nodeLLMRequest, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
@@ -131,14 +100,9 @@ object PredefinedStrategies {
         }
     }
 
-    /**
-     * 单工具调用的单轮策略
-     * 移植自 koog 的 singleRunModeStrategy
-     */
     private fun singleRunSingleTool(toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL): AgentStrategy<String, String> {
         return graphStrategy("single_run") {
             this.toolSelection = toolSelection
-
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequest") { input ->
                 fireNodeEnter("nodeLLMRequest")
                 session.appendPrompt { user(input) }
@@ -146,36 +110,23 @@ object PredefinedStrategies {
                 fireNodeExit("nodeLLMRequest")
                 result
             }
-
             val nodeExecuteTool = node<ChatResult, ReceivedToolResult>("nodeExecuteTool") { result ->
                 fireNodeEnter("nodeExecuteTool")
                 val call = result.toolCalls.first()
                 val toolCall = ToolCall(id = call.id, name = call.name, arguments = call.arguments)
-                @Suppress("UNCHECKED_CAST")
-                val onStart = get<suspend (String, String) -> Unit>("onToolCallStart")
-                onStart?.invoke(call.name, call.arguments)
+                storage.get(KEY_ON_TOOL_CALL_START)?.invoke(call.name, call.arguments)
                 val toolResult = environment.executeTool(toolCall)
-                @Suppress("UNCHECKED_CAST")
-                val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
-                onResult?.invoke(call.name, toolResult.content)
+                storage.get(KEY_ON_TOOL_CALL_RESULT)?.invoke(call.name, toolResult.content)
                 fireNodeExit("nodeExecuteTool")
                 toolResult
             }
-
             val nodeSendToolResult = node<ReceivedToolResult, ChatResult>("nodeSendToolResult") { result ->
                 fireNodeEnter("nodeSendToolResult")
-                session.appendPrompt {
-                    message(ChatMessage.toolResult(
-                        com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                            callId = result.id, name = result.tool, content = result.content
-                        )
-                    ))
-                }
+                session.appendPrompt { message(ChatMessage.toolResult(com.lhzkml.jasmine.core.prompt.model.ToolResult(callId = result.id, name = result.tool, content = result.content))) }
                 val llmResult = session.requestLLM()
                 fireNodeExit("nodeSendToolResult")
                 llmResult
             }
-
             edge(nodeStart, nodeLLMRequest)
             conditionalEdge(nodeLLMRequest, nodeExecuteTool) { r -> if (r.hasToolCalls) r else null }
             conditionalEdge(nodeLLMRequest, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
@@ -185,10 +136,6 @@ object PredefinedStrategies {
         }
     }
 
-    /**
-     * 单轮流式执行策略
-     * @param runMode 工具调用模式
-     */
     fun singleRunStreamStrategy(
         runMode: ToolCalls = ToolCalls.SEQUENTIAL,
         toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL
@@ -203,81 +150,43 @@ object PredefinedStrategies {
     private fun singleRunStreamWithMultipleTools(parallelTools: Boolean, toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL): AgentStrategy<String, String> {
         return graphStrategy("single_run_stream") {
             this.toolSelection = toolSelection
-
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequestStream") { input ->
                 fireNodeEnter("nodeLLMRequest")
                 session.appendPrompt { user(input) }
-                @Suppress("UNCHECKED_CAST")
-                val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
-                @Suppress("UNCHECKED_CAST")
-                val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+                val onChunk: suspend (String) -> Unit = storage.get(KEY_ON_CHUNK) ?: {}
+                val onThinking: suspend (String) -> Unit = storage.get(KEY_ON_THINKING) ?: {}
                 val streamResult = session.requestLLMStream(onChunk, onThinking)
-                val result = ChatResult(
-                    content = streamResult.content, usage = streamResult.usage,
-                    finishReason = streamResult.finishReason,
-                    toolCalls = streamResult.toolCalls, thinking = streamResult.thinking
-                )
+                val result = ChatResult(content = streamResult.content, usage = streamResult.usage, finishReason = streamResult.finishReason, toolCalls = streamResult.toolCalls, thinking = streamResult.thinking)
                 fireNodeExit("nodeLLMRequest")
                 result
             }
-
             val nodeExecuteTools = node<ChatResult, List<ReceivedToolResult>>("nodeExecuteTools") { result ->
                 fireNodeEnter("nodeExecuteTools")
-                val toolCalls = result.toolCalls.map { call ->
-                    ToolCall(id = call.id, name = call.name, arguments = call.arguments)
-                }
-                for (call in toolCalls) {
-                    @Suppress("UNCHECKED_CAST")
-                    val onStart = get<suspend (String, String) -> Unit>("onToolCallStart")
-                    onStart?.invoke(call.name, call.arguments)
-                }
+                val toolCalls = result.toolCalls.map { call -> ToolCall(id = call.id, name = call.name, arguments = call.arguments) }
+                for (call in toolCalls) { storage.get(KEY_ON_TOOL_CALL_START)?.invoke(call.name, call.arguments) }
                 val results = if (parallelTools) {
                     environment.executeTools(toolCalls)
                 } else {
                     toolCalls.map { call ->
                         val toolResult = environment.executeTool(call)
-                        @Suppress("UNCHECKED_CAST")
-                        val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
-                        onResult?.invoke(call.name, toolResult.content)
+                        storage.get(KEY_ON_TOOL_CALL_RESULT)?.invoke(call.name, toolResult.content)
                         toolResult
                     }
                 }
-                if (parallelTools) {
-                    for (r in results) {
-                        @Suppress("UNCHECKED_CAST")
-                        val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
-                        onResult?.invoke(r.tool, r.content)
-                    }
-                }
+                if (parallelTools) { for (r in results) { storage.get(KEY_ON_TOOL_CALL_RESULT)?.invoke(r.tool, r.content) } }
                 fireNodeExit("nodeExecuteTools")
                 results
             }
-
             val nodeSendToolResults = node<List<ReceivedToolResult>, ChatResult>("nodeSendToolResultsStream") { results ->
                 fireNodeEnter("nodeSendToolResults")
-                for (r in results) {
-                    session.appendPrompt {
-                        message(ChatMessage.toolResult(
-                            com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                                callId = r.id, name = r.tool, content = r.content
-                            )
-                        ))
-                    }
-                }
-                @Suppress("UNCHECKED_CAST")
-                val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
-                @Suppress("UNCHECKED_CAST")
-                val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+                for (r in results) { session.appendPrompt { message(ChatMessage.toolResult(com.lhzkml.jasmine.core.prompt.model.ToolResult(callId = r.id, name = r.tool, content = r.content))) } }
+                val onChunk: suspend (String) -> Unit = storage.get(KEY_ON_CHUNK) ?: {}
+                val onThinking: suspend (String) -> Unit = storage.get(KEY_ON_THINKING) ?: {}
                 val streamResult = session.requestLLMStream(onChunk, onThinking)
-                val llmResult = ChatResult(
-                    content = streamResult.content, usage = streamResult.usage,
-                    finishReason = streamResult.finishReason,
-                    toolCalls = streamResult.toolCalls, thinking = streamResult.thinking
-                )
+                val llmResult = ChatResult(content = streamResult.content, usage = streamResult.usage, finishReason = streamResult.finishReason, toolCalls = streamResult.toolCalls, thinking = streamResult.thinking)
                 fireNodeExit("nodeSendToolResults")
                 llmResult
             }
-
             edge(nodeStart, nodeLLMRequest)
             conditionalEdge(nodeLLMRequest, nodeExecuteTools) { r -> if (r.hasToolCalls) r else null }
             conditionalEdge(nodeLLMRequest, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
@@ -290,62 +199,36 @@ object PredefinedStrategies {
     private fun singleRunStreamSingleTool(toolSelection: ToolSelectionStrategy = ToolSelectionStrategy.ALL): AgentStrategy<String, String> {
         return graphStrategy("single_run_stream") {
             this.toolSelection = toolSelection
-
             val nodeLLMRequest = node<String, ChatResult>("nodeLLMRequestStream") { input ->
                 fireNodeEnter("nodeLLMRequest")
                 session.appendPrompt { user(input) }
-                @Suppress("UNCHECKED_CAST")
-                val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
-                @Suppress("UNCHECKED_CAST")
-                val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+                val onChunk: suspend (String) -> Unit = storage.get(KEY_ON_CHUNK) ?: {}
+                val onThinking: suspend (String) -> Unit = storage.get(KEY_ON_THINKING) ?: {}
                 val streamResult = session.requestLLMStream(onChunk, onThinking)
-                val result = ChatResult(
-                    content = streamResult.content, usage = streamResult.usage,
-                    finishReason = streamResult.finishReason,
-                    toolCalls = streamResult.toolCalls, thinking = streamResult.thinking
-                )
+                val result = ChatResult(content = streamResult.content, usage = streamResult.usage, finishReason = streamResult.finishReason, toolCalls = streamResult.toolCalls, thinking = streamResult.thinking)
                 fireNodeExit("nodeLLMRequest")
                 result
             }
-
             val nodeExecuteTool = node<ChatResult, ReceivedToolResult>("nodeExecuteTool") { result ->
                 fireNodeEnter("nodeExecuteTool")
                 val call = result.toolCalls.first()
                 val toolCall = ToolCall(id = call.id, name = call.name, arguments = call.arguments)
-                @Suppress("UNCHECKED_CAST")
-                val onStart = get<suspend (String, String) -> Unit>("onToolCallStart")
-                onStart?.invoke(call.name, call.arguments)
+                storage.get(KEY_ON_TOOL_CALL_START)?.invoke(call.name, call.arguments)
                 val toolResult = environment.executeTool(toolCall)
-                @Suppress("UNCHECKED_CAST")
-                val onResult = get<suspend (String, String) -> Unit>("onToolCallResult")
-                onResult?.invoke(call.name, toolResult.content)
+                storage.get(KEY_ON_TOOL_CALL_RESULT)?.invoke(call.name, toolResult.content)
                 fireNodeExit("nodeExecuteTool")
                 toolResult
             }
-
             val nodeSendToolResult = node<ReceivedToolResult, ChatResult>("nodeSendToolResultStream") { result ->
                 fireNodeEnter("nodeSendToolResult")
-                session.appendPrompt {
-                    message(ChatMessage.toolResult(
-                        com.lhzkml.jasmine.core.prompt.model.ToolResult(
-                            callId = result.id, name = result.tool, content = result.content
-                        )
-                    ))
-                }
-                @Suppress("UNCHECKED_CAST")
-                val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
-                @Suppress("UNCHECKED_CAST")
-                val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+                session.appendPrompt { message(ChatMessage.toolResult(com.lhzkml.jasmine.core.prompt.model.ToolResult(callId = result.id, name = result.tool, content = result.content))) }
+                val onChunk: suspend (String) -> Unit = storage.get(KEY_ON_CHUNK) ?: {}
+                val onThinking: suspend (String) -> Unit = storage.get(KEY_ON_THINKING) ?: {}
                 val streamResult = session.requestLLMStream(onChunk, onThinking)
-                val llmResult = ChatResult(
-                    content = streamResult.content, usage = streamResult.usage,
-                    finishReason = streamResult.finishReason,
-                    toolCalls = streamResult.toolCalls, thinking = streamResult.thinking
-                )
+                val llmResult = ChatResult(content = streamResult.content, usage = streamResult.usage, finishReason = streamResult.finishReason, toolCalls = streamResult.toolCalls, thinking = streamResult.thinking)
                 fireNodeExit("nodeSendToolResult")
                 llmResult
             }
-
             edge(nodeStart, nodeLLMRequest)
             conditionalEdge(nodeLLMRequest, nodeExecuteTool) { r -> if (r.hasToolCalls) r else null }
             conditionalEdge(nodeLLMRequest, nodeFinish) { r -> if (!r.hasToolCalls) r.content else null }
