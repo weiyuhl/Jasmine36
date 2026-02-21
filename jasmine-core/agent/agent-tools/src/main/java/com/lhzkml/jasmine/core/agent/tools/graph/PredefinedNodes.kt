@@ -464,3 +464,78 @@ fun GraphStrategyBuilder<*, *>.nodeExecuteMultipleToolsAndSendResults(
         session.requestLLMMultiple()
     }
 }
+
+/**
+ * 直接调用指定工具的节点（不经过 LLM 选择）
+ * 移植自 koog 的 nodeExecuteSingleTool
+ *
+ * 与 nodeExecuteTool 不同，此节点直接按工具名调用，不需要 LLM 生成 tool_call。
+ * 可选将调用过程追加到 prompt（便于后续 LLM 了解上下文）。
+ *
+ * 输入: String (工具参数，JSON 格式)
+ * 输出: ReceivedToolResult (工具执行结果)
+ *
+ * @param toolName 要调用的工具名称
+ * @param doUpdatePrompt 是否将工具调用信息追加到 prompt，默认 true
+ */
+fun GraphStrategyBuilder<*, *>.nodeExecuteSingleTool(
+    name: String? = null,
+    toolName: String,
+    doUpdatePrompt: Boolean = true
+): AgentNodeDelegate<String, ReceivedToolResult> {
+    return node(name) { toolArgs ->
+        if (doUpdatePrompt) {
+            session.appendPrompt {
+                user("Tool call: $toolName was explicitly called with args: $toolArgs")
+            }
+        }
+
+        val toolCall = ToolCall(
+            id = "explicit_${toolName}_${System.currentTimeMillis()}",
+            name = toolName,
+            arguments = toolArgs
+        )
+        val result = environment.executeTool(toolCall)
+
+        if (doUpdatePrompt) {
+            session.appendPrompt {
+                user("Tool call: $toolName was explicitly called and returned result: ${result.content}")
+            }
+        }
+
+        result
+    }
+}
+
+/**
+ * 流式请求 LLM 并收集结果更新 prompt 的节点
+ * 移植自 koog 的 nodeLLMRequestStreamingAndSendResults
+ *
+ * 流式请求 LLM，通过回调输出 chunk，收集完整响应后自动更新 prompt。
+ * 输入直接透传到输出（透传节点模式）。
+ *
+ * 输入: T (任意类型，透传)
+ * 输出: List<ChatResult> (收集到的 LLM 响应列表)
+ */
+fun <T> GraphStrategyBuilder<*, *>.nodeLLMRequestStreamingAndSendResults(
+    name: String? = null
+): AgentNodeDelegate<T, List<ChatResult>> {
+    return node(name) { _ ->
+        @Suppress("UNCHECKED_CAST")
+        val onChunk = get<suspend (String) -> Unit>("onChunk") ?: { _ -> }
+        @Suppress("UNCHECKED_CAST")
+        val onThinking = get<suspend (String) -> Unit>("onThinking") ?: { _ -> }
+
+        val streamResult = session.requestLLMStream(onChunk, onThinking)
+        val chatResult = ChatResult(
+            content = streamResult.content,
+            usage = streamResult.usage,
+            finishReason = streamResult.finishReason,
+            toolCalls = streamResult.toolCalls,
+            thinking = streamResult.thinking
+        )
+
+        // requestLLMStream 已自动追加 assistant 消息到 prompt
+        listOf(chatResult)
+    }
+}

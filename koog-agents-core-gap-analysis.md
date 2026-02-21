@@ -51,6 +51,8 @@ jasmine 已有 10+8 个节点（原始 10 个 + Task 26 移植 8 个），koog �
 | nodeLLMSendToolResultOnlyCallingTools | [已完成] | 发送工具结果 + 强制只能调用工具 |
 | nodeLLMSendMultipleToolResultsMultiple | [已完成] | 发送多工具结果，获取多响应 |
 | nodeLLMSendMultipleToolResultsOnlyCallingTools | [已完成] | 发送多工具结果 + 强制只能调用工具 |
+| nodeExecuteSingleTool | [已完成] | 直接调用指定工具(不经过LLM选择) |
+| nodeLLMRequestStreamingAndSendResults | [已完成] | 流式请求LLM并收集结果更新prompt |
 
 仍未移植（低优先级 / 架构差异大）:
 
@@ -58,11 +60,7 @@ jasmine 已有 10+8 个节点（原始 10 个 + Task 26 移植 8 个），koog �
 |---|---|---|
 | nodeLLMModerateMessage | `(Message) -> ModeratedMessage` | 内容审核节点，需要 moderate() API |
 | nodeLLMRequestStreaming (Flow) | `(String) -> Flow<StreamFrame>` | Flow-based流式请求(koog用Flow，jasmine用回调) |
-| nodeLLMRequestStreamingAndSendResults | `(T) -> List<Message.Response>` | 流式请求并自动收集结果更新prompt |
-| nodeExecuteSingleTool | `(ToolArg) -> SafeTool.Result<TResult>` | 直接调用指定工具(依赖SafeTool类型系统) |
 | nodeSetStructuredOutput | `(TInput) -> TInput` | 设置结构化输出schema(需要StructuredOutputConfig) |
-| nodeDoNothing | `(T) -> T` | 透传节点 |
-| nodeUpdatePrompt | `(T) -> T` | 修改prompt后透传 |
 | nodeLLMSendMessageOnlyCallingTools | `(String) -> Message.Response` | 同nodeLLMRequestOnlyCallingTools，koog别名 |
 | nodeLLMSendMessageForceOneTool | `(String) -> Message.Response` | 同nodeLLMRequestForceOneTool，koog别名 |
 
@@ -70,9 +68,8 @@ jasmine 已有 10+8 个节点（原始 10 个 + Task 26 移植 8 个），koog �
 
 - nodeLLMModerateMessage: 需要 moderate() API，jasmine 没有，需要新增
 - nodeLLMRequestStreaming (Flow): koog 用 Kotlin Flow，jasmine 用回调式。架构差异较大
-- nodeExecuteSingleTool: 依赖 SafeTool 类型系统，jasmine 没有。需要适配
 - nodeSetStructuredOutput: 需要 StructuredOutputConfig，jasmine 没有完整的结构化输出配置系统
-- nodeDoNothing / nodeUpdatePrompt: 简单，可随时移植
+- nodeLLMSendMessageOnlyCallingTools / nodeLLMSendMessageForceOneTool: koog 别名，功能已由现有节点覆盖
 
 ---
 
