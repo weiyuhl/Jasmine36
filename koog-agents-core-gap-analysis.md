@@ -365,7 +365,39 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 
 ---
 
-## 十、架构差异 -- 不建议直接移植
+## 十、已完成移植 -- AgentExecutionInfo / AgentNodePath (执行路径追踪)
+
+来源: `koog agents-core/agent/execution/AgentExecutionInfo.kt` + `AgentNodePath.kt`
+目标: `jasmine AgentExecutionInfo.kt` + `AgentGraphContext.kt` 更新
+
+将 koog 的执行路径追踪系统移植到 jasmine。
+
+### 架构对比
+
+| koog | jasmine (移植后) | 说明 |
+|---|---|---|
+| DEFAULT_AGENT_PATH_SEPARATOR | DEFAULT_AGENT_PATH_SEPARATOR | 默认路径分隔符 "/" |
+| path(vararg parts, separator) | path(vararg parts, separator) | 路径拼接工具函数 |
+| AgentExecutionInfo(parent, partName) | AgentExecutionInfo(parent, partName) | @Serializable data class，层级执行信息 |
+| AgentExecutionInfo.path(separator) | AgentExecutionInfo.path(separator) | 构建完整路径字符串 |
+| AIAgentContext.with(executionInfo, block) | AgentGraphContext.with(executionInfo, block) | 临时切换执行信息的扩展函数 |
+| AIAgentContext.with(partName, block) | AgentGraphContext.with(partName, block) | 创建子级执行信息的扩展函数 |
+
+### 集成点更新
+
+- AgentGraphContext -- 新增 `executionInfo: AgentExecutionInfo` 构造参数 + `currentExecutionInfo: var` 属性
+- AgentGraphContext.fork() -- 复制 executionInfo
+- GraphAgent.run() -- 创建初始 `AgentExecutionInfo(null, agentId)`
+- GraphAgent.runWithCallbacks() -- 同上
+- FunctionalAgent.run() -- 同上
+
+### 测试
+
+- AgentExecutionInfoTest -- 移植自 koog 的 8 个测试 + 1 个 path 工具函数测试
+
+---
+
+## 十一、架构差异 -- 不建议直接移植
 
 以下是 koog 和 jasmine 的架构设计差异，属于有意的简化，不建议直接移植:
 
@@ -377,7 +409,7 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 | AIAgentStorage | AgentStorage (AgentStorageKey + Mutex) | koog 有独立存储类，jasmine 已完成移植 |
 | AIAgentStateManager (Mutex) | ManagedAgent.state | koog 有 Mutex 保护的状态管理，jasmine 直接设置 |
 | AgentContextData / RollbackStrategy | 无 | checkpoint/rollback 机制 |
-| AgentExecutionInfo / AgentNodePath | 无 | 执行路径追踪 |
+| AgentExecutionInfo / AgentNodePath | AgentExecutionInfo + with 扩展函数 | 已完成移植 |
 | ContextualAgentEnvironment | 无 | 带 pipeline 事件的环境包装 |
 | SubgraphMetadata | 无 | 节点映射元数据 |
 | Utils (Option, RWLock, MutexCheck) | 无 | 通用工具类 |
@@ -386,7 +418,7 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 
 ---
 
-## 十一、移植优先级建议
+## 十二、移植优先级建议
 
 ### 高优先级 (实用性强，移植难度低) -- 全部已完成
 
@@ -414,12 +446,13 @@ Pipeline 事件与现有 Tracing 事件并行触发，完全向后兼容。
 16. Feature/Pipeline 系统 (17个新文件，完整插件/事件/处理器管道) [已完成]
 17. LLM Session 读写分离 (LLMSession sealed base + LLMReadSession + LLMWriteSession) [已完成]
 18. AgentStorage 类型化并发安全存储 (AgentStorageKey + Mutex) [已完成]
+19. AgentExecutionInfo / AgentNodePath 执行路径追踪 [已完成]
 
 ### 低优先级 (依赖架构变更或使用场景有限) -- 不移植
 
-19. SafeTool 类型系统 -- 需要重构 Tool 基类，架构差异
-20. onSuccessful / onFailure -- 依赖 SafeTool.Result，jasmine 用 ToolResultKind 替代
-21. onAssistantMessageWithMedia -- 依赖 ContentPart.Attachment，jasmine 无附件概念
-22. nodeLLMModerateMessage -- 需要 moderate() API
-23. Flow-based streaming nodes -- 架构差异大，jasmine 用回调式
-24. nodeSetStructuredOutput -- 需要 StructuredOutputConfig
+20. SafeTool 类型系统 -- 需要重构 Tool 基类，架构差异
+21. onSuccessful / onFailure -- 依赖 SafeTool.Result，jasmine 用 ToolResultKind 替代
+22. onAssistantMessageWithMedia -- 依赖 ContentPart.Attachment，jasmine 无附件概念
+23. nodeLLMModerateMessage -- 需要 moderate() API
+24. Flow-based streaming nodes -- 架构差异大，jasmine 用回调式
+25. nodeSetStructuredOutput -- 需要 StructuredOutputConfig

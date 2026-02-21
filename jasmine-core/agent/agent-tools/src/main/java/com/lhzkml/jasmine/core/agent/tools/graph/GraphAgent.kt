@@ -73,7 +73,8 @@ class GraphAgent<TInput, TOutput>(
             toolRegistry = toolRegistry,
             environment = environment,
             tracing = tracing,
-            pipeline = pipeline
+            pipeline = pipeline,
+            executionInfo = AgentExecutionInfo(null, agentId)
         )
 
         // 触发 Pipeline 事件
@@ -148,7 +149,8 @@ class GraphAgent<TInput, TOutput>(
             toolRegistry = toolRegistry,
             environment = environment,
             tracing = tracing,
-            pipeline = pipeline
+            pipeline = pipeline,
+            executionInfo = AgentExecutionInfo(null, agentId)
         )
 
         // 通过 storage 传递回调（类型化 AgentStorageKey）

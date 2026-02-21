@@ -24,6 +24,7 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
  * @param tracing 追踪系统（可选）
  * @param pipeline Feature/Pipeline 系统（可选，移植自 koog）
  * @param storage 并发安全的类型化存储（节点间共享数据，移植自 koog 的 AIAgentStorage）
+ * @param executionInfo 执行路径信息（移植自 koog 的 AgentExecutionInfo）
  */
 class AgentGraphContext(
     val agentId: String,
@@ -36,8 +37,11 @@ class AgentGraphContext(
     val environment: AgentEnvironment,
     val tracing: Tracing? = null,
     val pipeline: AgentPipeline? = null,
-    val storage: AgentStorage = AgentStorage()
+    val storage: AgentStorage = AgentStorage(),
+    val executionInfo: AgentExecutionInfo = AgentExecutionInfo(null, "")
 ) {
+    /** 可变的执行路径信息（用于 with 扩展函数临时切换） */
+    var currentExecutionInfo: AgentExecutionInfo = executionInfo
     /** 当前策略名称 */
     var strategyName: String = ""
         internal set
@@ -74,7 +78,49 @@ class AgentGraphContext(
             environment = environment,
             tracing = tracing,
             pipeline = pipeline,
-            storage = storage.copy()
+            storage = storage.copy(),
+            executionInfo = executionInfo.copy()
         )
     }
+}
+
+/**
+ * 在指定的执行信息下执行代码块
+ * 移植自 koog 的 AIAgentContext.with(executionInfo, block)
+ *
+ * 执行完毕后自动恢复原始的 executionInfo。
+ *
+ * @param executionInfo 临时设置的执行信息
+ * @param block 要执行的代码块，接收 executionInfo 和 eventId
+ * @return 代码块的返回值
+ */
+inline fun <T> AgentGraphContext.with(
+    executionInfo: AgentExecutionInfo,
+    block: (executionInfo: AgentExecutionInfo, eventId: String) -> T
+): T {
+    val originalExecutionInfo = this.currentExecutionInfo
+    val eventId = java.util.UUID.randomUUID().toString()
+
+    return try {
+        this.currentExecutionInfo = executionInfo
+        block(executionInfo, eventId)
+    } finally {
+        this.currentExecutionInfo = originalExecutionInfo
+    }
+}
+
+/**
+ * 在指定的 partName 下执行代码块，自动创建父子层级关系
+ * 移植自 koog 的 AIAgentContext.with(partName, block)
+ *
+ * @param partName 执行部分名称，追加到当前执行路径
+ * @param block 要执行的代码块，接收 executionInfo 和 eventId
+ * @return 代码块的返回值
+ */
+inline fun <T> AgentGraphContext.with(
+    partName: String,
+    block: (executionInfo: AgentExecutionInfo, eventId: String) -> T
+): T {
+    val executionInfo = AgentExecutionInfo(parent = this.currentExecutionInfo, partName = partName)
+    return with(executionInfo = executionInfo, block = block)
 }

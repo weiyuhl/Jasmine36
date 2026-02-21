@@ -76,7 +76,8 @@ class FunctionalAgent<TInput, TOutput>(
             toolRegistry = toolRegistry,
             environment = environment,
             tracing = tracing,
-            pipeline = pipeline
+            pipeline = pipeline,
+            executionInfo = AgentExecutionInfo(null, agentId)
         )
 
         // 触发 Pipeline 事件
