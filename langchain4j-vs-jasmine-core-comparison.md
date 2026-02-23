@@ -234,7 +234,7 @@ Jasmine 如果要从 langchain4j 借鉴，最有价值的方向是：
 | MCP 工具过滤 | McpToolProvider.filter(BiPredicate) 按 client + spec 过滤 | 无 |
 | MCP 工具名映射 | McpToolProvider.toolNameMapper / toolSpecificationMapper | 无 |
 | MCP 资源转工具 | ResourcesAsTools（MCP 资源自动暴露为 list_resources + get_resource 工具） | 无 |
-| 工具分组开关 | 无内置机制 | ToolConfigActivity 8 个分组开关（calculator/file_tools/dex_editor 等） |
+| 工具分组开关 | 无内置机制 | ToolConfigActivity 分组开关（calculator/file_tools 等） |
 | Agent 工具预设 | 无 | ProviderManager.agentToolPreset（Agent 模式独立工具配置） |
 
 ### 4.4 Agent Loop 能力
