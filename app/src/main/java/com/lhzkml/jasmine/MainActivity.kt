@@ -281,13 +281,6 @@ class MainActivity : AppCompatActivity() {
                 register(ft.fetchJson)
             }
 
-            // DEX/APK 编辑工具
-            if (isEnabled("dex_editor")) {
-                com.lhzkml.jasmine.core.agent.dex.DexSessionManager.basePath = basePath
-                val dexTools = com.lhzkml.jasmine.core.agent.dex.tools.DexToolRegistry.allTools()
-                dexTools.forEach { register(it) }
-            }
-
             // Agent 显式完成工具
             if (isEnabled("attempt_completion")) register(AttemptCompletionTool)
         }
