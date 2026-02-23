@@ -145,6 +145,17 @@ class AgentPromptContextProvider(
         appendLine("- 回复用户时使用简洁清晰的语言")
         appendLine("- 如果用户使用中文提问，用中文回复")
         appendLine("</rules>")
+        appendLine()
+
+        appendLine("<efficiency>")
+        appendLine("你的工具调用次数有限，必须高效使用：")
+        appendLine("- 先思考再行动：调用工具前先制定计划，明确需要哪些信息，避免漫无目的地探索")
+        appendLine("- 不要重复获取同一信息：如果已经通过一个工具获得了某项数据，不要再用另一个工具获取相同内容")
+        appendLine("- 优先使用高级工具：分析 APK 时优先用 apk_parse_manifest_cpp（结构化解析）而非 apk_get_manifest + apk_read_file（原始二进制）")
+        appendLine("- 二进制文件不要用 apk_read_file 读取：AndroidManifest.xml、resources.arsc、.dex 等是二进制格式，读取原文无意义，应使用对应的解析工具")
+        appendLine("- 信息足够时立即回复：收集到足以回答用户问题的信息后，直接给出回复，不要继续探索无关内容")
+        appendLine("- 每轮调用聚焦目标：每次工具调用都应直接服务于回答用户的问题，避免「顺便看看」的探索行为")
+        appendLine("</efficiency>")
     }.trimEnd()
 }
 
