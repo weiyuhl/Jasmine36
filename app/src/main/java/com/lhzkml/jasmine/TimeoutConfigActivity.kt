@@ -29,24 +29,26 @@ class TimeoutConfigActivity : AppCompatActivity() {
         layoutResumeParams = findViewById(R.id.layoutResumeParams)
         etMaxRetries = findViewById(R.id.etMaxRetries)
 
+        val config = AppConfig.configRepo()
+        
         // 加载当前值
-        val reqTimeout = ProviderManager.getRequestTimeout(this)
+        val reqTimeout = config.getRequestTimeout()
         if (reqTimeout > 0) etRequestTimeout.setText(reqTimeout.toString())
 
-        val socketTimeout = ProviderManager.getSocketTimeout(this)
+        val socketTimeout = config.getSocketTimeout()
         if (socketTimeout > 0) etSocketTimeout.setText(socketTimeout.toString())
 
-        val connectTimeout = ProviderManager.getConnectTimeout(this)
+        val connectTimeout = config.getConnectTimeout()
         if (connectTimeout > 0) etConnectTimeout.setText(connectTimeout.toString())
 
-        switchResume.isChecked = ProviderManager.isStreamResumeEnabled(this)
+        switchResume.isChecked = config.isStreamResumeEnabled()
         layoutResumeParams.visibility = if (switchResume.isChecked) View.VISIBLE else View.GONE
         switchResume.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setStreamResumeEnabled(this, isChecked)
+            config.setStreamResumeEnabled(isChecked)
             layoutResumeParams.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
 
-        etMaxRetries.setText(ProviderManager.getStreamResumeMaxRetries(this).toString())
+        etMaxRetries.setText(config.getStreamResumeMaxRetries().toString())
     }
 
     private fun save() {
@@ -55,9 +57,10 @@ class TimeoutConfigActivity : AppCompatActivity() {
         val connectTimeout = etConnectTimeout.text.toString().trim().toIntOrNull() ?: 0
         val maxRetries = (etMaxRetries.text.toString().trim().toIntOrNull() ?: 3).coerceIn(1, 10)
 
-        ProviderManager.setRequestTimeout(this, reqTimeout)
-        ProviderManager.setSocketTimeout(this, socketTimeout)
-        ProviderManager.setConnectTimeout(this, connectTimeout)
-        ProviderManager.setStreamResumeMaxRetries(this, maxRetries)
+        val config = AppConfig.configRepo()
+        config.setRequestTimeout(reqTimeout)
+        config.setSocketTimeout(socketTimeout)
+        config.setConnectTimeout(connectTimeout)
+        config.setStreamResumeMaxRetries(maxRetries)
     }
 }

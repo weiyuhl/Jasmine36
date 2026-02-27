@@ -29,8 +29,10 @@ class ShellPolicyActivity : AppCompatActivity() {
         etBlacklist = findViewById(R.id.etBlacklist)
         etWhitelist = findViewById(R.id.etWhitelist)
 
+        val config = AppConfig.configRepo()
+        
         // 加载当前配置
-        val policy = ProviderManager.getShellPolicy(this)
+        val policy = config.getShellPolicy()
         when (policy) {
             ShellPolicy.MANUAL -> rgPolicy.check(R.id.rbManual)
             ShellPolicy.BLACKLIST -> rgPolicy.check(R.id.rbBlacklist)
@@ -38,8 +40,8 @@ class ShellPolicyActivity : AppCompatActivity() {
         }
         updateListVisibility(policy)
 
-        etBlacklist.setText(ProviderManager.getShellBlacklist(this).joinToString("\n"))
-        etWhitelist.setText(ProviderManager.getShellWhitelist(this).joinToString("\n"))
+        etBlacklist.setText(config.getShellBlacklist().joinToString("\n"))
+        etWhitelist.setText(config.getShellWhitelist().joinToString("\n"))
 
         rgPolicy.setOnCheckedChangeListener { _, checkedId ->
             val newPolicy = when (checkedId) {
@@ -47,7 +49,7 @@ class ShellPolicyActivity : AppCompatActivity() {
                 R.id.rbWhitelist -> ShellPolicy.WHITELIST
                 else -> ShellPolicy.MANUAL
             }
-            ProviderManager.setShellPolicy(this, newPolicy)
+            config.setShellPolicy(newPolicy)
             updateListVisibility(newPolicy)
         }
     }
@@ -57,8 +59,9 @@ class ShellPolicyActivity : AppCompatActivity() {
         // 保存列表内容
         val blacklist = etBlacklist.text.toString().lines().filter { it.isNotBlank() }
         val whitelist = etWhitelist.text.toString().lines().filter { it.isNotBlank() }
-        ProviderManager.setShellBlacklist(this, blacklist)
-        ProviderManager.setShellWhitelist(this, whitelist)
+        val config = AppConfig.configRepo()
+        config.setShellBlacklist(blacklist)
+        config.setShellWhitelist(whitelist)
     }
 
     private fun updateListVisibility(policy: ShellPolicy) {

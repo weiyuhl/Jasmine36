@@ -12,14 +12,15 @@ import com.google.android.material.tabs.TabLayoutMediator
 
 class ProviderConfigActivity : AppCompatActivity() {
 
-    private lateinit var provider: Provider
+    private lateinit var provider: ProviderManager.Provider
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_provider_config)
 
         val providerId = intent.getStringExtra("provider_id") ?: run { finish(); return }
-        provider = ProviderManager.providers.find { it.id == providerId } ?: run { finish(); return }
+        val registry = AppConfig.providerRegistry()
+        provider = registry.getProvider(providerId) ?: run { finish(); return }
 
         findViewById<TextView>(R.id.tvTitle).text = provider.name
         findViewById<MaterialButton>(R.id.btnBack).setOnClickListener { finish() }

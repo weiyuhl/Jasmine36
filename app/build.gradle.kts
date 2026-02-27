@@ -32,6 +32,7 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs += listOf("-Xnested-type-aliases")
     }
 }
 
@@ -46,6 +47,7 @@ dependencies {
     implementation(project(":jasmine-core:conversation:conversation-storage"))
     implementation(project(":jasmine-core:agent:agent-tools"))
     implementation(project(":jasmine-core:agent:agent-dex"))
+    implementation(project(":jasmine-core:config:config-manager"))
 
     // Coroutines（UI 层需要协程来调用框架）
     implementation(libs.kotlinx.coroutines.core)

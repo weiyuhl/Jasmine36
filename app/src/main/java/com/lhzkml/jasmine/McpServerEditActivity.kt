@@ -11,6 +11,8 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
 import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
+import com.lhzkml.jasmine.core.config.McpTransportType
+import com.lhzkml.jasmine.core.config.McpServerConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -39,6 +41,8 @@ class McpServerEditActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_mcp_server_edit)
 
+        val config = AppConfig.configRepo()
+
         editIndex = intent.getIntExtra(McpServerActivity.EXTRA_EDIT_INDEX, -1)
 
         tvTitle = findViewById(R.id.tvTitle)
@@ -56,14 +60,14 @@ class McpServerEditActivity : AppCompatActivity() {
 
         // 加载已有配置
         if (editIndex >= 0) {
-            val servers = ProviderManager.getMcpServers(this)
+            val servers = config.getMcpServers()
             if (editIndex in servers.indices) {
                 val server = servers[editIndex]
                 etName.setText(server.name)
                 etUrl.setText(server.url)
                 when (server.transportType) {
-                    ProviderManager.McpTransportType.STREAMABLE_HTTP -> rbStreamableHttp.isChecked = true
-                    ProviderManager.McpTransportType.SSE -> rbSse.isChecked = true
+                    McpTransportType.STREAMABLE_HTTP -> rbStreamableHttp.isChecked = true
+                    McpTransportType.SSE -> rbSse.isChecked = true
                 }
                 etHeaderName.setText(server.headerName)
                 etHeaderValue.setText(server.headerValue)
@@ -76,6 +80,7 @@ class McpServerEditActivity : AppCompatActivity() {
     }
 
     private fun save() {
+        val config = AppConfig.configRepo()
         val name = etName.text.toString().trim().ifEmpty { "MCP Server" }
         val url = etUrl.text.toString().trim()
         if (url.isEmpty()) {
@@ -84,15 +89,15 @@ class McpServerEditActivity : AppCompatActivity() {
         }
 
         val transportType = if (rbSse.isChecked) {
-            ProviderManager.McpTransportType.SSE
+            McpTransportType.SSE
         } else {
-            ProviderManager.McpTransportType.STREAMABLE_HTTP
+            McpTransportType.STREAMABLE_HTTP
         }
 
         val headerName = etHeaderName.text.toString().trim()
         val headerValue = etHeaderValue.text.toString().trim()
 
-        val config = ProviderManager.McpServerConfig(
+        val serverConfig = McpServerConfig(
             name = name,
             url = url,
             transportType = transportType,
@@ -103,11 +108,11 @@ class McpServerEditActivity : AppCompatActivity() {
 
         if (editIndex >= 0) {
             // 保留原来的 enabled 状态
-            val servers = ProviderManager.getMcpServers(this)
+            val servers = config.getMcpServers()
             val oldEnabled = servers.getOrNull(editIndex)?.enabled ?: true
-            ProviderManager.updateMcpServer(this, editIndex, config.copy(enabled = oldEnabled))
+            config.updateMcpServer(editIndex, serverConfig.copy(enabled = oldEnabled))
         } else {
-            ProviderManager.addMcpServer(this, config)
+            config.addMcpServer(serverConfig)
         }
 
         setResult(RESULT_OK)
@@ -128,9 +133,9 @@ class McpServerEditActivity : AppCompatActivity() {
         tvTestResult.setTextColor(getColor(R.color.text_secondary))
 
         val transportType = if (rbSse.isChecked) {
-            ProviderManager.McpTransportType.SSE
+            McpTransportType.SSE
         } else {
-            ProviderManager.McpTransportType.STREAMABLE_HTTP
+            McpTransportType.STREAMABLE_HTTP
         }
 
         val headers = mutableMapOf<String, String>()
@@ -143,9 +148,9 @@ class McpServerEditActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val client = when (transportType) {
-                    ProviderManager.McpTransportType.SSE ->
+                    McpTransportType.SSE ->
                         SseMcpClient(url, customHeaders = headers)
-                    ProviderManager.McpTransportType.STREAMABLE_HTTP ->
+                    McpTransportType.STREAMABLE_HTTP ->
                         HttpMcpClient(url, headers)
                 }
                 client.connect()

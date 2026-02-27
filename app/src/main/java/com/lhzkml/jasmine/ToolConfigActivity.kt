@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.lhzkml.jasmine.core.config.ToolCatalog
 
 /**
  * 工具管理界面
@@ -23,15 +24,7 @@ class ToolConfigActivity : AppCompatActivity() {
         const val EXTRA_AGENT_PRESET = "agent_preset"
     }
 
-    private val allTools = listOf(
-        "calculator" to "计算器（四则运算/科学计算/进制转换/单位转换/统计）",
-        "get_current_time" to "获取当前时间",
-        "file_tools" to "文件操作（读写/编辑/搜索/压缩等 17 个工具）",
-        "execute_shell_command" to "执行命令",
-        "web_search" to "网络搜索/抓取（需要 BrightData Key）",
-        "fetch_url" to "URL 抓取（本地直接请求，HTML/纯文本/JSON）",
-        "attempt_completion" to "显式完成任务（Agent 模式）"
-    )
+    private val allTools = ToolCatalog.allTools.map { it.id to it.description }
 
     private var isAgentPreset = false
 
@@ -62,15 +55,17 @@ class ToolConfigActivity : AppCompatActivity() {
         layoutToolList = findViewById(R.id.layoutToolList)
         etBrightDataKey = findViewById(R.id.etBrightDataKey)
 
+        val config = AppConfig.configRepo()
+        
         // 加载 BrightData Key
-        val currentKey = ProviderManager.getBrightDataKey(this)
+        val currentKey = config.getBrightDataKey()
         if (currentKey.isNotEmpty()) etBrightDataKey.setText(currentKey)
 
         // 加载工具状态：根据模式读取不同的存储
         val enabledTools = if (isAgentPreset) {
-            ProviderManager.getAgentToolPreset(this)
+            config.getAgentToolPreset()
         } else {
-            ProviderManager.getEnabledTools(this)
+            config.getEnabledTools()
         }
         val allEnabled = enabledTools.isEmpty()
 
@@ -147,13 +142,14 @@ class ToolConfigActivity : AppCompatActivity() {
         }
         val toSave = if (selected.size == allTools.size) emptySet() else selected
 
+        val config = AppConfig.configRepo()
         if (isAgentPreset) {
-            ProviderManager.setAgentToolPreset(this, toSave)
+            config.setAgentToolPreset(toSave)
         } else {
-            ProviderManager.setEnabledTools(this, toSave)
+            config.setEnabledTools(toSave)
         }
         // BrightData Key 两种模式都保存
-        ProviderManager.setBrightDataKey(this, etBrightDataKey.text.toString().trim())
+        config.setBrightDataKey(etBrightDataKey.text.toString().trim())
 
         Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
         setResult(RESULT_OK)

@@ -305,9 +305,9 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     val client: McpClient = when (server.transportType) {
-                        ProviderManager.McpTransportType.SSE ->
+                        com.lhzkml.jasmine.core.config.McpTransportType.SSE ->
                             SseMcpClient(server.url, customHeaders = headers)
-                        ProviderManager.McpTransportType.STREAMABLE_HTTP ->
+                        com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP ->
                             HttpMcpClient(server.url, headers)
                     }
                     client.connect()
@@ -328,8 +328,8 @@ class MainActivity : AppCompatActivity() {
 
                     withContext(Dispatchers.Main) {
                         val transportLabel = when (server.transportType) {
-                            ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
-                            ProviderManager.McpTransportType.SSE -> "SSE"
+                            com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP -> "HTTP"
+                            com.lhzkml.jasmine.core.config.McpTransportType.SSE -> "SSE"
                         }
                         Toast.makeText(this@MainActivity, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Toast.LENGTH_SHORT).show()
                     }
@@ -396,9 +396,9 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val client: McpClient = when (server.transportType) {
-                    ProviderManager.McpTransportType.SSE ->
+                    com.lhzkml.jasmine.core.config.McpTransportType.SSE ->
                         SseMcpClient(server.url, customHeaders = headers)
-                    ProviderManager.McpTransportType.STREAMABLE_HTTP ->
+                    com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP ->
                         HttpMcpClient(server.url, headers)
                 }
                 client.connect()
@@ -414,8 +414,8 @@ class MainActivity : AppCompatActivity() {
 
                 withContext(Dispatchers.Main) {
                     val transportLabel = when (server.transportType) {
-                        ProviderManager.McpTransportType.STREAMABLE_HTTP -> "HTTP"
-                        ProviderManager.McpTransportType.SSE -> "SSE"
+                        com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP -> "HTTP"
+                        com.lhzkml.jasmine.core.config.McpTransportType.SSE -> "SSE"
                     }
                     Toast.makeText(this@MainActivity, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Toast.LENGTH_SHORT).show()
                 }
@@ -512,8 +512,8 @@ class MainActivity : AppCompatActivity() {
         if (!ProviderManager.isSnapshotEnabled(this)) return null
 
         val provider = when (ProviderManager.getSnapshotStorage(this)) {
-            ProviderManager.SnapshotStorage.MEMORY -> InMemoryPersistenceStorageProvider()
-            ProviderManager.SnapshotStorage.FILE -> {
+            com.lhzkml.jasmine.core.config.SnapshotStorageType.MEMORY -> InMemoryPersistenceStorageProvider()
+            com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE -> {
                 val snapshotDir = getExternalFilesDir("snapshots")
                 if (snapshotDir != null) {
                     com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider(snapshotDir)
@@ -823,7 +823,7 @@ class MainActivity : AppCompatActivity() {
      * 刷新底部模型选择器：更新当前模型名显示
      */
     private fun refreshModelSelector() {
-        val activeId = ProviderManager.getActiveId(this)
+        val activeId = ProviderManager.getActiveId()
         if (activeId == null) {
             tvCurrentModel.text = "未配置"
             return
@@ -836,7 +836,7 @@ class MainActivity : AppCompatActivity() {
      * 在模型名上方弹出浮动列表（PopupWindow，不是 Dialog）
      */
     private fun showModelPopup(anchor: View) {
-        val activeId = ProviderManager.getActiveId(this) ?: return
+        val activeId = ProviderManager.getActiveId() ?: return
         val currentModel = overrideModel ?: ProviderManager.getModel(this, activeId)
         val selectedModels = ProviderManager.getSelectedModels(this, activeId)
         val modelList = if (selectedModels.isEmpty()) {
@@ -990,7 +990,7 @@ class MainActivity : AppCompatActivity() {
 
             // 启动恢复：检查是否有未完成的检查点（非墓碑），提示用户恢复
             if (ProviderManager.isSnapshotEnabled(this@MainActivity)
-                && ProviderManager.getSnapshotStorage(this@MainActivity) == ProviderManager.SnapshotStorage.FILE) {
+                && ProviderManager.getSnapshotStorage(this@MainActivity) == com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE) {
                 tryOfferStartupRecovery(conversationId)
             }
         }
@@ -1063,7 +1063,7 @@ class MainActivity : AppCompatActivity() {
     private enum class ButtonState { IDLE, GENERATING, COMPRESSING }
 
     private fun sendMessage(message: String) {
-        val config = ProviderManager.getActiveConfig(this)
+        val config = ProviderManager.getActiveConfig()
         if (config == null) {
             Toast.makeText(this, "请先在设置中配置模型供应商", Toast.LENGTH_SHORT).show()
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -1151,7 +1151,7 @@ class MainActivity : AppCompatActivity() {
                     topK = if (topKVal >= 0) topKVal else null
                 )
 
-                val result: String
+                var result: String = ""
                 var usage: Usage? = null
                 // 重置中间过程日志收集器
                 agentLogBuilder = StringBuilder()
@@ -1281,7 +1281,7 @@ class MainActivity : AppCompatActivity() {
                     val agentStrategy = ProviderManager.getAgentStrategy(this@MainActivity)
 
                     when (agentStrategy) {
-                        ProviderManager.AgentStrategyType.SIMPLE_LOOP -> {
+                        com.lhzkml.jasmine.core.config.AgentStrategyType.SIMPLE_LOOP -> {
                             // 简单循环模式：使用 ToolExecutor（流式）
                             withContext(Dispatchers.Main) {
                                 appendRendered("AI: ")
@@ -1302,24 +1302,24 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
 
-                        ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH -> {
+                        com.lhzkml.jasmine.core.config.AgentStrategyType.SINGLE_RUN_GRAPH -> {
                             // 图策略模式：使用 GraphAgent + PredefinedStrategies（流式）
                             // 读取工具调用模式设置
                             val toolCallMode = when (ProviderManager.getGraphToolCallMode(this@MainActivity)) {
-                                ProviderManager.GraphToolCallMode.SEQUENTIAL -> ToolCalls.SEQUENTIAL
-                                ProviderManager.GraphToolCallMode.PARALLEL -> ToolCalls.PARALLEL
-                                ProviderManager.GraphToolCallMode.SINGLE_RUN_SEQUENTIAL -> ToolCalls.SINGLE_RUN_SEQUENTIAL
+                                com.lhzkml.jasmine.core.config.GraphToolCallMode.SEQUENTIAL -> ToolCalls.SEQUENTIAL
+                                com.lhzkml.jasmine.core.config.GraphToolCallMode.PARALLEL -> ToolCalls.PARALLEL
+                                com.lhzkml.jasmine.core.config.GraphToolCallMode.SINGLE_RUN_SEQUENTIAL -> ToolCalls.SINGLE_RUN_SEQUENTIAL
                             }
 
                             // 读取工具选择策略设置
                             val toolSelStrategy = when (ProviderManager.getToolSelectionStrategy(this@MainActivity)) {
-                                ProviderManager.ToolSelectionStrategyType.ALL -> ToolSelectionStrategy.ALL
-                                ProviderManager.ToolSelectionStrategyType.NONE -> ToolSelectionStrategy.NONE
-                                ProviderManager.ToolSelectionStrategyType.BY_NAME -> {
+                                com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.ALL -> ToolSelectionStrategy.ALL
+                                com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.NONE -> ToolSelectionStrategy.NONE
+                                com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.BY_NAME -> {
                                     val names = ProviderManager.getToolSelectionNames(this@MainActivity)
                                     if (names.isNotEmpty()) ToolSelectionStrategy.ByName(names) else ToolSelectionStrategy.ALL
                                 }
-                                ProviderManager.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK -> {
+                                com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK -> {
                                     val desc = ProviderManager.getToolSelectionTaskDesc(this@MainActivity)
                                     if (desc.isNotEmpty()) ToolSelectionStrategy.AutoSelectForTask(desc) else ToolSelectionStrategy.ALL
                                 }
@@ -1350,11 +1350,11 @@ class MainActivity : AppCompatActivity() {
                             // 读取 ToolChoice 设置并应用到 Prompt
                             val toolChoiceMode = ProviderManager.getToolChoiceMode(this@MainActivity)
                             val toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice? = when (toolChoiceMode) {
-                                ProviderManager.ToolChoiceMode.DEFAULT -> null
-                                ProviderManager.ToolChoiceMode.AUTO -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Auto
-                                ProviderManager.ToolChoiceMode.REQUIRED -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Required
-                                ProviderManager.ToolChoiceMode.NONE -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.None
-                                ProviderManager.ToolChoiceMode.NAMED -> {
+                                com.lhzkml.jasmine.core.config.ToolChoiceMode.DEFAULT -> null
+                                com.lhzkml.jasmine.core.config.ToolChoiceMode.AUTO -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Auto
+                                com.lhzkml.jasmine.core.config.ToolChoiceMode.REQUIRED -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Required
+                                com.lhzkml.jasmine.core.config.ToolChoiceMode.NONE -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.None
+                                com.lhzkml.jasmine.core.config.ToolChoiceMode.NAMED -> {
                                     val name = ProviderManager.getToolChoiceNamedTool(this@MainActivity)
                                     if (name.isNotEmpty()) com.lhzkml.jasmine.core.prompt.model.ToolChoice.Named(name) else null
                                 }
@@ -1955,7 +1955,7 @@ class MainActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: VH, position: Int) {
             val info = items[position]
             holder.tvTitle.text = info.title
-            val providerName = ProviderManager.providers
+            val providerName = ProviderManager.getAllProviders()
                 .find { it.id == info.providerId }?.name ?: info.providerId
             val dateStr = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
                 .format(Date(info.updatedAt))

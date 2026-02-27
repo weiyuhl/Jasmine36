@@ -16,6 +16,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
 import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolDefinition
 import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
+import com.lhzkml.jasmine.core.config.McpServerConfig
+import com.lhzkml.jasmine.core.config.McpTransportType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,10 +64,12 @@ class McpServerActivity : AppCompatActivity() {
         switchEnabled = findViewById(R.id.switchEnabled)
         layoutConfigContent = findViewById(R.id.layoutConfigContent)
 
-        switchEnabled.isChecked = ProviderManager.isMcpEnabled(this)
+        val config = AppConfig.configRepo()
+
+        switchEnabled.isChecked = config.isMcpEnabled()
         layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
         switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setMcpEnabled(this, isChecked)
+            config.setMcpEnabled(isChecked)
             layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
 
@@ -106,7 +110,8 @@ class McpServerActivity : AppCompatActivity() {
     }
 
     private fun refreshList() {
-        val servers = ProviderManager.getMcpServers(this)
+        val config = AppConfig.configRepo()
+        val servers = config.getMcpServers()
         adapter.submitList(servers, connectionResults)
         tvEmpty.visibility = if (servers.isEmpty()) View.VISIBLE else View.GONE
         rvServers.visibility = if (servers.isEmpty()) View.GONE else View.VISIBLE
@@ -114,7 +119,8 @@ class McpServerActivity : AppCompatActivity() {
 
     /** 自动连接所有启用的服务器（跳过已有缓存的） */
     private fun autoConnectAll() {
-        val servers = ProviderManager.getMcpServers(this)
+        val config = AppConfig.configRepo()
+        val servers = config.getMcpServers()
         val cache = MainActivity.mcpConnectionCache
 
         servers.forEachIndexed { index, server ->
@@ -136,7 +142,8 @@ class McpServerActivity : AppCompatActivity() {
     }
 
     private fun connectServer(index: Int) {
-        val servers = ProviderManager.getMcpServers(this)
+        val config = AppConfig.configRepo()
+        val servers = config.getMcpServers()
         if (index !in servers.indices) return
         val server = servers[index]
 
@@ -148,9 +155,9 @@ class McpServerActivity : AppCompatActivity() {
             try {
                 val headers = buildHeaders(server)
                 val client = when (server.transportType) {
-                    ProviderManager.McpTransportType.SSE ->
+                    McpTransportType.SSE ->
                         SseMcpClient(server.url, customHeaders = headers)
-                    ProviderManager.McpTransportType.STREAMABLE_HTTP ->
+                    McpTransportType.STREAMABLE_HTTP ->
                         HttpMcpClient(server.url, headers)
                 }
                 client.connect()
@@ -188,7 +195,8 @@ class McpServerActivity : AppCompatActivity() {
         }
     }
 
-    private fun showServerActions(index: Int, server: ProviderManager.McpServerConfig) {
+    private fun showServerActions(index: Int, server: McpServerConfig) {
+        val config = AppConfig.configRepo()
         val actions = arrayOf(
             "编辑",
             if (server.enabled) "禁用" else "启用",
@@ -205,7 +213,7 @@ class McpServerActivity : AppCompatActivity() {
                         startActivityForResult(intent, REQUEST_EDIT)
                     }
                     1 -> {
-                        ProviderManager.updateMcpServer(this, index, server.copy(enabled = !server.enabled))
+                        config.updateMcpServer(index, server.copy(enabled = !server.enabled))
                         connectionResults.remove(index)
                         refreshList()
                         // 如果刚启用，自动连接
@@ -215,7 +223,7 @@ class McpServerActivity : AppCompatActivity() {
                         AlertDialog.Builder(this)
                             .setMessage("确定删除 ${server.name}？")
                             .setPositiveButton("删除") { _, _ ->
-                                ProviderManager.removeMcpServer(this, index)
+                                config.removeMcpServer(index)
                                 connectionResults.clear()
                                 refreshList()
                             }
@@ -228,7 +236,7 @@ class McpServerActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun buildHeaders(server: ProviderManager.McpServerConfig): Map<String, String> {
+    private fun buildHeaders(server: McpServerConfig): Map<String, String> {
         val headers = mutableMapOf<String, String>()
         if (server.headerName.isNotBlank() && server.headerValue.isNotBlank()) {
             headers[server.headerName] = server.headerValue
@@ -239,14 +247,14 @@ class McpServerActivity : AppCompatActivity() {
     // ========== RecyclerView Adapter ==========
 
     private class McpServerAdapter : RecyclerView.Adapter<McpServerAdapter.VH>() {
-        private var items = listOf<ProviderManager.McpServerConfig>()
+        private var items = listOf<McpServerConfig>()
         private var resultMap = mapOf<Int, ConnectionResult>()
 
-        var onTestClick: ((Int, ProviderManager.McpServerConfig) -> Unit)? = null
-        var onMoreClick: ((Int, ProviderManager.McpServerConfig) -> Unit)? = null
-        var onItemClick: ((Int, ProviderManager.McpServerConfig) -> Unit)? = null
+        var onTestClick: ((Int, McpServerConfig) -> Unit)? = null
+        var onMoreClick: ((Int, McpServerConfig) -> Unit)? = null
+        var onItemClick: ((Int, McpServerConfig) -> Unit)? = null
 
-        fun submitList(list: List<ProviderManager.McpServerConfig>, results: Map<Int, ConnectionResult>) {
+        fun submitList(list: List<McpServerConfig>, results: Map<Int, ConnectionResult>) {
             items = list
             resultMap = results.toMap()
             notifyDataSetChanged()
@@ -269,8 +277,8 @@ class McpServerActivity : AppCompatActivity() {
             holder.tvUrl.text = server.url
 
             val transportLabel = when (server.transportType) {
-                ProviderManager.McpTransportType.STREAMABLE_HTTP -> "Streamable HTTP"
-                ProviderManager.McpTransportType.SSE -> "SSE"
+                McpTransportType.STREAMABLE_HTTP -> "Streamable HTTP"
+                McpTransportType.SSE -> "SSE"
             }
             val enabledLabel = if (server.enabled) "" else " · 已禁用"
             holder.tvTransport.text = "$transportLabel$enabledLabel"

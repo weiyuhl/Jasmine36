@@ -36,15 +36,17 @@ class CompressionConfigActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_compression_config)
 
+        val config = AppConfig.configRepo()
+
         findViewById<View>(R.id.btnBack).setOnClickListener { save(); finish() }
 
         switchEnabled = findViewById(R.id.switchEnabled)
         layoutConfigContent = findViewById(R.id.layoutConfigContent)
 
-        switchEnabled.isChecked = ProviderManager.isCompressionEnabled(this)
+        switchEnabled.isChecked = config.isCompressionEnabled()
         layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
         switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setCompressionEnabled(this, isChecked)
+            config.setCompressionEnabled(isChecked)
             layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
 
@@ -68,11 +70,11 @@ class CompressionConfigActivity : AppCompatActivity() {
         etChunkSize = findViewById(R.id.etChunkSize)
 
         // 加载当前参数值
-        val maxTokens = ProviderManager.getCompressionMaxTokens(this)
+        val maxTokens = config.getCompressionMaxTokens()
         if (maxTokens > 0) etMaxTokens.setText(maxTokens.toString())
-        etThreshold.setText(ProviderManager.getCompressionThreshold(this).toString())
-        etLastN.setText(ProviderManager.getCompressionLastN(this).toString())
-        etChunkSize.setText(ProviderManager.getCompressionChunkSize(this).toString())
+        etThreshold.setText(config.getCompressionThreshold().toString())
+        etLastN.setText(config.getCompressionLastN().toString())
+        etChunkSize.setText(config.getCompressionChunkSize().toString())
 
         cardTokenBudget.setOnClickListener { selectStrategy(CompressionStrategyType.TOKEN_BUDGET) }
         cardWholeHistory.setOnClickListener { selectStrategy(CompressionStrategyType.WHOLE_HISTORY) }
@@ -83,12 +85,14 @@ class CompressionConfigActivity : AppCompatActivity() {
     }
 
     private fun selectStrategy(strategy: CompressionStrategyType) {
-        ProviderManager.setCompressionStrategy(this, strategy)
+        val config = AppConfig.configRepo()
+        config.setCompressionStrategy(strategy)
         refreshSelection()
     }
 
     private fun refreshSelection() {
-        val current = ProviderManager.getCompressionStrategy(this)
+        val config = AppConfig.configRepo()
+        val current = config.getCompressionStrategy()
 
         data class CardInfo(val card: LinearLayout, val check: TextView, val strategy: CompressionStrategyType)
         val cards = listOf(
@@ -131,21 +135,22 @@ class CompressionConfigActivity : AppCompatActivity() {
     }
 
     private fun save() {
-        val strategy = ProviderManager.getCompressionStrategy(this)
+        val config = AppConfig.configRepo()
+        val strategy = config.getCompressionStrategy()
         when (strategy) {
             CompressionStrategyType.TOKEN_BUDGET -> {
                 val maxTokens = etMaxTokens.text.toString().trim().toIntOrNull() ?: 0
                 val threshold = (etThreshold.text.toString().trim().toIntOrNull() ?: 75).coerceIn(1, 99)
-                ProviderManager.setCompressionMaxTokens(this, maxTokens)
-                ProviderManager.setCompressionThreshold(this, threshold)
+                config.setCompressionMaxTokens(maxTokens)
+                config.setCompressionThreshold(threshold)
             }
             CompressionStrategyType.LAST_N -> {
                 val n = (etLastN.text.toString().trim().toIntOrNull() ?: 10).coerceAtLeast(2)
-                ProviderManager.setCompressionLastN(this, n)
+                config.setCompressionLastN(n)
             }
             CompressionStrategyType.CHUNKED -> {
                 val size = (etChunkSize.text.toString().trim().toIntOrNull() ?: 20).coerceAtLeast(5)
-                ProviderManager.setCompressionChunkSize(this, size)
+                config.setCompressionChunkSize(size)
             }
             CompressionStrategyType.WHOLE_HISTORY -> { /* 无参数 */ }
         }

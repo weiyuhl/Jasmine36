@@ -51,10 +51,11 @@ class TraceConfigActivity : AppCompatActivity() {
         switchEnabled = findViewById(R.id.switchEnabled)
         layoutConfigContent = findViewById(R.id.layoutConfigContent)
 
-        switchEnabled.isChecked = ProviderManager.isTraceEnabled(this)
+        val config = AppConfig.configRepo()
+        switchEnabled.isChecked = config.isTraceEnabled()
         layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
         switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setTraceEnabled(this, isChecked)
+            config.setTraceEnabled(isChecked)
             layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
 
@@ -74,16 +75,16 @@ class TraceConfigActivity : AppCompatActivity() {
         // 内联显示卡片已从布局中移除
 
         // 加载当前状态
-        switchFileOutput.isChecked = ProviderManager.isTraceFileEnabled(this)
+        switchFileOutput.isChecked = config.isTraceFileEnabled()
 
-        val currentFilter = ProviderManager.getTraceEventFilter(this)
+        val currentFilter = config.getTraceEventFilter()
         for ((cat, switchGetter) in categoryMap) {
             switchGetter.get().isChecked = currentFilter.isEmpty() || cat in currentFilter
         }
 
         // 输出方式监听
         switchFileOutput.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setTraceFileEnabled(this, isChecked)
+            config.setTraceFileEnabled(isChecked)
             updateFileOutputPath()
             refreshSummary()
         }
@@ -120,12 +121,12 @@ class TraceConfigActivity : AppCompatActivity() {
         } else {
             categoryMap.filter { (_, switchGetter) -> switchGetter.get().isChecked }.keys
         }
-        ProviderManager.setTraceEventFilter(this, selected)
+        AppConfig.configRepo().setTraceEventFilter(selected)
     }
 
     private fun refreshSummary() {
         val file = switchFileOutput.isChecked
-        val filter = ProviderManager.getTraceEventFilter(this)
+        val filter = AppConfig.configRepo().getTraceEventFilter()
 
         val sb = StringBuilder()
 

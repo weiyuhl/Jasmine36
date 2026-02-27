@@ -22,15 +22,17 @@ class PlannerConfigActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_planner_config)
 
+        val config = AppConfig.configRepo()
+
         findViewById<android.view.View>(R.id.btnBack).setOnClickListener { save(); finish() }
 
         switchEnabled = findViewById(R.id.switchEnabled)
         layoutConfigContent = findViewById(R.id.layoutConfigContent)
 
-        switchEnabled.isChecked = ProviderManager.isPlannerEnabled(this)
+        switchEnabled.isChecked = config.isPlannerEnabled()
         layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
         switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setPlannerEnabled(this, isChecked)
+            config.setPlannerEnabled(isChecked)
             layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
 
@@ -38,11 +40,11 @@ class PlannerConfigActivity : AppCompatActivity() {
         switchCritic = findViewById(R.id.switchCritic)
         tvSummary = findViewById(R.id.tvSummary)
 
-        etMaxIterations.setText(ProviderManager.getPlannerMaxIterations(this).toString())
-        switchCritic.isChecked = ProviderManager.isPlannerCriticEnabled(this)
+        etMaxIterations.setText(config.getPlannerMaxIterations().toString())
+        switchCritic.isChecked = config.isPlannerCriticEnabled()
 
         switchCritic.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setPlannerCriticEnabled(this, isChecked)
+            config.setPlannerCriticEnabled(isChecked)
             refreshSummary()
         }
 
@@ -51,7 +53,7 @@ class PlannerConfigActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 val v = s.toString().trim().toIntOrNull() ?: return
-                ProviderManager.setPlannerMaxIterations(this@PlannerConfigActivity, v.coerceIn(1, 20))
+                config.setPlannerMaxIterations(v.coerceIn(1, 20))
                 refreshSummary()
             }
         })
@@ -60,13 +62,15 @@ class PlannerConfigActivity : AppCompatActivity() {
     }
 
     private fun save() {
+        val config = AppConfig.configRepo()
         val maxIter = (etMaxIterations.text.toString().trim().toIntOrNull() ?: 1).coerceIn(1, 20)
-        ProviderManager.setPlannerMaxIterations(this, maxIter)
-        ProviderManager.setPlannerCriticEnabled(this, switchCritic.isChecked)
+        config.setPlannerMaxIterations(maxIter)
+        config.setPlannerCriticEnabled(switchCritic.isChecked)
     }
 
     private fun refreshSummary() {
-        val maxIter = ProviderManager.getPlannerMaxIterations(this)
+        val config = AppConfig.configRepo()
+        val maxIter = config.getPlannerMaxIterations()
         val critic = if (switchCritic.isChecked) "Critic 评估" else "无 Critic"
         tvSummary.text = "迭代 $maxIter 次 · $critic"
     }

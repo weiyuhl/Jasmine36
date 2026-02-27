@@ -20,15 +20,17 @@ class EventHandlerConfigActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_event_handler_config)
 
+        val config = AppConfig.configRepo()
+
         findViewById<android.view.View>(R.id.btnBack).setOnClickListener { finish() }
 
         switchEnabled = findViewById(R.id.switchEnabled)
         layoutConfigContent = findViewById(R.id.layoutConfigContent)
 
-        switchEnabled.isChecked = ProviderManager.isEventHandlerEnabled(this)
+        switchEnabled.isChecked = config.isEventHandlerEnabled()
         layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
         switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setEventHandlerEnabled(this, isChecked)
+            config.setEventHandlerEnabled(isChecked)
             layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
 
@@ -44,7 +46,7 @@ class EventHandlerConfigActivity : AppCompatActivity() {
             EventCategory.STREAMING to findViewById(R.id.switchEvStream)
         )
 
-        val current = ProviderManager.getEventHandlerFilter(this)
+        val current = config.getEventHandlerFilter()
         for (entry in switches) {
             entry.value.isChecked = current.isEmpty() || entry.key in current
         }
@@ -61,6 +63,7 @@ class EventHandlerConfigActivity : AppCompatActivity() {
     }
 
     private fun saveFilter() {
+        val config = AppConfig.configRepo()
         val checked = mutableSetOf<EventCategory>()
         for (entry in switches) {
             if (entry.value.isChecked) checked.add(entry.key)
@@ -70,11 +73,12 @@ class EventHandlerConfigActivity : AppCompatActivity() {
         } else {
             checked.toSet()
         }
-        ProviderManager.setEventHandlerFilter(this, selected)
+        config.setEventHandlerFilter(selected)
     }
 
     private fun refreshSummary() {
-        val filter = ProviderManager.getEventHandlerFilter(this)
+        val config = AppConfig.configRepo()
+        val filter = config.getEventHandlerFilter()
         tvSummary.text = if (filter.isEmpty()) "监听全部事件" else "监听 ${filter.size} 类事件"
     }
 }

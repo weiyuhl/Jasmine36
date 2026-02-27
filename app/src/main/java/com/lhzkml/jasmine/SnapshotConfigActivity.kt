@@ -10,6 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy
+import com.lhzkml.jasmine.core.config.SnapshotStorageType
 
 class SnapshotConfigActivity : AppCompatActivity() {
 
@@ -32,15 +33,17 @@ class SnapshotConfigActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_snapshot_config)
 
+        val config = AppConfig.configRepo()
+
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
 
         switchEnabled = findViewById(R.id.switchEnabled)
         layoutConfigContent = findViewById(R.id.layoutConfigContent)
 
-        switchEnabled.isChecked = ProviderManager.isSnapshotEnabled(this)
+        switchEnabled.isChecked = config.isSnapshotEnabled()
         layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
         switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setSnapshotEnabled(this, isChecked)
+            config.setSnapshotEnabled(isChecked)
             layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
 
@@ -57,36 +60,36 @@ class SnapshotConfigActivity : AppCompatActivity() {
         tvDefaultCheck = findViewById(R.id.tvDefaultCheck)
         tvCheckpointCount = findViewById(R.id.tvCheckpointCount)
 
-        switchAutoCheckpoint.isChecked = ProviderManager.isSnapshotAutoCheckpoint(this)
+        switchAutoCheckpoint.isChecked = config.isSnapshotAutoCheckpoint()
         switchAutoCheckpoint.setOnCheckedChangeListener { _, isChecked ->
-            ProviderManager.setSnapshotAutoCheckpoint(this, isChecked)
+            config.setSnapshotAutoCheckpoint(isChecked)
         }
 
         cardMemory.setOnClickListener {
-            ProviderManager.setSnapshotStorage(this, ProviderManager.SnapshotStorage.MEMORY)
+            config.setSnapshotStorage(SnapshotStorageType.MEMORY)
             refreshStorage()
         }
         cardFile.setOnClickListener {
-            ProviderManager.setSnapshotStorage(this, ProviderManager.SnapshotStorage.FILE)
+            config.setSnapshotStorage(SnapshotStorageType.FILE)
             refreshStorage()
         }
 
         cardRestartFromNode.setOnClickListener {
-            ProviderManager.setSnapshotRollbackStrategy(this, RollbackStrategy.RESTART_FROM_NODE)
+            config.setSnapshotRollbackStrategy(RollbackStrategy.RESTART_FROM_NODE)
             refreshRollback()
         }
         cardSkipNode.setOnClickListener {
-            ProviderManager.setSnapshotRollbackStrategy(this, RollbackStrategy.SKIP_NODE)
+            config.setSnapshotRollbackStrategy(RollbackStrategy.SKIP_NODE)
             refreshRollback()
         }
         cardDefaultOutput.setOnClickListener {
-            ProviderManager.setSnapshotRollbackStrategy(this, RollbackStrategy.USE_DEFAULT_OUTPUT)
+            config.setSnapshotRollbackStrategy(RollbackStrategy.USE_DEFAULT_OUTPUT)
             refreshRollback()
         }
 
         // 检查点管理 — 跳转到独立界面
         findViewById<View>(R.id.btnViewCheckpoints).setOnClickListener {
-            if (ProviderManager.getSnapshotStorage(this) != ProviderManager.SnapshotStorage.FILE) {
+            if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
                 Toast.makeText(this, "内存存储模式下无法查看检查点，请切换到文件存储", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -105,8 +108,9 @@ class SnapshotConfigActivity : AppCompatActivity() {
     }
 
     private fun refreshStorage() {
-        val current = ProviderManager.getSnapshotStorage(this)
-        val isMem = current == ProviderManager.SnapshotStorage.MEMORY
+        val config = AppConfig.configRepo()
+        val current = config.getSnapshotStorage()
+        val isMem = current == SnapshotStorageType.MEMORY
         cardMemory.setBackgroundResource(if (isMem) R.drawable.bg_strategy_card_selected else R.drawable.bg_strategy_card)
         cardFile.setBackgroundResource(if (!isMem) R.drawable.bg_strategy_card_selected else R.drawable.bg_strategy_card)
         tvMemoryCheck.visibility = if (isMem) View.VISIBLE else View.GONE
@@ -114,7 +118,8 @@ class SnapshotConfigActivity : AppCompatActivity() {
     }
 
     private fun refreshRollback() {
-        val current = ProviderManager.getSnapshotRollbackStrategy(this)
+        val config = AppConfig.configRepo()
+        val current = config.getSnapshotRollbackStrategy()
         val cards = mapOf(
             RollbackStrategy.RESTART_FROM_NODE to Triple(cardRestartFromNode, tvRestartCheck, true),
             RollbackStrategy.SKIP_NODE to Triple(cardSkipNode, tvSkipCheck, true),
@@ -129,7 +134,8 @@ class SnapshotConfigActivity : AppCompatActivity() {
     }
 
     private fun refreshCheckpointCount() {
-        if (ProviderManager.getSnapshotStorage(this) == ProviderManager.SnapshotStorage.FILE) {
+        val config = AppConfig.configRepo()
+        if (config.getSnapshotStorage() == SnapshotStorageType.FILE) {
             val snapshotDir = getExternalFilesDir("snapshots")
             if (snapshotDir != null && snapshotDir.exists()) {
                 val agentDirs = snapshotDir.listFiles()?.filter { it.isDirectory } ?: emptyList()
@@ -147,7 +153,8 @@ class SnapshotConfigActivity : AppCompatActivity() {
     }
 
     private fun confirmClearCheckpoints() {
-        if (ProviderManager.getSnapshotStorage(this) != ProviderManager.SnapshotStorage.FILE) {
+        val config = AppConfig.configRepo()
+        if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
             AlertDialog.Builder(this)
                 .setMessage("内存存储模式下，检查点会在 APP 关闭时自动清除。")
                 .setPositiveButton("确定", null)

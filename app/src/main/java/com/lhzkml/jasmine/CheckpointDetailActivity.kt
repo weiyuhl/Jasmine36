@@ -231,7 +231,7 @@ class CheckpointDetailActivity : AppCompatActivity() {
                 val timeFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
                 val timeStr = timeFormat.format(Date(cp.createdAt))
 
-                val config = ProviderManager.getActiveConfig(this@CheckpointDetailActivity)
+                val config = ProviderManager.getActiveConfig()
                 val title = "[恢复] ${cp.nodePath} $timeStr"
                 val systemPrompt = ProviderManager.getDefaultSystemPrompt(this@CheckpointDetailActivity)
                 val conversationId = repo.createConversation(

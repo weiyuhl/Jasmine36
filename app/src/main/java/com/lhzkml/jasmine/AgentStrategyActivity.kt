@@ -6,6 +6,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.lhzkml.jasmine.core.config.AgentStrategyType
+import com.lhzkml.jasmine.core.config.GraphToolCallMode
+import com.lhzkml.jasmine.core.config.ToolSelectionStrategyType
+import com.lhzkml.jasmine.core.config.ToolChoiceMode
 
 /**
  * Agent 策略选择界面
@@ -62,6 +66,8 @@ class AgentStrategyActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_agent_strategy)
 
+        val config = AppConfig.configRepo()
+
         findViewById<View>(R.id.btnBack).setOnClickListener { save(); finish() }
 
         // 策略卡片
@@ -111,71 +117,71 @@ class AgentStrategyActivity : AppCompatActivity() {
         etTcNamedTool = findViewById(R.id.etTcNamedTool)
 
         // 加载已保存的值到输入框
-        etSelByNameTools.setText(ProviderManager.getToolSelectionNames(this).joinToString(","))
-        etSelAutoTaskDesc.setText(ProviderManager.getToolSelectionTaskDesc(this))
-        etTcNamedTool.setText(ProviderManager.getToolChoiceNamedTool(this))
+        etSelByNameTools.setText(config.getToolSelectionNames().joinToString(","))
+        etSelAutoTaskDesc.setText(config.getToolSelectionTaskDesc())
+        etTcNamedTool.setText(config.getToolChoiceNamedTool())
 
         // 策略卡片点击
         cardSimpleLoop.setOnClickListener {
-            ProviderManager.setAgentStrategy(this, ProviderManager.AgentStrategyType.SIMPLE_LOOP)
+            config.setAgentStrategy(AgentStrategyType.SIMPLE_LOOP)
             refreshAll()
         }
         cardGraphStrategy.setOnClickListener {
-            ProviderManager.setAgentStrategy(this, ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH)
+            config.setAgentStrategy(AgentStrategyType.SINGLE_RUN_GRAPH)
             refreshAll()
         }
 
         // 工具调用模式点击
         cardModeSequential.setOnClickListener {
-            ProviderManager.setGraphToolCallMode(this, ProviderManager.GraphToolCallMode.SEQUENTIAL)
+            config.setGraphToolCallMode(GraphToolCallMode.SEQUENTIAL)
             refreshToolCallMode()
         }
         cardModeParallel.setOnClickListener {
-            ProviderManager.setGraphToolCallMode(this, ProviderManager.GraphToolCallMode.PARALLEL)
+            config.setGraphToolCallMode(GraphToolCallMode.PARALLEL)
             refreshToolCallMode()
         }
         cardModeSingle.setOnClickListener {
-            ProviderManager.setGraphToolCallMode(this, ProviderManager.GraphToolCallMode.SINGLE_RUN_SEQUENTIAL)
+            config.setGraphToolCallMode(GraphToolCallMode.SINGLE_RUN_SEQUENTIAL)
             refreshToolCallMode()
         }
 
         // 工具选择策略点击
         cardSelAll.setOnClickListener {
-            ProviderManager.setToolSelectionStrategy(this, ProviderManager.ToolSelectionStrategyType.ALL)
+            config.setToolSelectionStrategy(ToolSelectionStrategyType.ALL)
             refreshToolSelectionStrategy()
         }
         cardSelNone.setOnClickListener {
-            ProviderManager.setToolSelectionStrategy(this, ProviderManager.ToolSelectionStrategyType.NONE)
+            config.setToolSelectionStrategy(ToolSelectionStrategyType.NONE)
             refreshToolSelectionStrategy()
         }
         cardSelByName.setOnClickListener {
-            ProviderManager.setToolSelectionStrategy(this, ProviderManager.ToolSelectionStrategyType.BY_NAME)
+            config.setToolSelectionStrategy(ToolSelectionStrategyType.BY_NAME)
             refreshToolSelectionStrategy()
         }
         cardSelAuto.setOnClickListener {
-            ProviderManager.setToolSelectionStrategy(this, ProviderManager.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK)
+            config.setToolSelectionStrategy(ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK)
             refreshToolSelectionStrategy()
         }
 
         // ToolChoice 点击
         cardTcDefault.setOnClickListener {
-            ProviderManager.setToolChoiceMode(this, ProviderManager.ToolChoiceMode.DEFAULT)
+            config.setToolChoiceMode(ToolChoiceMode.DEFAULT)
             refreshToolChoice()
         }
         cardTcAuto.setOnClickListener {
-            ProviderManager.setToolChoiceMode(this, ProviderManager.ToolChoiceMode.AUTO)
+            config.setToolChoiceMode(ToolChoiceMode.AUTO)
             refreshToolChoice()
         }
         cardTcRequired.setOnClickListener {
-            ProviderManager.setToolChoiceMode(this, ProviderManager.ToolChoiceMode.REQUIRED)
+            config.setToolChoiceMode(ToolChoiceMode.REQUIRED)
             refreshToolChoice()
         }
         cardTcNone.setOnClickListener {
-            ProviderManager.setToolChoiceMode(this, ProviderManager.ToolChoiceMode.NONE)
+            config.setToolChoiceMode(ToolChoiceMode.NONE)
             refreshToolChoice()
         }
         cardTcNamed.setOnClickListener {
-            ProviderManager.setToolChoiceMode(this, ProviderManager.ToolChoiceMode.NAMED)
+            config.setToolChoiceMode(ToolChoiceMode.NAMED)
             refreshToolChoice()
         }
 
@@ -191,9 +197,10 @@ class AgentStrategyActivity : AppCompatActivity() {
     }
 
     private fun refreshSelection() {
-        val current = ProviderManager.getAgentStrategy(this)
-        val isSimple = current == ProviderManager.AgentStrategyType.SIMPLE_LOOP
-        val isGraph = current == ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH
+        val config = AppConfig.configRepo()
+        val current = config.getAgentStrategy()
+        val isSimple = current == AgentStrategyType.SIMPLE_LOOP
+        val isGraph = current == AgentStrategyType.SINGLE_RUN_GRAPH
 
         tvSimpleLoopCheck.visibility = if (isSimple) View.VISIBLE else View.GONE
         tvGraphCheck.visibility = if (isGraph) View.VISIBLE else View.GONE
@@ -217,21 +224,23 @@ class AgentStrategyActivity : AppCompatActivity() {
     }
 
     private fun refreshGraphOptions() {
-        val isGraph = ProviderManager.getAgentStrategy(this) == ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH
+        val config = AppConfig.configRepo()
+        val isGraph = config.getAgentStrategy() == AgentStrategyType.SINGLE_RUN_GRAPH
         layoutGraphOptions.visibility = if (isGraph) View.VISIBLE else View.GONE
     }
 
     private fun refreshToolCallMode() {
-        val mode = ProviderManager.getGraphToolCallMode(this)
+        val config = AppConfig.configRepo()
+        val mode = config.getGraphToolCallMode()
         val checks = mapOf(
-            ProviderManager.GraphToolCallMode.SEQUENTIAL to tvModeSeqCheck,
-            ProviderManager.GraphToolCallMode.PARALLEL to tvModeParCheck,
-            ProviderManager.GraphToolCallMode.SINGLE_RUN_SEQUENTIAL to tvModeSingleCheck
+            GraphToolCallMode.SEQUENTIAL to tvModeSeqCheck,
+            GraphToolCallMode.PARALLEL to tvModeParCheck,
+            GraphToolCallMode.SINGLE_RUN_SEQUENTIAL to tvModeSingleCheck
         )
         val cards = mapOf(
-            ProviderManager.GraphToolCallMode.SEQUENTIAL to cardModeSequential,
-            ProviderManager.GraphToolCallMode.PARALLEL to cardModeParallel,
-            ProviderManager.GraphToolCallMode.SINGLE_RUN_SEQUENTIAL to cardModeSingle
+            GraphToolCallMode.SEQUENTIAL to cardModeSequential,
+            GraphToolCallMode.PARALLEL to cardModeParallel,
+            GraphToolCallMode.SINGLE_RUN_SEQUENTIAL to cardModeSingle
         )
         for ((m, tv) in checks) {
             tv.visibility = if (m == mode) View.VISIBLE else View.GONE
@@ -244,18 +253,19 @@ class AgentStrategyActivity : AppCompatActivity() {
     }
 
     private fun refreshToolSelectionStrategy() {
-        val strategy = ProviderManager.getToolSelectionStrategy(this)
+        val config = AppConfig.configRepo()
+        val strategy = config.getToolSelectionStrategy()
         val checks = mapOf(
-            ProviderManager.ToolSelectionStrategyType.ALL to tvSelAllCheck,
-            ProviderManager.ToolSelectionStrategyType.NONE to tvSelNoneCheck,
-            ProviderManager.ToolSelectionStrategyType.BY_NAME to tvSelByNameCheck,
-            ProviderManager.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK to tvSelAutoCheck
+            ToolSelectionStrategyType.ALL to tvSelAllCheck,
+            ToolSelectionStrategyType.NONE to tvSelNoneCheck,
+            ToolSelectionStrategyType.BY_NAME to tvSelByNameCheck,
+            ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK to tvSelAutoCheck
         )
         val cards = mapOf(
-            ProviderManager.ToolSelectionStrategyType.ALL to cardSelAll,
-            ProviderManager.ToolSelectionStrategyType.NONE to cardSelNone,
-            ProviderManager.ToolSelectionStrategyType.BY_NAME to cardSelByName,
-            ProviderManager.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK to cardSelAuto
+            ToolSelectionStrategyType.ALL to cardSelAll,
+            ToolSelectionStrategyType.NONE to cardSelNone,
+            ToolSelectionStrategyType.BY_NAME to cardSelByName,
+            ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK to cardSelAuto
         )
         for ((s, tv) in checks) {
             tv.visibility = if (s == strategy) View.VISIBLE else View.GONE
@@ -266,26 +276,27 @@ class AgentStrategyActivity : AppCompatActivity() {
             )
         }
         layoutSelByNameInput.visibility =
-            if (strategy == ProviderManager.ToolSelectionStrategyType.BY_NAME) View.VISIBLE else View.GONE
+            if (strategy == ToolSelectionStrategyType.BY_NAME) View.VISIBLE else View.GONE
         layoutSelAutoInput.visibility =
-            if (strategy == ProviderManager.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK) View.VISIBLE else View.GONE
+            if (strategy == ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK) View.VISIBLE else View.GONE
     }
 
     private fun refreshToolChoice() {
-        val mode = ProviderManager.getToolChoiceMode(this)
+        val config = AppConfig.configRepo()
+        val mode = config.getToolChoiceMode()
         val checks = mapOf(
-            ProviderManager.ToolChoiceMode.DEFAULT to tvTcDefaultCheck,
-            ProviderManager.ToolChoiceMode.AUTO to tvTcAutoCheck,
-            ProviderManager.ToolChoiceMode.REQUIRED to tvTcRequiredCheck,
-            ProviderManager.ToolChoiceMode.NONE to tvTcNoneCheck,
-            ProviderManager.ToolChoiceMode.NAMED to tvTcNamedCheck
+            ToolChoiceMode.DEFAULT to tvTcDefaultCheck,
+            ToolChoiceMode.AUTO to tvTcAutoCheck,
+            ToolChoiceMode.REQUIRED to tvTcRequiredCheck,
+            ToolChoiceMode.NONE to tvTcNoneCheck,
+            ToolChoiceMode.NAMED to tvTcNamedCheck
         )
         val cards = mapOf(
-            ProviderManager.ToolChoiceMode.DEFAULT to cardTcDefault,
-            ProviderManager.ToolChoiceMode.AUTO to cardTcAuto,
-            ProviderManager.ToolChoiceMode.REQUIRED to cardTcRequired,
-            ProviderManager.ToolChoiceMode.NONE to cardTcNone,
-            ProviderManager.ToolChoiceMode.NAMED to cardTcNamed
+            ToolChoiceMode.DEFAULT to cardTcDefault,
+            ToolChoiceMode.AUTO to cardTcAuto,
+            ToolChoiceMode.REQUIRED to cardTcRequired,
+            ToolChoiceMode.NONE to cardTcNone,
+            ToolChoiceMode.NAMED to cardTcNamed
         )
         for ((m, tv) in checks) {
             tv.visibility = if (m == mode) View.VISIBLE else View.GONE
@@ -296,21 +307,22 @@ class AgentStrategyActivity : AppCompatActivity() {
             )
         }
         layoutTcNamedInput.visibility =
-            if (mode == ProviderManager.ToolChoiceMode.NAMED) View.VISIBLE else View.GONE
+            if (mode == ToolChoiceMode.NAMED) View.VISIBLE else View.GONE
     }
 
     private fun save() {
+        val config = AppConfig.configRepo()
         // 保存 ByName 工具列表
         val byNameText = etSelByNameTools.text.toString().trim()
         if (byNameText.isNotEmpty()) {
-            ProviderManager.setToolSelectionNames(this, byNameText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet())
+            config.setToolSelectionNames(byNameText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet())
         } else {
-            ProviderManager.setToolSelectionNames(this, emptySet())
+            config.setToolSelectionNames(emptySet())
         }
         // 保存 AutoSelect 任务描述
-        ProviderManager.setToolSelectionTaskDesc(this, etSelAutoTaskDesc.text.toString().trim())
+        config.setToolSelectionTaskDesc(etSelAutoTaskDesc.text.toString().trim())
         // 保存 Named 工具名
-        ProviderManager.setToolChoiceNamedTool(this, etTcNamedTool.text.toString().trim())
+        config.setToolChoiceNamedTool(etTcNamedTool.text.toString().trim())
     }
 
     override fun onBackPressed() {

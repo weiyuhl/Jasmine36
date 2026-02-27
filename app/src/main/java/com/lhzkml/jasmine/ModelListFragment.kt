@@ -15,6 +15,7 @@ import com.lhzkml.jasmine.core.prompt.executor.*
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
 import com.lhzkml.jasmine.core.prompt.model.ModelInfo
+import com.lhzkml.jasmine.core.config.ProviderConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -35,7 +36,7 @@ class ModelListFragment : Fragment() {
     }
 
     private lateinit var providerId: String
-    private lateinit var provider: Provider
+    private lateinit var provider: ProviderConfig
     private lateinit var tvStatus: TextView
     private lateinit var tvSelectedCount: TextView
     private lateinit var rvModels: RecyclerView
@@ -58,8 +59,10 @@ class ModelListFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val ctx = requireContext()
+        val config = AppConfig.configRepo()
+        val registry = AppConfig.providerRegistry()
         providerId = arguments?.getString(ARG_PROVIDER_ID) ?: return
-        provider = ProviderManager.providers.find { it.id == providerId } ?: return
+        provider = registry.providers.find { it.id == providerId } ?: return
 
         tvStatus = view.findViewById(R.id.tvStatus)
         tvSelectedCount = view.findViewById(R.id.tvSelectedCount)
@@ -72,8 +75,8 @@ class ModelListFragment : Fragment() {
         rvModels.adapter = adapter
 
         // 加载已保存的选中模型
-        currentModel = ProviderManager.getModel(ctx, providerId)
-        val savedSelected = ProviderManager.getSelectedModels(ctx, providerId)
+        currentModel = registry.getModel(providerId)
+        val savedSelected = config.getSelectedModels(providerId)
         checkedModels.addAll(savedSelected)
         if (currentModel.isNotEmpty()) {
             checkedModels.add(currentModel)
@@ -88,11 +91,13 @@ class ModelListFragment : Fragment() {
 
     private fun fetchModels() {
         val ctx = requireContext()
-        val apiKey = ProviderManager.getApiKey(ctx, providerId) ?: ""
-        val baseUrl = ProviderManager.getBaseUrl(ctx, providerId)
+        val config = AppConfig.configRepo()
+        val registry = AppConfig.providerRegistry()
+        val apiKey = config.getApiKey(providerId) ?: ""
+        val baseUrl = registry.getBaseUrl(providerId)
 
         val vertexEnabled = provider.apiType == ApiType.GEMINI
-                && ProviderManager.isVertexAIEnabled(ctx, providerId)
+                && config.isVertexAIEnabled(providerId)
 
         if (!vertexEnabled && apiKey.isEmpty()) {
             tvStatus.text = "请先在配置页输入 API Key"
@@ -110,7 +115,7 @@ class ModelListFragment : Fragment() {
         btnRefresh.isEnabled = false
         tvStatus.text = "正在获取模型列表..."
 
-        val chatPath = ProviderManager.getChatPath(ctx, providerId)
+        val chatPath = config.getChatPath(providerId)
         val client: ChatClient = ChatClientFactory.create(ChatClientConfig(
             providerId = providerId,
             providerName = provider.name,
@@ -156,12 +161,14 @@ class ModelListFragment : Fragment() {
 
     private fun confirmSelection() {
         val ctx = requireContext()
-        ProviderManager.setSelectedModels(ctx, providerId, checkedModels.toList())
+        val config = AppConfig.configRepo()
+        val registry = AppConfig.providerRegistry()
+        config.setSelectedModels(providerId, checkedModels.toList())
         if (currentModel !in checkedModels && checkedModels.isNotEmpty()) {
             val newModel = checkedModels.first()
-            ProviderManager.saveConfig(ctx, providerId,
-                ProviderManager.getApiKey(ctx, providerId) ?: "",
-                ProviderManager.getBaseUrl(ctx, providerId),
+            config.saveProviderCredentials(providerId,
+                config.getApiKey(providerId) ?: "",
+                registry.getBaseUrl(providerId),
                 newModel)
         }
         Toast.makeText(ctx, "已保存 ${checkedModels.size} 个模型", Toast.LENGTH_SHORT).show()

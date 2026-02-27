@@ -17,6 +17,7 @@ import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.button.MaterialButton
+import com.lhzkml.jasmine.core.config.ProviderConfig
 
 class ProviderListActivity : AppCompatActivity() {
 
@@ -26,9 +27,6 @@ class ProviderListActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_provider_list)
-
-        // 初始化 ProviderManager，加载自定义供应商
-        ProviderManager.initialize(this)
 
         container = findViewById(R.id.providerContainer)
         findViewById<MaterialButton>(R.id.btnBack).setOnClickListener { finish() }
@@ -45,11 +43,13 @@ class ProviderListActivity : AppCompatActivity() {
     }
 
     private fun buildList() {
+        val config = AppConfig.configRepo()
+        val registry = AppConfig.providerRegistry()
         container.removeAllViews()
         switches.clear()
         val inflater = LayoutInflater.from(this)
 
-        for (provider in ProviderManager.providers) {
+        for (provider in registry.providers) {
             val view = inflater.inflate(R.layout.item_provider, container, false)
 
             view.findViewById<TextView>(R.id.tvProviderName).text = provider.name
@@ -60,7 +60,7 @@ class ProviderListActivity : AppCompatActivity() {
             switch.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
                     // 检查是否已配置 Key
-                    val key = ProviderManager.getApiKey(this, provider.id)
+                    val key = config.getApiKey(provider.id)
                     if (key == null) {
                         switch.isChecked = false
                         // 跳转到配置页
@@ -70,18 +70,18 @@ class ProviderListActivity : AppCompatActivity() {
                         return@setOnCheckedChangeListener
                     }
                     // 关闭其他开关
-                    ProviderManager.setActive(this, provider.id)
+                    config.setActiveProviderId(provider.id)
                     switches.forEach { (id, sw) ->
                         if (id != provider.id && sw.isChecked) {
                             sw.setOnCheckedChangeListener(null)
                             sw.isChecked = false
-                            bindSwitchListener(sw, ProviderManager.providers.find { it.id == id }!!)
+                            bindSwitchListener(sw, registry.getProvider(id)!!)
                         }
                     }
                 } else {
                     // 如果关闭的是当前激活的，清除激活状态
-                    if (ProviderManager.getActiveId(this) == provider.id) {
-                        ProviderManager.setActive(this, "")
+                    if (config.getActiveProviderId() == provider.id) {
+                        config.setActiveProviderId("")
                     }
                 }
             }
@@ -108,10 +108,12 @@ class ProviderListActivity : AppCompatActivity() {
         }
     }
 
-    private fun bindSwitchListener(switch: SwitchCompat, provider: Provider) {
+    private fun bindSwitchListener(switch: SwitchCompat, provider: ProviderConfig) {
+        val config = AppConfig.configRepo()
+        val registry = AppConfig.providerRegistry()
         switch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
-                val key = ProviderManager.getApiKey(this, provider.id)
+                val key = config.getApiKey(provider.id)
                 if (key == null) {
                     switch.isChecked = false
                     startActivity(Intent(this, ProviderConfigActivity::class.java).apply {
@@ -119,30 +121,32 @@ class ProviderListActivity : AppCompatActivity() {
                     })
                     return@setOnCheckedChangeListener
                 }
-                ProviderManager.setActive(this, provider.id)
+                config.setActiveProviderId(provider.id)
                 switches.forEach { (id, sw) ->
                     if (id != provider.id && sw.isChecked) {
                         sw.setOnCheckedChangeListener(null)
                         sw.isChecked = false
-                        bindSwitchListener(sw, ProviderManager.providers.find { it.id == id }!!)
+                        bindSwitchListener(sw, registry.getProvider(id)!!)
                     }
                 }
             } else {
-                if (ProviderManager.getActiveId(this) == provider.id) {
-                    ProviderManager.setActive(this, "")
+                if (config.getActiveProviderId() == provider.id) {
+                    config.setActiveProviderId("")
                 }
             }
         }
     }
 
     private fun refreshStatus() {
-        val activeId = ProviderManager.getActiveId(this)
-        for (provider in ProviderManager.providers) {
+        val config = AppConfig.configRepo()
+        val registry = AppConfig.providerRegistry()
+        val activeId = config.getActiveProviderId()
+        for (provider in registry.providers) {
             val switch = switches[provider.id] ?: continue
             val statusView = (switch.parent as View).findViewById<TextView>(R.id.tvStatus)
 
-            val hasKey = ProviderManager.getApiKey(this, provider.id) != null
-            statusView.text = if (hasKey) "已配置 · ${ProviderManager.getModel(this, provider.id)}" else "未配置"
+            val hasKey = config.getApiKey(provider.id) != null
+            statusView.text = if (hasKey) "已配置 · ${registry.getModel(provider.id)}" else "未配置"
 
             switch.setOnCheckedChangeListener(null)
             switch.isChecked = provider.id == activeId
@@ -201,7 +205,7 @@ class ProviderListActivity : AppCompatActivity() {
                         Toast.makeText(this, "请输入默认模型", Toast.LENGTH_SHORT).show()
                     }
                     else -> {
-                        val provider = Provider(
+                        val provider = ProviderConfig(
                             id = id,
                             name = name,
                             defaultBaseUrl = baseUrl,
@@ -209,7 +213,8 @@ class ProviderListActivity : AppCompatActivity() {
                             apiType = selectedApiType,
                             isCustom = true
                         )
-                        val success = ProviderManager.registerProviderPersistent(this, provider)
+                        val registry = AppConfig.providerRegistry()
+                        val success = registry.registerProviderPersistent(provider)
                         if (success) {
                             Toast.makeText(this, "添加成功", Toast.LENGTH_SHORT).show()
                             buildList()
@@ -224,17 +229,19 @@ class ProviderListActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showDeleteProviderDialog(provider: Provider) {
+    private fun showDeleteProviderDialog(provider: ProviderConfig) {
+        val config = AppConfig.configRepo()
+        val registry = AppConfig.providerRegistry()
         AlertDialog.Builder(this)
             .setTitle("删除供应商")
             .setMessage("确定要删除「${provider.name}」吗？\n删除后配置信息将保留，但供应商将从列表中移除。")
             .setPositiveButton("删除") { _, _ ->
                 // 如果是当前激活的供应商，先取消激活
-                if (ProviderManager.getActiveId(this) == provider.id) {
-                    ProviderManager.setActive(this, "")
+                if (config.getActiveProviderId() == provider.id) {
+                    config.setActiveProviderId("")
                 }
                 
-                val success = ProviderManager.unregisterProviderPersistent(this, provider.id)
+                val success = registry.unregisterProviderPersistent(provider.id)
                 if (success) {
                     Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
                     buildList()

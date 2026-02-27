@@ -184,16 +184,16 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshTopKVisibility() {
-        val config = ProviderManager.getActiveConfig(this)
+        val config = ProviderManager.getActiveConfig()
         // top_k 仅 Claude 和 Gemini 支持
         val supportsTopK = config?.apiType == ApiType.CLAUDE || config?.apiType == ApiType.GEMINI
         layoutTopK.visibility = if (supportsTopK) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun refreshProviderStatus() {
-        val config = ProviderManager.getActiveConfig(this)
+        val config = ProviderManager.getActiveConfig()
         if (config != null) {
-            val provider = ProviderManager.providers.find { it.id == config.providerId }
+            val provider = ProviderManager.getAllProviders().find { it.id == config.providerId }
             tvActiveProvider.text = provider?.name ?: config.providerId
         } else {
             tvActiveProvider.text = "未配置"
@@ -365,8 +365,8 @@ class SettingsActivity : AppCompatActivity() {
     private fun refreshAgentStrategy() {
         val strategy = ProviderManager.getAgentStrategy(this)
         tvAgentStrategy.text = when (strategy) {
-            ProviderManager.AgentStrategyType.SIMPLE_LOOP -> "简单循环（ToolExecutor）"
-            ProviderManager.AgentStrategyType.SINGLE_RUN_GRAPH -> "图策略（GraphAgent）"
+            com.lhzkml.jasmine.core.config.AgentStrategyType.SIMPLE_LOOP -> "简单循环（ToolExecutor）"
+            com.lhzkml.jasmine.core.config.AgentStrategyType.SINGLE_RUN_GRAPH -> "图策略（GraphAgent）"
         }
     }
 
@@ -446,8 +446,8 @@ class SettingsActivity : AppCompatActivity() {
         val auto = ProviderManager.isSnapshotAutoCheckpoint(this)
         val rollback = ProviderManager.getSnapshotRollbackStrategy(this)
         val storageName = when (storage) {
-            ProviderManager.SnapshotStorage.MEMORY -> "内存存储"
-            ProviderManager.SnapshotStorage.FILE -> "文件存储"
+            com.lhzkml.jasmine.core.config.SnapshotStorageType.MEMORY -> "内存存储"
+            com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE -> "文件存储"
         }
         val autoStr = if (auto) "自动检查点" else "手动检查点"
         val rollbackName = when (rollback) {

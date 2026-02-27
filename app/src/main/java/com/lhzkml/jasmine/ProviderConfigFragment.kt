@@ -15,6 +15,7 @@ import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
+import com.lhzkml.jasmine.core.config.ProviderConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -22,7 +23,7 @@ import kotlinx.coroutines.withContext
 
 class ProviderConfigFragment : Fragment() {
 
-    private lateinit var provider: Provider
+    private lateinit var provider: ProviderConfig
     private lateinit var etApiKey: EditText
     private lateinit var etBaseUrl: EditText
     private lateinit var etChatPath: EditText
@@ -60,8 +61,10 @@ class ProviderConfigFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val ctx = requireContext()
+        val config = AppConfig.configRepo()
+        val registry = AppConfig.providerRegistry()
         val providerId = arguments?.getString(ARG_PROVIDER_ID) ?: return
-        provider = ProviderManager.providers.find { it.id == providerId } ?: return
+        provider = registry.providers.find { it.id == providerId } ?: return
 
         etApiKey = view.findViewById(R.id.etApiKey)
         etBaseUrl = view.findViewById(R.id.etBaseUrl)
@@ -93,6 +96,9 @@ class ProviderConfigFragment : Fragment() {
             ApiType.CLAUDE -> {
                 layoutChatPath.visibility = View.GONE
             }
+            else -> {
+                layoutChatPath.visibility = View.GONE
+            }
         }
 
         // Vertex AI 开关：仅 Gemini 类型显示
@@ -104,18 +110,19 @@ class ProviderConfigFragment : Fragment() {
         }
 
         // 加载已保存的配置
-        ProviderManager.getApiKey(ctx, provider.id)?.let { etApiKey.setText(it) }
-        etBaseUrl.setText(ProviderManager.getBaseUrl(ctx, provider.id))
+        config.getApiKey(provider.id)?.let { etApiKey.setText(it) }
+        etBaseUrl.setText(registry.getBaseUrl(provider.id))
 
         // 加载 API 路径
-        val savedPath = ProviderManager.getChatPath(ctx, provider.id)
-        if (!savedPath.isNullOrEmpty()) {
+        val savedPath = config.getChatPath(provider.id)
+        if (savedPath != null && savedPath.isNotEmpty()) {
             etChatPath.setText(savedPath)
         } else {
             etChatPath.hint = when (provider.apiType) {
                 ApiType.OPENAI -> "/v1/chat/completions"
                 ApiType.GEMINI -> "/v1beta/models/{model}:generateContent"
                 ApiType.CLAUDE -> "/v1/messages"
+                else -> ""
             }
         }
 
@@ -136,13 +143,14 @@ class ProviderConfigFragment : Fragment() {
 
     private fun setupVertexAI(view: View) {
         val ctx = requireContext()
-        val vertexEnabled = ProviderManager.isVertexAIEnabled(ctx, provider.id)
+        val config = AppConfig.configRepo()
+        val vertexEnabled = config.isVertexAIEnabled(provider.id)
         switchVertexAI.isChecked = vertexEnabled
         layoutVertexFields.visibility = if (vertexEnabled) View.VISIBLE else View.GONE
 
-        etVertexProjectId.setText(ProviderManager.getVertexProjectId(ctx, provider.id))
-        etVertexLocation.setText(ProviderManager.getVertexLocation(ctx, provider.id))
-        etVertexServiceAccountJson.setText(ProviderManager.getVertexServiceAccountJson(ctx, provider.id))
+        etVertexProjectId.setText(config.getVertexProjectId(provider.id))
+        etVertexLocation.setText(config.getVertexLocation(provider.id))
+        etVertexServiceAccountJson.setText(config.getVertexServiceAccountJson(provider.id))
 
         updateVertexUIState(view, vertexEnabled)
 
@@ -239,6 +247,7 @@ class ProviderConfigFragment : Fragment() {
 
     private fun save() {
         val ctx = requireContext()
+        val config = AppConfig.configRepo()
         val vertexEnabled = provider.apiType == ApiType.GEMINI && switchVertexAI.isChecked
 
         if (vertexEnabled) {
@@ -266,11 +275,11 @@ class ProviderConfigFragment : Fragment() {
             val baseUrl = etBaseUrl.text.toString().trim()
             val apiKey = etApiKey.text.toString().trim()
 
-            ProviderManager.saveConfig(ctx, provider.id, apiKey, baseUrl.ifEmpty { null }, null)
-            ProviderManager.setVertexAIEnabled(ctx, provider.id, true)
-            ProviderManager.setVertexProjectId(ctx, provider.id, projectId)
-            ProviderManager.setVertexLocation(ctx, provider.id, location)
-            ProviderManager.setVertexServiceAccountJson(ctx, provider.id, saJson)
+            config.saveProviderCredentials(provider.id, apiKey, baseUrl.ifEmpty { null }, null)
+            config.setVertexAIEnabled(provider.id, true)
+            config.setVertexProjectId(provider.id, projectId)
+            config.setVertexLocation(provider.id, location)
+            config.setVertexServiceAccountJson(provider.id, saJson)
         } else {
             val apiKey = etApiKey.text.toString().trim()
             if (apiKey.isEmpty()) {
@@ -283,19 +292,19 @@ class ProviderConfigFragment : Fragment() {
                 return
             }
             val model: String? = null
-            ProviderManager.saveConfig(ctx, provider.id, apiKey, baseUrl, model)
+            config.saveProviderCredentials(provider.id, apiKey, baseUrl, model)
 
             if (provider.apiType == ApiType.GEMINI) {
-                ProviderManager.setVertexAIEnabled(ctx, provider.id, false)
+                config.setVertexAIEnabled(provider.id, false)
             }
         }
 
         val chatPath = etChatPath.text.toString().trim()
         if (chatPath.isNotEmpty()) {
-            ProviderManager.saveChatPath(ctx, provider.id, chatPath)
+            config.saveChatPath(provider.id, chatPath)
         }
 
-        ProviderManager.setActive(ctx, provider.id)
+        config.setActiveProviderId(provider.id)
         Toast.makeText(ctx, "已保存并启用 ${provider.name}", Toast.LENGTH_SHORT).show()
     }
 }
