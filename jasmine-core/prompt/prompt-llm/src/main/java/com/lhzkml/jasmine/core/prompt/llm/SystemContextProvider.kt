@@ -88,12 +88,8 @@ class SystemInfoContextProvider : SystemContextProvider {
         val sdkInt = try {
             android.os.Build.VERSION.SDK_INT
         } catch (_: Exception) { -1 }
-        val device = try {
-            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
-        } catch (_: Exception) { "Unknown" }
         return "<system_information>\n" +
             "OS: Android $sdkInt ($os $arch)\n" +
-            "设备: $device\n" +
             "</system_information>"
     }
 }
