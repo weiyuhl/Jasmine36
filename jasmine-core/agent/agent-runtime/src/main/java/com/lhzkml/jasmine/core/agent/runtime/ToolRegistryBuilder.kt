@@ -40,7 +40,6 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
      * 用户交互工具回调
      * 由 app 层提供实现
      */
-    var sayToUserHandler: ((String) -> Unit)? = null
     var askUserHandler: (suspend (String) -> String)? = null
 
     /**
@@ -137,16 +136,10 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
 
             // 用户交互工具
             if (isEnabled("user_interaction")) {
-                // SayToUser - 向用户显示消息
-                if (sayToUserHandler != null) {
-                    register(SayToUserTool(sayToUserHandler!!))
-                }
                 // AskUser - 询问用户输入
                 if (askUserHandler != null) {
                     register(AskUserTool(askUserHandler!!))
                 }
-                // Exit - 结束对话
-                register(ExitTool)
             }
         }
     }

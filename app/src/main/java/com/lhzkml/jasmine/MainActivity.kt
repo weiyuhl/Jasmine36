@@ -160,12 +160,6 @@ class MainActivity : AppCompatActivity() {
             }
             deferred.await()
         }
-        toolRegistryBuilder.sayToUserHandler = { message ->
-            CoroutineScope(Dispatchers.Main).launch {
-                appendRendered("\n[Agent] $message\n\n")
-                autoScrollToBottom()
-            }
-        }
         toolRegistryBuilder.askUserHandler = { question ->
             val deferred = CompletableDeferred<String>()
             withContext(Dispatchers.Main) {
@@ -1328,12 +1322,6 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: CancellationException) {
                 // 用户主动停止，已渲染文字保留，不追加任何内容
-            } catch (e: com.lhzkml.jasmine.core.agent.tools.ExitSignalException) {
-                // Agent 调用 exit 工具，显示结束消息
-                withContext(Dispatchers.Main) {
-                    appendRendered("\n[Agent] ${e.finalMessage}\n\n")
-                    autoScrollToBottom()
-                }
             } catch (e: ChatClientException) {
                 val errorMsg = when (e.errorType) {
                     ErrorType.NETWORK -> "网络错误: ${e.message}\n请检查网络连接后重试"
