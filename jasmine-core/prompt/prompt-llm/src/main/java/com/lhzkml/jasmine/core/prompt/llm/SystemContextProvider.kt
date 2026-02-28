@@ -130,7 +130,7 @@ class AgentPromptContextProvider(
     override val name = "agent_prompt"
     override fun getContextSection(): String = buildString {
         appendLine("<identity>")
-        appendLine("You are $agentName, an AI assistant built to assist developers on Android devices.")
+        appendLine("You are $agentName, an AI assistant built to assist developers.")
         appendLine()
         appendLine("When users ask about $agentName, respond with information about yourself in first person.")
         appendLine()
