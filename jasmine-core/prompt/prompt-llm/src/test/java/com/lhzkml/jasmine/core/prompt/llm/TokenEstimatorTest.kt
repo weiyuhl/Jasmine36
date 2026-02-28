@@ -63,16 +63,4 @@ class TokenEstimatorTest {
         assertTrue(tokenizer.countMessageTokens("user", "hello") > tokenizer.countTokens("hello"))
     }
 
-    @Test
-    fun `legacy estimate method still works`() {
-        assertEquals(TokenEstimator.countTokens("hello"), TokenEstimator.estimate("hello"))
-    }
-
-    @Test
-    fun `legacy estimateMessage method still works`() {
-        assertEquals(
-            TokenEstimator.countMessageTokens("user", "hello"),
-            TokenEstimator.estimateMessage("user", "hello")
-        )
-    }
 }

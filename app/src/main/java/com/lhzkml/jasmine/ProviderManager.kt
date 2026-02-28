@@ -13,7 +13,6 @@ import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
  * ProviderManager - 配置管理门面
  *
  * 这是一个薄薄的委托层，所有调用转发给 ConfigRepository 和 ProviderRegistry。
- * 保持向后兼容，所有现有调用点无需修改。
  */
 object ProviderManager {
 
@@ -26,22 +25,11 @@ object ProviderManager {
         registry.initialize()
     }
 
-    // ========== 类型别名（向后兼容）==========
-
-    typealias Provider = ProviderConfig
-    typealias ActiveConfig = ActiveProviderConfig
-    typealias McpTransportType = com.lhzkml.jasmine.core.config.McpTransportType
-    typealias AgentStrategyType = com.lhzkml.jasmine.core.config.AgentStrategyType
-    typealias GraphToolCallMode = com.lhzkml.jasmine.core.config.GraphToolCallMode
-    typealias ToolSelectionStrategyType = com.lhzkml.jasmine.core.config.ToolSelectionStrategyType
-    typealias ToolChoiceMode = com.lhzkml.jasmine.core.config.ToolChoiceMode
-    typealias SnapshotStorage = SnapshotStorageType
-
     // ========== 供应商管理 ==========
 
-    fun getAllProviders(): List<Provider> = registry.providers
+    fun getAllProviders(): List<ProviderConfig> = registry.providers
 
-    fun getProvider(id: String): Provider? = registry.getProvider(id)
+    fun getProvider(id: String): ProviderConfig? = registry.getProvider(id)
 
     fun getActiveProvider(): String? = configRepo.getActiveProviderId()
 
@@ -49,13 +37,13 @@ object ProviderManager {
 
     fun getActiveId(): String? = configRepo.getActiveProviderId()
 
-    fun getActiveConfig(): ActiveConfig? = registry.getActiveConfig()
+    fun getActiveConfig(): ActiveProviderConfig? = registry.getActiveConfig()
 
     fun saveConfig(context: Context, providerId: String, apiKey: String, baseUrl: String, model: String) {
         configRepo.saveProviderCredentials(providerId, apiKey, baseUrl, model)
     }
 
-    fun registerProvider(provider: Provider): Boolean = registry.registerProviderPersistent(provider)
+    fun registerProvider(provider: ProviderConfig): Boolean = registry.registerProviderPersistent(provider)
 
     fun unregisterProvider(id: String): Boolean = registry.unregisterProviderPersistent(id)
 

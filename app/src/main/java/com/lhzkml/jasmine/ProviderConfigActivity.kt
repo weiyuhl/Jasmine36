@@ -9,10 +9,11 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import com.lhzkml.jasmine.core.config.ProviderConfig
 
 class ProviderConfigActivity : AppCompatActivity() {
 
-    private lateinit var provider: ProviderManager.Provider
+    private lateinit var provider: ProviderConfig
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -977,8 +977,17 @@ class MainActivity : AppCompatActivity() {
                             withContext(Dispatchers.Main) {
                                 appendRendered("AI: ")
                             }
+                            val agentPrompt = Prompt.build("agent") {
+                                for (msg in trimmedMessages) {
+                                    when (msg.role) {
+                                        "system" -> system(msg.content)
+                                        "user" -> user(msg.content)
+                                        "assistant" -> assistant(msg.content)
+                                    }
+                                }
+                            }.copy(maxTokens = maxTokens, samplingParams = samplingParams)
                             val streamResult = executor.executeStream(
-                                trimmedMessages, config.model, maxTokens, samplingParams
+                                agentPrompt, config.model
                             ) { chunk ->
                                 withContext(Dispatchers.Main) {
                                     tvOutput.append(chunk)

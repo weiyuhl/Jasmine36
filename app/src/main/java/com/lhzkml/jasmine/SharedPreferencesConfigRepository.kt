@@ -218,39 +218,19 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
 
     override fun getMcpServers(): List<McpServerConfig> {
         val raw = prefs().getString("mcp_servers_v2", null)
-        if (raw != null) {
-            return try {
-                raw.split("|||").filter { it.isNotBlank() }.map { entry ->
-                    val parts = entry.split(":::")
-                    McpServerConfig(
-                        name = parts.getOrElse(0) { "" },
-                        url = parts.getOrElse(1) { "" },
-                        transportType = try { McpTransportType.valueOf(parts.getOrElse(2) { "STREAMABLE_HTTP" }) } catch (_: Exception) { McpTransportType.STREAMABLE_HTTP },
-                        headerName = parts.getOrElse(3) { "" },
-                        headerValue = parts.getOrElse(4) { "" },
-                        enabled = parts.getOrElse(5) { "true" }.toBooleanStrictOrNull() ?: true
-                    )
-                }
-            } catch (_: Exception) { emptyList() }
-        }
-        // 兼容旧版 v1 格式迁移
-        val oldRaw = prefs().getString("mcp_servers", null) ?: return emptyList()
+        if (raw == null) return emptyList()
         return try {
-            val migrated = oldRaw.split("|||").filter { it.isNotBlank() }.map { entry ->
+            raw.split("|||").filter { it.isNotBlank() }.map { entry ->
                 val parts = entry.split(":::")
-                val oldHeaders = parts.getOrElse(2) { "" }
-                val firstHeader = oldHeaders.lines().firstOrNull { it.contains('=') }
-                val hName = firstHeader?.substringBefore('=')?.trim() ?: ""
-                val hValue = firstHeader?.substringAfter('=')?.trim() ?: ""
                 McpServerConfig(
-                    name = parts.getOrElse(0) { "" }, url = parts.getOrElse(1) { "" },
-                    transportType = McpTransportType.STREAMABLE_HTTP,
-                    headerName = hName, headerValue = hValue,
-                    enabled = parts.getOrElse(3) { "true" }.toBooleanStrictOrNull() ?: true
+                    name = parts.getOrElse(0) { "" },
+                    url = parts.getOrElse(1) { "" },
+                    transportType = try { McpTransportType.valueOf(parts.getOrElse(2) { "STREAMABLE_HTTP" }) } catch (_: Exception) { McpTransportType.STREAMABLE_HTTP },
+                    headerName = parts.getOrElse(3) { "" },
+                    headerValue = parts.getOrElse(4) { "" },
+                    enabled = parts.getOrElse(5) { "true" }.toBooleanStrictOrNull() ?: true
                 )
             }
-            setMcpServers(migrated)
-            migrated
         } catch (_: Exception) { emptyList() }
     }
 

@@ -51,11 +51,13 @@ class ToolExecutorTest {
         override fun close() {}
     }
 
+    private fun testPrompt(content: String) = prompt("agent") { user(content) }
+
     @Test
     fun `no tool calls returns immediately`() = runBlocking {
         val client = FakeClient(mutableListOf(ChatResult("Hello!", Usage(10, 5, 15), "stop")))
         val registry = ToolRegistry.build { register(CalculatorTool.plus) }
-        val result = ToolExecutor(client, registry).execute(listOf(ChatMessage.user("Hi")), "m")
+        val result = ToolExecutor(client, registry).execute(testPrompt("Hi"), "m")
         assertEquals("Hello!", result.content)
         assertEquals(1, client.callCount)
     }
@@ -68,7 +70,7 @@ class ToolExecutorTest {
             ChatResult("Result is 30.0", Usage(30, 10, 40), "stop")
         ))
         val registry = ToolRegistry.build { registerAll(*CalculatorTool.allTools().toTypedArray()) }
-        val result = ToolExecutor(client, registry).execute(listOf(ChatMessage.user("10+20?")), "m")
+        val result = ToolExecutor(client, registry).execute(testPrompt("10+20?"), "m")
         assertEquals("Result is 30.0", result.content)
         assertEquals(2, client.callCount)
         assertEquals(50, result.usage?.promptTokens)
@@ -85,7 +87,7 @@ class ToolExecutorTest {
         responses.add(ChatResult("Summary after max iterations", Usage(10, 5, 15), "stop"))
         val client = FakeClient(responses)
         val registry = ToolRegistry.build { register(CalculatorTool.plus) }
-        val result = ToolExecutor(client, registry, maxIterations = 3).execute(listOf(ChatMessage.user("loop")), "m")
+        val result = ToolExecutor(client, registry, maxIterations = 3).execute(testPrompt("loop"), "m")
         assertEquals("Summary after max iterations", result.content)
         assertEquals("max_iterations", result.finishReason)
         assertEquals(4, client.callCount) // 3 iterations + 1 summary
@@ -101,7 +103,7 @@ class ToolExecutorTest {
         val registry = ToolRegistry.build { register(GetCurrentTimeTool) }
         val chunks = mutableListOf<String>()
         val result = ToolExecutor(client, registry).executeStream(
-            listOf(ChatMessage.user("time?")), "m"
+            testPrompt("time?"), "m"
         ) { chunks.add(it) }
         assertEquals("Time is now.", result.content)
         assertTrue(chunks.contains("Time is now."))
@@ -115,7 +117,7 @@ class ToolExecutorTest {
             register(CalculatorTool.minus)
             register(GetCurrentTimeTool)
         }
-        ToolExecutor(client, registry).execute(listOf(ChatMessage.user("Hi")), "m")
+        ToolExecutor(client, registry).execute(testPrompt("Hi"), "m")
         assertEquals("3 tools should be passed to client", 3, client.lastToolsCount)
     }
 
@@ -128,7 +130,7 @@ class ToolExecutorTest {
             register(GetCurrentTimeTool)
         }
         ToolExecutor(client, registry).executeStream(
-            listOf(ChatMessage.user("Hi")), "m"
+            testPrompt("Hi"), "m"
         ) {}
         assertEquals("3 tools should be passed to client in stream mode", 3, client.lastToolsCount)
     }

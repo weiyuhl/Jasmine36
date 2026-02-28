@@ -11,9 +11,7 @@ import com.lhzkml.jasmine.core.prompt.llm.compressIfNeeded
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.ChatResult
 import com.lhzkml.jasmine.core.prompt.model.Prompt
-import com.lhzkml.jasmine.core.prompt.model.SamplingParams
 import com.lhzkml.jasmine.core.prompt.model.Usage
-import com.lhzkml.jasmine.core.prompt.model.prompt
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -54,9 +52,6 @@ class AgentCompletionSignal(
  * 2. 如果 LLM 返回 tool_calls → 执行工具 → 将结果追加到 prompt → 回到步骤 1
  * 3. 如果 LLM 返回普通文本 → 结束循环，返回最终结果
  *
- * 支持两种使用方式：
- * - 传统方式：传入 messages 列表（向后兼容）
- * - Prompt 方式：传入 Prompt 对象，利用 LLMSession 自动管理提示词
  */
 class ToolExecutor(
     private val client: ChatClient,
@@ -390,39 +385,6 @@ class ToolExecutor(
             content = finalResult.content,
             usage = totalUsage, finishReason = "max_iterations"
         )
-    }
-
-    // ========== 传统方式（向后兼容） ==========
-
-    /**
-     * 传统方式：传入 messages 列表执行 agent loop（非流式）
-     */
-    suspend fun execute(
-        messages: List<ChatMessage>,
-        model: String,
-        maxTokens: Int? = null,
-        samplingParams: SamplingParams? = null
-    ): ChatResult {
-        val p = prompt("agent") {
-            messages(messages)
-        }.copy(maxTokens = maxTokens, samplingParams = samplingParams ?: SamplingParams.DEFAULT)
-        return execute(p, model)
-    }
-
-    /**
-     * 传统方式：传入 messages 列表执行 agent loop（流式）
-     */
-    suspend fun executeStream(
-        messages: List<ChatMessage>,
-        model: String,
-        maxTokens: Int? = null,
-        samplingParams: SamplingParams? = null,
-        onChunk: suspend (String) -> Unit
-    ): StreamResult {
-        val p = prompt("agent") {
-            messages(messages)
-        }.copy(maxTokens = maxTokens, samplingParams = samplingParams ?: SamplingParams.DEFAULT)
-        return executeStream(p, model, onChunk)
     }
 
     private fun Usage.add(other: Usage?): Usage {

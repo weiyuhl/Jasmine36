@@ -37,19 +37,6 @@ object TokenEstimator : Tokenizer {
         return tokens
     }
 
-    /**
-     * 估算单条消息的 token 数（含开销）
-     * 保留旧的静态方法签名以兼容
-     */
-    fun estimateMessage(role: String, content: String): Int =
-        countMessageTokens(role, content)
-
-    /**
-     * 估算单条文本的 token 数
-     * 保留旧的静态方法签名以兼容
-     */
-    fun estimate(text: String): Int = countTokens(text)
-
     private fun isCJK(char: Char): Boolean {
         val code = char.code
         return (code in 0x4E00..0x9FFF) ||   // CJK 统一汉字
