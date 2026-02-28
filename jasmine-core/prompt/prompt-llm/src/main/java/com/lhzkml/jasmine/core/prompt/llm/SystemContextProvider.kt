@@ -219,6 +219,10 @@ class AgentPromptContextProvider(
         appendLine("</rules>")
         appendLine()
         
+        appendLine("<long_running_commands_warning>")
+        appendLine("</long_running_commands_warning>")
+        appendLine()
+        
         appendLine("<goal>")
         appendLine("- Execute the user goal using the provided tools, in as few steps as possible, be sure to check your work. The user can always ask you to do additional work later, but may be frustrated if you take a long time.")
         appendLine("- You can communicate directly with the user.")
