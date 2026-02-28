@@ -46,6 +46,7 @@ dependencies {
     implementation(project(":jasmine-core:prompt:prompt-executor"))
     implementation(project(":jasmine-core:conversation:conversation-storage"))
     implementation(project(":jasmine-core:agent:agent-tools"))
+    implementation(project(":jasmine-core:agent:agent-runtime"))
     implementation(project(":jasmine-core:agent:agent-dex"))
     implementation(project(":jasmine-core:config:config-manager"))
 

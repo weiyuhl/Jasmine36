@@ -35,10 +35,6 @@ import com.lhzkml.jasmine.core.prompt.llm.TokenEstimator
 import com.lhzkml.jasmine.core.prompt.llm.StreamResumeHelper
 import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
-import com.lhzkml.jasmine.core.prompt.llm.WorkspaceContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.SystemInfoContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.CurrentTimeContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.AgentPromptContextProvider
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
@@ -48,14 +44,6 @@ import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.conversation.storage.TimedMessage
 import com.lhzkml.jasmine.core.agent.tools.*
-import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpClient
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolAdapter
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolDefinition
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolRegistryProvider
-import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
-import com.lhzkml.jasmine.core.agent.tools.trace.LogTraceWriter
-import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
 import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMPlanner
 import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMWithCriticPlanner
 import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
@@ -68,7 +56,12 @@ import com.lhzkml.jasmine.core.agent.tools.event.EventHandler
 import com.lhzkml.jasmine.core.agent.tools.event.*
 import com.lhzkml.jasmine.core.agent.tools.snapshot.Persistence
 import com.lhzkml.jasmine.core.agent.tools.snapshot.AgentCheckpoint
-import com.lhzkml.jasmine.core.agent.tools.snapshot.InMemoryPersistenceStorageProvider
+import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
+import com.lhzkml.jasmine.core.config.ActiveProviderConfig
+import com.lhzkml.jasmine.core.agent.runtime.AgentRuntimeBuilder
+import com.lhzkml.jasmine.core.agent.runtime.CompressionStrategyBuilder
+import com.lhzkml.jasmine.core.agent.runtime.McpConnectionManager
+import com.lhzkml.jasmine.core.agent.runtime.ToolRegistryBuilder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -85,19 +78,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CONVERSATION_ID = "conversation_id"
-
-        /**
-         * 全局 MCP 连接状态缓存
-         * McpServerActivity 进入时读取此缓存，避免重复连接。
-         * key = 服务器名称
-         */
-        data class McpServerStatus(
-            val success: Boolean,
-            val tools: List<McpToolDefinition> = emptyList(),
-            val error: String? = null
-        )
-
-        val mcpConnectionCache = mutableMapOf<String, McpServerStatus>()
     }
 
     private lateinit var drawerLayout: DrawerLayout
@@ -137,403 +117,114 @@ class MainActivity : AppCompatActivity() {
     private var tracing: Tracing? = null
     private var eventHandler: EventHandler? = null
     private var persistence: Persistence? = null
-    private var mcpClients: MutableList<McpClient> = mutableListOf()
-    /** 预加载的 MCP 工具（APP 启动时后台连接） */
-    private var preloadedMcpTools: MutableList<McpToolAdapter> = mutableListOf()
-    private var mcpPreloaded = false
+    /** 预加载的 MCP 工具（APP 启动时后台连接，全局共享实例） */
+    private val mcpConnectionManager get() = AppConfig.mcpConnectionManager()
     /** 中间过程日志收集器，用于持久化到对话历史 */
     private var agentLogBuilder = StringBuilder()
     /** 用户是否手动向上滚动（流式回复期间暂停自动滚动） */
     private var userScrolledUp = false
     /** 系统上下文收集器 — 自动拼接环境信息到 system prompt */
-    private val contextCollector = SystemContextCollector()
+    private var contextCollector = SystemContextCollector()
+    /** Agent 运行时构建器 */
+    private val runtimeBuilder = AgentRuntimeBuilder(AppConfig.configRepo())
+    /** 工具注册表构建器 */
+    private val toolRegistryBuilder = ToolRegistryBuilder(AppConfig.configRepo())
 
     /**
      * 刷新系统上下文收集器
-     * 根据当前设置注册/注销上下文提供者，发送消息时自动拼接到 system prompt。
+     * 委托给 AgentRuntimeBuilder，根据当前设置注册/注销上下文提供者。
      */
     private fun refreshContextCollector() {
-        contextCollector.clear()
-
         val isAgent = ProviderManager.isAgentMode(this)
         val wsPath = ProviderManager.getWorkspacePath(this)
-
-        // Agent 模式：注入结构化行为指引提示词（工具通过 API tools 参数发送，不在提示词中列出）
-        if (isAgent) {
-            contextCollector.register(AgentPromptContextProvider(
-                agentName = "Jasmine",
-                workspacePath = wsPath
-            ))
-        }
-
-        // Agent 模式：注入工作区路径
-        if (isAgent && wsPath.isNotEmpty()) {
-            contextCollector.register(WorkspaceContextProvider(wsPath))
-        }
-
-        // 系统信息
-        contextCollector.register(SystemInfoContextProvider())
-
-        // 当前时间
-        contextCollector.register(CurrentTimeContextProvider())
+        contextCollector = runtimeBuilder.buildSystemContext(isAgent, wsPath)
     }
 
     /**
      * 根据设置构建工具注册表
+     * 委托给 ToolRegistryBuilder，平台相关回调（Shell 确认）在此提供。
      */
     private fun buildToolRegistry(): ToolRegistry {
-        // Agent 模式下优先使用 Agent 工具预设，否则使用普通工具配置
-        val enabledTools = if (ProviderManager.isAgentMode(this)) {
-            ProviderManager.getAgentToolPreset(this)
-        } else {
-            ProviderManager.getEnabledTools(this)
+        toolRegistryBuilder.workspacePath = ProviderManager.getWorkspacePath(this)
+        toolRegistryBuilder.fallbackBasePath = getExternalFilesDir(null)?.absolutePath
+        toolRegistryBuilder.shellConfirmationHandler = { command, _ ->
+            val deferred = CompletableDeferred<Boolean>()
+            withContext(Dispatchers.Main) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("执行命令确认")
+                    .setMessage("AI 请求执行以下命令：\n\n$command\n\n是否允许？")
+                    .setPositiveButton("允许") { _, _ -> deferred.complete(true) }
+                    .setNegativeButton("拒绝") { _, _ -> deferred.complete(false) }
+                    .setCancelable(false)
+                    .show()
+            }
+            deferred.await()
         }
-        fun isEnabled(name: String) = enabledTools.isEmpty() || name in enabledTools
-
-        return ToolRegistry.build {
-            // 计算器
-            if (isEnabled("calculator")) {
-                CalculatorTool.allTools().forEach { register(it) }
-            }
-
-            // 获取当前时间
-            if (isEnabled("get_current_time")) {
-                register(GetCurrentTimeTool)
-            }
-
-            // 文件工具 — Agent 模式使用用户选择的工作区，否则使用 APP 沙箱
-            val workspacePath = ProviderManager.getWorkspacePath(this@MainActivity)
-            val basePath = if (ProviderManager.isAgentMode(this@MainActivity) && workspacePath.isNotEmpty()) {
-                workspacePath
-            } else {
-                getExternalFilesDir(null)?.absolutePath
-            }
-            if (isEnabled("file_tools")) {
-                register(ReadFileTool(basePath))
-                register(WriteFileTool(basePath))
-                register(EditFileTool(basePath))
-                register(ListDirectoryTool(basePath))
-                register(RegexSearchTool(basePath))
-                register(FindFilesTool(basePath))
-                register(DeleteFileTool(basePath))
-                register(MoveFileTool(basePath))
-                register(CopyFileTool(basePath))
-                register(AppendFileTool(basePath))
-                register(FileInfoTool(basePath))
-                register(CreateDirectoryTool(basePath))
-                register(CompressFilesTool(basePath))
-                register(InsertContentTool(basePath))
-                register(RenameFileTool(basePath))
-                register(ReplaceInFileTool(basePath))
-                register(CreateFileTool(basePath))
-            }
-
-            // Shell 命令（根据策略决定确认方式）
-            if (isEnabled("execute_shell_command")) {
-                val shellPolicy = ProviderManager.getShellPolicy(this@MainActivity)
-                val blacklist = ProviderManager.getShellBlacklist(this@MainActivity)
-                val whitelist = ProviderManager.getShellWhitelist(this@MainActivity)
-
-                val policyConfig = ShellPolicyConfig(
-                    policy = shellPolicy,
-                    blacklist = blacklist,
-                    whitelist = whitelist
-                )
-
-                register(ExecuteShellCommandTool(
-                    confirmationHandler = { command, _ ->
-                        val deferred = CompletableDeferred<Boolean>()
-                        withContext(Dispatchers.Main) {
-                            AlertDialog.Builder(this@MainActivity)
-                                .setTitle("执行命令确认")
-                                .setMessage("AI 请求执行以下命令：\n\n$command\n\n是否允许？")
-                                .setPositiveButton("允许") { _, _ -> deferred.complete(true) }
-                                .setNegativeButton("拒绝") { _, _ -> deferred.complete(false) }
-                                .setCancelable(false)
-                                .show()
-                        }
-                        deferred.await()
-                    },
-                    policyConfig = policyConfig,
-                    basePath = basePath
-                ))
-            }
-
-            // 网络搜索/抓取（BrightData API）
-            if (isEnabled("web_search")) {
-                val brightDataKey = ProviderManager.getBrightDataKey(this@MainActivity)
-                if (brightDataKey.isNotEmpty()) {
-                    webSearchTool?.close()
-                    val wst = WebSearchTool(brightDataKey)
-                    webSearchTool = wst
-                    register(wst.search)
-                    register(wst.scrape)
-                }
-            }
-
-            // URL 抓取（本地直接请求）
-            if (isEnabled("fetch_url")) {
-                fetchUrlTool?.close()
-                val ft = FetchUrlTool()
-                fetchUrlTool = ft
-                register(ft.fetchHtml)
-                register(ft.fetchText)
-                register(ft.fetchJson)
-            }
-
-            // Agent 显式完成工具
-            if (isEnabled("attempt_completion")) register(AttemptCompletionTool)
-        }
+        return toolRegistryBuilder.build(ProviderManager.isAgentMode(this))
     }
 
     /**
      * APP 启动时后台预连接 MCP 服务器
-     * 连接成功后缓存客户端和工具，发消息时直接复用。
+     * 委托给 McpConnectionManager，UI 反馈通过 listener 回调。
      */
     private fun preconnectMcpServers() {
-        if (!ProviderManager.isMcpEnabled(this)) return
-
-        val servers = ProviderManager.getMcpServers(this).filter { it.enabled && it.url.isNotBlank() }
-        if (servers.isEmpty()) return
-
-        CoroutineScope(Dispatchers.IO).launch {
-            for (server in servers) {
-                try {
-                    val headers = mutableMapOf<String, String>()
-                    if (server.headerName.isNotBlank() && server.headerValue.isNotBlank()) {
-                        headers[server.headerName] = server.headerValue
-                    }
-
-                    val client: McpClient = when (server.transportType) {
-                        com.lhzkml.jasmine.core.config.McpTransportType.SSE ->
-                            SseMcpClient(server.url, customHeaders = headers)
-                        com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP ->
-                            HttpMcpClient(server.url, headers)
-                    }
-                    client.connect()
-                    mcpClients.add(client)
-
-                    val mcpRegistry = McpToolRegistryProvider.fromClient(client)
-                    for (descriptor in mcpRegistry.descriptors()) {
-                        val mcpTool = mcpRegistry.findTool(descriptor.name) ?: continue
-                        preloadedMcpTools.add(McpToolAdapter(mcpTool))
-                    }
-
-                    // 获取工具定义列表，缓存到全局状态
-                    val toolDefs = client.listTools()
-                    mcpConnectionCache[server.name] = McpServerStatus(
-                        success = true,
-                        tools = toolDefs
-                    )
-
-                    withContext(Dispatchers.Main) {
-                        val transportLabel = when (server.transportType) {
-                            com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP -> "HTTP"
-                            com.lhzkml.jasmine.core.config.McpTransportType.SSE -> "SSE"
-                        }
-                        Toast.makeText(this@MainActivity, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Exception) {
-                    mcpConnectionCache[server.name] = McpServerStatus(
-                        success = false,
-                        error = e.message ?: "未知错误"
-                    )
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "MCP: ${server.name} 连接失败", Toast.LENGTH_SHORT).show()
-                    }
+        mcpConnectionManager.listener = object : McpConnectionManager.ConnectionListener {
+            override fun onConnected(serverName: String, transportType: com.lhzkml.jasmine.core.config.McpTransportType, toolCount: Int) {
+                val transportLabel = when (transportType) {
+                    com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP -> "HTTP"
+                    com.lhzkml.jasmine.core.config.McpTransportType.SSE -> "SSE"
+                }
+                CoroutineScope(Dispatchers.Main).launch {
+                    Toast.makeText(this@MainActivity, "MCP: $serverName 已连接 [$transportLabel] ($toolCount 个工具)", Toast.LENGTH_SHORT).show()
                 }
             }
-            mcpPreloaded = true
+            override fun onConnectionFailed(serverName: String, error: String) {
+                CoroutineScope(Dispatchers.Main).launch {
+                    Toast.makeText(this@MainActivity, "MCP: $serverName 连接失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            mcpConnectionManager.preconnect()
         }
     }
 
     /**
      * 加载 MCP 工具到注册表
-     * 优先复用 APP 启动时预连接的工具，避免重复连接。
+     * 委托给 McpConnectionManager。
      */
     private suspend fun loadMcpToolsInto(registry: ToolRegistry) {
-        if (!ProviderManager.isMcpEnabled(this)) return
-
-        // 如果已经预加载了，直接复用
-        if (mcpPreloaded && preloadedMcpTools.isNotEmpty()) {
-            for (tool in preloadedMcpTools) {
-                registry.register(tool)
-            }
-            return
-        }
-
-        // 还没预加载完成，等一下或者重新连接
-        val servers = ProviderManager.getMcpServers(this).filter { it.enabled && it.url.isNotBlank() }
-        if (servers.isEmpty()) return
-
-        // 如果预加载还在进行中（mcpClients 不为空但 mcpPreloaded 还是 false），等待
-        // 简单处理：如果已有客户端但工具为空，说明还在连接中，重新连接
-        if (mcpClients.isNotEmpty() && preloadedMcpTools.isEmpty()) {
-            // 预连接可能还在进行，等一小段时间
-            var waited = 0
-            while (!mcpPreloaded && waited < 10000) {
-                kotlinx.coroutines.delay(200)
-                waited += 200
-            }
-            if (preloadedMcpTools.isNotEmpty()) {
-                for (tool in preloadedMcpTools) {
-                    registry.register(tool)
-                }
-                return
-            }
-        }
-
-        // 预连接失败或未启动，重新连接
-        mcpClients.forEach { try { it.close() } catch (_: Exception) {} }
-        mcpClients.clear()
-        preloadedMcpTools.clear()
-
-        for (server in servers) {
-            try {
-                val headers = mutableMapOf<String, String>()
-                if (server.headerName.isNotBlank() && server.headerValue.isNotBlank()) {
-                    headers[server.headerName] = server.headerValue
-                }
-
-                val client: McpClient = when (server.transportType) {
-                    com.lhzkml.jasmine.core.config.McpTransportType.SSE ->
-                        SseMcpClient(server.url, customHeaders = headers)
-                    com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP ->
-                        HttpMcpClient(server.url, headers)
-                }
-                client.connect()
-                mcpClients.add(client)
-
-                val mcpRegistry = McpToolRegistryProvider.fromClient(client)
-                for (descriptor in mcpRegistry.descriptors()) {
-                    val mcpTool = mcpRegistry.findTool(descriptor.name) ?: continue
-                    val adapter = McpToolAdapter(mcpTool)
-                    preloadedMcpTools.add(adapter)
-                    registry.register(adapter)
-                }
-
-                withContext(Dispatchers.Main) {
-                    val transportLabel = when (server.transportType) {
-                        com.lhzkml.jasmine.core.config.McpTransportType.STREAMABLE_HTTP -> "HTTP"
-                        com.lhzkml.jasmine.core.config.McpTransportType.SSE -> "SSE"
-                    }
-                    Toast.makeText(this@MainActivity, "MCP: ${server.name} 已连接 [$transportLabel] (${mcpRegistry.size} 个工具)", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "MCP: ${server.name} 连接失败", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-        mcpPreloaded = true
+        mcpConnectionManager.loadToolsInto(registry)
     }
 
     /**
      * 构建追踪系统
-     * Trace 专注于数据记录（日志文件、Android Log），不负责 UI 显示。
-     * UI 显示由 EventHandler 负责。
+     * 委托给 AgentRuntimeBuilder。
      */
     private fun buildTracing(): Tracing? {
-        if (!ProviderManager.isTraceEnabled(this)) return null
-
-        return Tracing.build {
-            addWriter(LogTraceWriter())
-            if (ProviderManager.isTraceFileEnabled(this@MainActivity)) {
-                val traceDir = getExternalFilesDir("traces")
-                if (traceDir != null) {
-                    traceDir.mkdirs()
-                    val traceFile = java.io.File(traceDir, "trace_${System.currentTimeMillis()}.log")
-                    addWriter(com.lhzkml.jasmine.core.agent.tools.trace.FileTraceWriter(traceFile))
-                }
-            }
-        }
+        return runtimeBuilder.buildTracing(getExternalFilesDir("traces"))
     }
 
     /**
      * 构建事件处理器
-     * EventHandler 是 UI 通知系统，负责在聊天界面实时显示 Agent 执行过程。
-     * 与 Trace（纯数据记录）职责分离：Trace 写日志/文件，EventHandler 更新 UI。
+     * 委托给 AgentRuntimeBuilder，UI 回调在此提供。
      */
     private fun buildEventHandler(): EventHandler? {
-        if (!ProviderManager.isEventHandlerEnabled(this)) return null
-
-        val filter = ProviderManager.getEventHandlerFilter(this)
-        fun isEnabled(cat: com.lhzkml.jasmine.core.agent.tools.event.EventCategory) = filter.isEmpty() || cat in filter
-
-        // 统一的事件输出方法
-        suspend fun emitEvent(line: String) {
+        return runtimeBuilder.buildEventHandler { line ->
             agentLogBuilder.append(line)
             withContext(Dispatchers.Main) {
                 appendRendered(line)
                 autoScrollToBottom()
             }
         }
-
-        return EventHandler.build {
-            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.AGENT)) {
-                onAgentExecutionFailed { ctx -> emitEvent("[EVENT] Agent 失败: ${ctx.throwable.message}\n") }
-            }
-            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.TOOL)) {
-                onToolCallStarting { ctx -> emitEvent("[EVENT] 工具调用: ${ctx.toolName}(${ctx.toolArgs.take(60)})\n") }
-                onToolCallCompleted { ctx -> emitEvent("[EVENT] 工具完成: ${ctx.toolName} -> ${(ctx.result ?: "").take(100)}\n") }
-                onToolCallFailed { ctx -> emitEvent("[EVENT] 工具失败: ${ctx.toolName} - ${ctx.throwable.message}\n") }
-                onToolValidationFailed { ctx -> emitEvent("[EVENT] 工具验证失败: ${ctx.toolName} - ${ctx.validationError}\n") }
-            }
-            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.LLM)) {
-                onLLMCallStarting { ctx -> emitEvent("[EVENT] LLM 请求 [消息: ${ctx.messageCount}, 工具: ${ctx.tools.size}]\n") }
-                onLLMCallCompleted { ctx -> emitEvent("[EVENT] LLM 回复 [${ctx.totalTokens} tokens]\n") }
-            }
-            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.STRATEGY)) {
-                onStrategyStarting { ctx -> emitEvent("[EVENT] 策略开始: ${ctx.strategyName}\n") }
-                onStrategyCompleted { ctx -> emitEvent("[EVENT] 策略完成: ${ctx.strategyName} -> ${ctx.result?.take(80) ?: ""}\n") }
-            }
-            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.NODE)) {
-                onNodeExecutionStarting { ctx -> emitEvent("[EVENT] 节点开始: ${ctx.nodeName}\n") }
-                onNodeExecutionCompleted { ctx -> emitEvent("[EVENT] 节点完成: ${ctx.nodeName}\n") }
-                onNodeExecutionFailed { ctx -> emitEvent("[EVENT] 节点失败: ${ctx.nodeName} - ${ctx.throwable.message}\n") }
-            }
-            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.SUBGRAPH)) {
-                onSubgraphExecutionStarting { ctx -> emitEvent("[EVENT] 子图开始: ${ctx.subgraphName}\n") }
-                onSubgraphExecutionCompleted { ctx -> emitEvent("[EVENT] 子图完成: ${ctx.subgraphName}\n") }
-                onSubgraphExecutionFailed { ctx -> emitEvent("[EVENT] 子图失败: ${ctx.subgraphName} - ${ctx.throwable.message}\n") }
-            }
-            if (isEnabled(com.lhzkml.jasmine.core.agent.tools.event.EventCategory.STREAMING)) {
-                onLLMStreamingStarting { ctx -> emitEvent("[EVENT] LLM 流式开始 [模型: ${ctx.model}]\n") }
-                onLLMStreamingCompleted { ctx -> emitEvent("[EVENT] LLM 流式完成 [${ctx.totalTokens} tokens]\n") }
-                onLLMStreamingFailed { ctx -> emitEvent("[EVENT] LLM 流式失败: ${ctx.throwable.message}\n") }
-            }
-        }
     }
 
     /**
      * 构建快照/持久化系统
+     * 委托给 AgentRuntimeBuilder。
      */
     private fun buildPersistence(): Persistence? {
-        if (!ProviderManager.isSnapshotEnabled(this)) return null
-
-        val provider = when (ProviderManager.getSnapshotStorage(this)) {
-            com.lhzkml.jasmine.core.config.SnapshotStorageType.MEMORY -> InMemoryPersistenceStorageProvider()
-            com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE -> {
-                val snapshotDir = getExternalFilesDir("snapshots")
-                if (snapshotDir != null) {
-                    com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider(snapshotDir)
-                } else {
-                    InMemoryPersistenceStorageProvider()
-                }
-            }
-        }
-
-        val autoCheckpoint = ProviderManager.isSnapshotAutoCheckpoint(this)
-
-        val persistence = Persistence(
-            provider = provider,
-            autoCheckpoint = autoCheckpoint
-        )
-
-        // 设置回滚策略
-        persistence.rollbackStrategy = ProviderManager.getSnapshotRollbackStrategy(this)
-
-        return persistence
+        return runtimeBuilder.buildPersistence(getExternalFilesDir("snapshots"))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -736,7 +427,7 @@ class MainActivity : AppCompatActivity() {
         webSearchTool?.close()
         fetchUrlTool?.close()
         tracing?.close()
-        mcpClients.forEach { try { it.close() } catch (_: Exception) {} }
+        mcpConnectionManager.close()
     }
 
     @Suppress("DEPRECATION")
@@ -996,7 +687,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun getOrCreateClient(config: ProviderManager.ActiveConfig): ChatClient {
+    private fun getOrCreateClient(config: ActiveProviderConfig): ChatClient {
         // 如果 router 中已有该供应商的客户端，直接复用
         val existing = clientRouter.getClient(config.providerId)
         if (existing != null && currentProviderId == config.providerId) {
@@ -1756,10 +1447,9 @@ class MainActivity : AppCompatActivity() {
      * 每个检查点只保存当轮 user + assistant，恢复时拼接重建完整历史。
      */
     private suspend fun tryOfferStartupRecovery(conversationId: String) {
-        val snapshotDir = getExternalFilesDir("snapshots") ?: return
-        val fp = com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider(snapshotDir)
+        val service = AppConfig.checkpointService() ?: return
 
-        val allCheckpoints = fp.getCheckpoints(conversationId)
+        val allCheckpoints = service.getCheckpoints(conversationId)
         if (allCheckpoints.isEmpty()) return
 
         // 检查点总轮数 vs 当前对话轮数
@@ -1791,8 +1481,8 @@ class MainActivity : AppCompatActivity() {
 
         if (!deferred.await()) return
 
-        val sortedCps = allCheckpoints.sortedBy { it.createdAt }
-        val rebuilt = rebuildHistoryFromCheckpoints(sortedCps)
+        val systemPrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
+        val rebuilt = service.rebuildHistory(conversationId, systemPrompt = systemPrompt)
 
         withContext(Dispatchers.Main) {
             messageHistory.clear()
@@ -1885,30 +1575,10 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * 根据设置构建压缩策略
+     * 委托给 CompressionStrategyBuilder。
      */
     private fun buildCompressionStrategy(): HistoryCompressionStrategy? {
-        return when (ProviderManager.getCompressionStrategy(this)) {
-            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.TOKEN_BUDGET -> {
-                val maxTokens = ProviderManager.getCompressionMaxTokens(this)
-                val effectiveMaxTokens = if (maxTokens > 0) maxTokens else contextManager.maxTokens
-                val threshold = ProviderManager.getCompressionThreshold(this) / 100.0
-                HistoryCompressionStrategy.TokenBudget(
-                    maxTokens = effectiveMaxTokens,
-                    threshold = threshold,
-                    tokenizer = TokenEstimator
-                )
-            }
-            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.WHOLE_HISTORY ->
-                HistoryCompressionStrategy.WholeHistory
-            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.LAST_N -> {
-                val n = ProviderManager.getCompressionLastN(this)
-                HistoryCompressionStrategy.FromLastNMessages(n)
-            }
-            com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.CHUNKED -> {
-                val size = ProviderManager.getCompressionChunkSize(this)
-                HistoryCompressionStrategy.Chunked(size)
-            }
-        }
+        return CompressionStrategyBuilder.build(AppConfig.configRepo(), contextManager)
     }
 
     /** 追加文本到聊天输出 */

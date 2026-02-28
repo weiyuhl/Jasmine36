@@ -77,15 +77,18 @@ class ToolExecutorTest {
     @Test
     fun `max iterations`() = runBlocking {
         val responses = mutableListOf<ChatResult>()
-        repeat(5) {
+        repeat(3) {
             responses.add(ChatResult("", Usage(10, 5, 15), "tool_calls",
                 listOf(ToolCall("tc$it", "calculator_plus", """{"a":1,"b":1}"""))))
         }
+        // 达到 maxIterations 后，ToolExecutor 会发一次无工具的总结请求
+        responses.add(ChatResult("Summary after max iterations", Usage(10, 5, 15), "stop"))
         val client = FakeClient(responses)
         val registry = ToolRegistry.build { register(CalculatorTool.plus) }
         val result = ToolExecutor(client, registry, maxIterations = 3).execute(listOf(ChatMessage.user("loop")), "m")
-        assertTrue(result.content.contains("Exceeded"))
-        assertEquals(3, client.callCount)
+        assertEquals("Summary after max iterations", result.content)
+        assertEquals("max_iterations", result.finishReason)
+        assertEquals(4, client.callCount) // 3 iterations + 1 summary
     }
 
     @Test

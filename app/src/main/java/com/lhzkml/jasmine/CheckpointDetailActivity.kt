@@ -1,10 +1,8 @@
 package com.lhzkml.jasmine
 
-import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
-import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -12,9 +10,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.lhzkml.jasmine.core.agent.tools.snapshot.AgentCheckpoint
-import com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider
+import com.lhzkml.jasmine.core.agent.runtime.CheckpointService
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
-import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -38,7 +35,7 @@ class CheckpointDetailActivity : AppCompatActivity() {
     private var agentId: String = ""
     private var checkpointId: String = ""
     private var checkpoint: AgentCheckpoint? = null
-    private var provider: FilePersistenceStorageProvider? = null
+    private val checkpointService: CheckpointService? get() = AppConfig.checkpointService()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,12 +56,10 @@ class CheckpointDetailActivity : AppCompatActivity() {
     }
 
     private fun loadCheckpoint() {
-        val snapshotDir = getExternalFilesDir("snapshots") ?: return
-        provider = FilePersistenceStorageProvider(snapshotDir)
+        val service = checkpointService ?: return
 
         CoroutineScope(Dispatchers.IO).launch {
-            val cp = provider?.getCheckpoints(agentId)
-                ?.firstOrNull { it.checkpointId == checkpointId }
+            val cp = service.getCheckpoint(agentId, checkpointId)
 
             withContext(Dispatchers.Main) {
                 if (cp == null) {
@@ -241,14 +236,14 @@ class CheckpointDetailActivity : AppCompatActivity() {
                     systemPrompt = systemPrompt
                 )
 
-                // 重建完整历史：使用框架层 Persistence.rebuildHistoryFromCheckpoints()
-                val allCheckpoints = provider?.getCheckpoints(agentId)
-                    ?.sortedBy { it.createdAt } ?: emptyList()
-                val cpIndex = allCheckpoints.indexOfFirst { it.checkpointId == cp.checkpointId }
-                val relevantCps = if (cpIndex >= 0) allCheckpoints.take(cpIndex + 1) else listOf(cp)
+                // 重建完整历史：使用 CheckpointService
+                val service = checkpointService
+                val rebuiltHistory = service?.rebuildHistory(
+                    agentId = agentId,
+                    upToCheckpointId = cp.checkpointId,
+                    systemPrompt = systemPrompt
+                ) ?: emptyList()
 
-                val rebuiltHistory = com.lhzkml.jasmine.core.agent.tools.snapshot.Persistence
-                    .rebuildHistoryFromCheckpoints(relevantCps, systemPrompt)
                 for (msg in rebuiltHistory) {
                     repo.addMessage(conversationId, msg)
                 }
@@ -275,7 +270,7 @@ class CheckpointDetailActivity : AppCompatActivity() {
             .setMessage("删除此检查点？\n${cp.nodePath}\n此操作不可撤销。")
             .setPositiveButton("删除") { _, _ ->
                 CoroutineScope(Dispatchers.IO).launch {
-                    provider?.deleteCheckpoint(agentId, cp.checkpointId)
+                    checkpointService?.deleteCheckpoint(agentId, cp.checkpointId)
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@CheckpointDetailActivity, "已删除", Toast.LENGTH_SHORT).show()
                         setResult(RESULT_DELETED)

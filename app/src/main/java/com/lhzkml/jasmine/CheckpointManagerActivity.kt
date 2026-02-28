@@ -14,7 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.lhzkml.jasmine.core.agent.tools.snapshot.AgentCheckpoint
-import com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider
+import com.lhzkml.jasmine.core.agent.runtime.CheckpointService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,7 +29,7 @@ class CheckpointManagerActivity : AppCompatActivity() {
     private lateinit var tvStats: TextView
     private lateinit var tvEmpty: TextView
     private lateinit var adapter: CheckpointListAdapter
-    private var provider: FilePersistenceStorageProvider? = null
+    private val checkpointService: CheckpointService? get() = AppConfig.checkpointService()
 
     private val detailLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -71,34 +71,21 @@ class CheckpointManagerActivity : AppCompatActivity() {
     }
 
     private fun loadCheckpoints() {
-        val snapshotDir = getExternalFilesDir("snapshots")
-        if (snapshotDir == null || !snapshotDir.exists()) {
+        val service = checkpointService
+        if (service == null) {
             showEmpty()
             return
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            val fp = FilePersistenceStorageProvider(snapshotDir)
-            provider = fp
-            val agentDirs = snapshotDir.listFiles()?.filter { it.isDirectory } ?: emptyList()
+            val sessions = service.listAllSessions()
+            val stats = service.getStats()
 
             val items = mutableListOf<ListItem>()
-            var totalSessions = 0
-            var totalCheckpoints = 0
-
-            for (dir in agentDirs) {
-                val agentId = dir.name
-                val checkpoints = fp.getCheckpoints(agentId)
-                if (checkpoints.isEmpty()) continue
-
-                totalSessions++
-                val checkpointCount = checkpoints.size
-                totalCheckpoints += checkpointCount
-
-                items.add(ListItem.SessionHeader(agentId, checkpointCount, false))
-
-                for (cp in checkpoints.sortedByDescending { it.createdAt }) {
-                    items.add(ListItem.CheckpointItem(agentId, cp))
+            for (session in sessions) {
+                items.add(ListItem.SessionHeader(session.agentId, session.checkpoints.size, false))
+                for (cp in session.checkpoints) {
+                    items.add(ListItem.CheckpointItem(session.agentId, cp))
                 }
             }
 
@@ -108,7 +95,7 @@ class CheckpointManagerActivity : AppCompatActivity() {
                 } else {
                     tvEmpty.visibility = View.GONE
                     rvCheckpoints.visibility = View.VISIBLE
-                    tvStats.text = "$totalSessions 个会话, $totalCheckpoints 轮对话检查点"
+                    tvStats.text = "${stats.totalSessions} 个会话, ${stats.totalCheckpoints} 轮对话检查点"
                     adapter.submitList(items)
                 }
             }
@@ -128,7 +115,7 @@ class CheckpointManagerActivity : AppCompatActivity() {
             .setMessage("删除会话 $displayId 的全部检查点？")
             .setPositiveButton("删除") { _, _ ->
                 CoroutineScope(Dispatchers.IO).launch {
-                    provider?.deleteCheckpoints(agentId)
+                    checkpointService?.deleteSession(agentId)
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@CheckpointManagerActivity, "会话已清除", Toast.LENGTH_SHORT).show()
                         loadCheckpoints()
@@ -144,13 +131,13 @@ class CheckpointManagerActivity : AppCompatActivity() {
             .setTitle("清除全部")
             .setMessage("删除所有检查点？此操作不可撤销。")
             .setPositiveButton("删除") { _, _ ->
-                val snapshotDir = getExternalFilesDir("snapshots")
-                if (snapshotDir != null && snapshotDir.exists()) {
-                    snapshotDir.deleteRecursively()
-                    snapshotDir.mkdirs()
+                CoroutineScope(Dispatchers.IO).launch {
+                    checkpointService?.clearAll()
+                    withContext(Dispatchers.Main) {
+                        showEmpty()
+                        Toast.makeText(this@CheckpointManagerActivity, "已清除", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                showEmpty()
-                Toast.makeText(this, "已清除", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("取消", null)
             .show()

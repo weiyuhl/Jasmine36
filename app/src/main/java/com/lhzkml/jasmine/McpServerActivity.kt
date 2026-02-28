@@ -121,7 +121,7 @@ class McpServerActivity : AppCompatActivity() {
     private fun autoConnectAll() {
         val config = AppConfig.configRepo()
         val servers = config.getMcpServers()
-        val cache = MainActivity.mcpConnectionCache
+        val cache = AppConfig.mcpConnectionManager().getConnectionCache()
 
         servers.forEachIndexed { index, server ->
             if (server.enabled && server.url.isNotBlank()) {
@@ -164,12 +164,7 @@ class McpServerActivity : AppCompatActivity() {
                 val tools = client.listTools()
                 client.close()
 
-                // 更新全局缓存
-                MainActivity.Companion.mcpConnectionCache[server.name] = MainActivity.Companion.McpServerStatus(
-                    success = true,
-                    tools = tools
-                )
-
+                // 更新连接结果
                 withContext(Dispatchers.Main) {
                     connectionResults[index] = ConnectionResult(
                         success = true,
@@ -178,12 +173,6 @@ class McpServerActivity : AppCompatActivity() {
                     refreshList()
                 }
             } catch (e: Exception) {
-                // 更新全局缓存
-                MainActivity.Companion.mcpConnectionCache[server.name] = MainActivity.Companion.McpServerStatus(
-                    success = false,
-                    error = e.message ?: "未知错误"
-                )
-
                 withContext(Dispatchers.Main) {
                     connectionResults[index] = ConnectionResult(
                         success = false,
