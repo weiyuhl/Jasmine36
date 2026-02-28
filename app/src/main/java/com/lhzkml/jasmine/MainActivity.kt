@@ -214,26 +214,17 @@ class MainActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 val selected = BooleanArray(options.size) { false }
                 
-                // 创建自定义列表视图，使用单选按钮样式但支持多选
-                val adapter = object : android.widget.ArrayAdapter<String>(
-                    this@MainActivity,
-                    android.R.layout.simple_list_item_multiple_choice,
-                    options
-                ) {
-                    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                        val view = super.getView(position, convertView, parent) as android.widget.CheckedTextView
-                        view.isChecked = selected[position]
-                        return view
-                    }
-                }
-                
+                // 使用单选按钮样式但支持多选
                 val listView = android.widget.ListView(this@MainActivity).apply {
-                    this.adapter = adapter
+                    adapter = android.widget.ArrayAdapter(
+                        this@MainActivity,
+                        android.R.layout.select_dialog_singlechoice,
+                        options
+                    )
                     choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
-                    setPadding(dp(16), dp(8), dp(16), dp(8))
                     setOnItemClickListener { _, _, position, _ ->
                         selected[position] = !selected[position]
-                        adapter.notifyDataSetChanged()
+                        setItemChecked(position, selected[position])
                     }
                 }
                 
