@@ -227,6 +227,23 @@ class AgentPromptContextProvider(
         appendLine()
         
         appendLine("<current_context>")
+        // 系统信息
+        val os = System.getProperty("os.name") ?: "Unknown"
+        val arch = System.getProperty("os.arch") ?: "Unknown"
+        val sdkInt = try {
+            android.os.Build.VERSION.SDK_INT
+        } catch (_: Exception) { -1 }
+        val device = try {
+            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+        } catch (_: Exception) { "Unknown" }
+        appendLine("System: Android $sdkInt ($os $arch)")
+        appendLine("Device: $device")
+        
+        // 当前时间
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm (EEEE)", java.util.Locale.getDefault())
+        appendLine("Current time: ${sdf.format(java.util.Date())}")
+        
+        // 工作区路径
         if (workspacePath.isNotEmpty()) {
             appendLine("Workspace: $workspacePath")
         }
