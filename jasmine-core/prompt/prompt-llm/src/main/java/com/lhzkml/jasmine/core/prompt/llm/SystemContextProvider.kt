@@ -223,28 +223,31 @@ class AgentPromptContextProvider(
         appendLine()
         
         appendLine("<current_date_and_time>")
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm (EEEE)", java.util.Locale.getDefault())
-        appendLine("${sdf.format(java.util.Date())}")
+        appendLine("Date: ${java.text.SimpleDateFormat("MMMM dd, yyyy", java.util.Locale.ENGLISH).format(java.util.Date())}")
+        appendLine("Day of Week: ${java.text.SimpleDateFormat("EEEE", java.util.Locale.ENGLISH).format(java.util.Date())}")
+        appendLine()
+        appendLine("Use this carefully for any queries involving date, time, or ranges. Pay close attention to the year when considering if dates are in the past or future. For example, November 2024 is before February 2025.")
         appendLine("</current_date_and_time>")
         appendLine()
         
         appendLine("<system_information>")
-        val os = System.getProperty("os.name") ?: "Unknown"
-        val arch = System.getProperty("os.arch") ?: "Unknown"
         val sdkInt = try {
             android.os.Build.VERSION.SDK_INT
         } catch (_: Exception) { -1 }
         appendLine("Operating System: Android")
         appendLine("Platform: Android $sdkInt")
-        appendLine("Architecture: $arch")
-        if (workspacePath.isNotEmpty()) {
-            appendLine("Workspace: $workspacePath")
-        }
+        appendLine("Shell: sh")
         appendLine("</system_information>")
         appendLine()
         
+        appendLine("<model_information>")
+        appendLine("Name: [Model Name]")
+        appendLine("Description: [Model Description]")
+        appendLine("</model_information>")
+        appendLine()
+        
         appendLine("<platform_specific_command_guidelines>")
-        appendLine("Commands MUST be adapted to Android system with limited shell environment.")
+        appendLine("Commands MUST be adapted to Android system running with sh shell.")
         appendLine()
         appendLine("<android_shell_command_examples>")
         appendLine("- List files: ls")
