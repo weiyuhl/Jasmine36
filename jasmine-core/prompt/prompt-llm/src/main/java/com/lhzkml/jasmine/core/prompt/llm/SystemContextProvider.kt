@@ -219,14 +219,6 @@ class AgentPromptContextProvider(
         appendLine("</rules>")
         appendLine()
         
-        appendLine("<long_running_commands_warning>")
-        appendLine("- NEVER use shell commands for long-running processes like development servers, build watchers, or interactive applications")
-        appendLine("- Commands that block execution and cause issues should be avoided")
-        appendLine("- Instead, recommend that users run these commands manually in their terminal")
-        appendLine("- If you need to start a long-running process, explain to the user that they should run it manually and provide the exact command")
-        appendLine("</long_running_commands_warning>")
-        appendLine()
-        
         appendLine("<goal>")
         appendLine("- Execute the user goal using the provided tools, in as few steps as possible, be sure to check your work. The user can always ask you to do additional work later, but may be frustrated if you take a long time.")
         appendLine("- You can communicate directly with the user.")
