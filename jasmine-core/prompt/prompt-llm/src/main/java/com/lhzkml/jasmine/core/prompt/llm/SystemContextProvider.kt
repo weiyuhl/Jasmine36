@@ -222,24 +222,46 @@ class AgentPromptContextProvider(
         appendLine("</long_running_commands_warning>")
         appendLine()
         
-        appendLine("<current_context>")
-        // 系统信息
+        appendLine("<current_date_and_time>")
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm (EEEE)", java.util.Locale.getDefault())
+        appendLine("${sdf.format(java.util.Date())}")
+        appendLine("</current_date_and_time>")
+        appendLine()
+        
+        appendLine("<system_information>")
         val os = System.getProperty("os.name") ?: "Unknown"
         val arch = System.getProperty("os.arch") ?: "Unknown"
         val sdkInt = try {
             android.os.Build.VERSION.SDK_INT
         } catch (_: Exception) { -1 }
-        appendLine("System: Android $sdkInt ($os $arch)")
-        
-        // 当前时间
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm (EEEE)", java.util.Locale.getDefault())
-        appendLine("Current time: ${sdf.format(java.util.Date())}")
-        
-        // 工作区路径
+        appendLine("Operating System: Android")
+        appendLine("Platform: Android $sdkInt")
+        appendLine("Architecture: $arch")
         if (workspacePath.isNotEmpty()) {
             appendLine("Workspace: $workspacePath")
         }
-        appendLine("</current_context>")
+        appendLine("</system_information>")
+        appendLine()
+        
+        appendLine("<platform_specific_command_guidelines>")
+        appendLine("Commands MUST be adapted to Android system with limited shell environment.")
+        appendLine()
+        appendLine("<android_shell_command_examples>")
+        appendLine("- List files: ls")
+        appendLine("- List files with details: ls -la")
+        appendLine("- View file content: cat file.txt")
+        appendLine("- Find files: find . -name \"*.txt\"")
+        appendLine("- Search in files: grep \"pattern\" file.txt")
+        appendLine("- Current directory: pwd")
+        appendLine("- Create directory: mkdir dirname")
+        appendLine("- Remove file: rm file.txt")
+        appendLine("- Remove directory: rm -r dirname")
+        appendLine("- Copy file: cp source.txt dest.txt")
+        appendLine("- Move/rename: mv old.txt new.txt")
+        appendLine("- Echo text: echo \"hello\"")
+        appendLine("- Command chaining: Use && or ; to chain commands")
+        appendLine("</android_shell_command_examples>")
+        appendLine("</platform_specific_command_guidelines>")
         appendLine()
         
         appendLine("<goal>")
