@@ -221,10 +221,9 @@ class AgentPromptContextProvider(
         
         appendLine("<long_running_commands_warning>")
         appendLine("- NEVER use shell commands for long-running processes like development servers, build watchers, or interactive applications")
-        appendLine("- Commands like \"npm run dev\", \"yarn start\", \"webpack --watch\", \"jest --watch\", or text editors will block execution and cause issues")
+        appendLine("- Commands that block execution and cause issues should be avoided")
         appendLine("- Instead, recommend that users run these commands manually in their terminal")
-        appendLine("- For test commands, suggest using --run flag (e.g., \"vitest --run\") for single execution instead of watch mode")
-        appendLine("- If you need to start a development server or watcher, explain to the user that they should run it manually and provide the exact command")
+        appendLine("- If you need to start a long-running process, explain to the user that they should run it manually and provide the exact command")
         appendLine("</long_running_commands_warning>")
         appendLine()
         
