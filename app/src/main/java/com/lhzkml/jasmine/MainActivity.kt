@@ -187,10 +187,18 @@ class MainActivity : AppCompatActivity() {
         toolRegistryBuilder.singleSelectHandler = { question, options ->
             val deferred = CompletableDeferred<String>()
             withContext(Dispatchers.Main) {
+                var selectedIndex = -1
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle(question)
-                    .setItems(options.toTypedArray()) { _, which ->
-                        deferred.complete(options[which])
+                    .setSingleChoiceItems(options.toTypedArray(), -1) { _, which ->
+                        selectedIndex = which
+                    }
+                    .setPositiveButton("确定") { _, _ ->
+                        if (selectedIndex >= 0) {
+                            deferred.complete(options[selectedIndex])
+                        } else {
+                            deferred.complete("(未选择)")
+                        }
                     }
                     .setNegativeButton("取消") { _, _ ->
                         deferred.complete("(用户取消)")
