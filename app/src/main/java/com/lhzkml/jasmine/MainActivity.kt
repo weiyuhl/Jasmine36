@@ -213,24 +213,17 @@ class MainActivity : AppCompatActivity() {
             val deferred = CompletableDeferred<List<String>>()
             withContext(Dispatchers.Main) {
                 val selected = BooleanArray(options.size) { false }
+                var dialog: AlertDialog? = null
                 
-                // 使用单选按钮样式但支持多选
-                val listView = android.widget.ListView(this@MainActivity).apply {
-                    adapter = android.widget.ArrayAdapter(
-                        this@MainActivity,
-                        android.R.layout.select_dialog_singlechoice,
-                        options
-                    )
-                    choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
-                    setOnItemClickListener { _, _, position, _ ->
-                        selected[position] = !selected[position]
-                        setItemChecked(position, selected[position])
-                    }
-                }
-                
-                AlertDialog.Builder(this@MainActivity)
+                // 使用单选样式但支持多选
+                val builder = AlertDialog.Builder(this@MainActivity)
                     .setTitle(question)
-                    .setView(listView)
+                    .setSingleChoiceItems(options.toTypedArray(), -1) { _, which ->
+                        // 切换选中状态
+                        selected[which] = !selected[which]
+                        // 刷新列表以显示多选状态
+                        dialog?.listView?.setItemChecked(which, selected[which])
+                    }
                     .setPositiveButton("确定") { _, _ ->
                         val result = options.filterIndexed { index, _ -> selected[index] }
                         deferred.complete(result.ifEmpty { listOf("(未选择)") })
@@ -239,7 +232,12 @@ class MainActivity : AppCompatActivity() {
                         deferred.complete(listOf("(用户取消)"))
                     }
                     .setCancelable(false)
-                    .show()
+                
+                dialog = builder.create()
+                dialog.show()
+                
+                // 设置为多选模式
+                dialog.listView?.choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
             }
             deferred.await()
         }
