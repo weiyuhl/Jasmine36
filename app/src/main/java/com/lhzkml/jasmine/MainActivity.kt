@@ -188,8 +188,7 @@ class MainActivity : AppCompatActivity() {
             val deferred = CompletableDeferred<String>()
             withContext(Dispatchers.Main) {
                 AlertDialog.Builder(this@MainActivity)
-                    .setTitle("AI 询问")
-                    .setMessage(question)
+                    .setTitle(question)
                     .setItems(options.toTypedArray()) { _, which ->
                         deferred.complete(options[which])
                     }
@@ -207,8 +206,7 @@ class MainActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 val selected = BooleanArray(options.size) { false }
                 AlertDialog.Builder(this@MainActivity)
-                    .setTitle("AI 询问")
-                    .setMessage(question)
+                    .setTitle(question)
                     .setMultiChoiceItems(options.toTypedArray(), selected) { _, which, isChecked ->
                         selected[which] = isChecked
                     }
