@@ -226,6 +226,13 @@ class AgentPromptContextProvider(
         appendLine("</long_running_commands_warning>")
         appendLine()
         
+        appendLine("<current_context>")
+        if (workspacePath.isNotEmpty()) {
+            appendLine("Workspace: $workspacePath")
+        }
+        appendLine("</current_context>")
+        appendLine()
+        
         appendLine("<goal>")
         appendLine("- Execute the user goal using the provided tools, in as few steps as possible, be sure to check your work. The user can always ask you to do additional work later, but may be frustrated if you take a long time.")
         appendLine("- You can communicate directly with the user.")
