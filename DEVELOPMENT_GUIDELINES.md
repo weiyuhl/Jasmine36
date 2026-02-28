@@ -14,8 +14,7 @@ Jasmine/
 │   │   └── prompt-executor/      # ChatClient 工厂、路由
 │   ├── agent/
 │   │   ├── agent-tools/          # 工具注册、ToolExecutor（Agent Loop）
-│   │   ├── agent-runtime/        # Agent 运行时、图策略
-│   │   └── agent-dex/            # 动态插件加载
+│   │   └── agent-runtime/        # Agent 运行时、图策略
 │   ├── conversation/
 │   │   └── conversation-storage/ # Room 数据库、DAO
 │   └── config/

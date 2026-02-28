@@ -152,7 +152,6 @@
 |------|-------------|------|
 | 图执行引擎 | graph/ (GraphAgent/AgentNode/AgentEdge/AgentSubgraph) | 独立的 DAG 执行引擎 |
 | GOAP 规划器 | planner/GOAPPlanner | 目标导向行动规划 |
-| DEX/APK 编辑 | agent-dex/ (38 个工具) | Android 逆向工程工具集 |
 | 移动端本地工具 | 17 个文件工具 + Shell + 计算器 + 时间 + 压缩 | 面向移动端的本地工具 |
 | 分类事件系统 | event/ (7 个事件类别) | 细粒度事件分类和过滤 |
 | 结构化追踪 | trace/ (TraceEvent 20+ 事件类型) | 比 langchain4j 更完整的追踪 |

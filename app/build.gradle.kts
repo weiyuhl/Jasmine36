@@ -51,7 +51,6 @@ dependencies {
     implementation(project(":jasmine-core:agent:agent-planner"))
     implementation(project(":jasmine-core:agent:agent-mcp"))
     implementation(project(":jasmine-core:agent:agent-runtime"))
-    implementation(project(":jasmine-core:agent:agent-dex"))
     implementation(project(":jasmine-core:config:config-manager"))
 
     // Coroutines（UI 层需要协程来调用框架）

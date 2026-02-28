@@ -30,8 +30,7 @@ jasmine-core/agent/
 ├── agent-mcp/        # 新建：MCP 协议客户端
 ├── agent-planner/    # 新建：规划算法（GOAP、LLM Planner）
 ├── agent-observe/    # 新建：trace + snapshot + event
-├── agent-runtime/    # 已有，不动
-└── agent-dex/        # 已有，不动
+└── agent-runtime/    # 已有，不动
 ```
 
 ## feature 归属问题
@@ -88,7 +87,6 @@ agent-planner  → agent-graph（planner 引用 AgentGraphContext）
 agent-mcp      → agent-tools, ktor（mcp 引用 Tool 接口 + HTTP 客户端）
 agent-a2a      → ktor, kotlinx-serialization（a2a 是独立协议，不依赖其他 agent 模块）
 agent-runtime  → agent-graph, agent-planner, agent-mcp, agent-observe, config-manager
-agent-dex      → agent-tools（保持不变）
 config-manager → agent-tools, agent-observe, prompt-executor（需要 ShellPolicy + TraceEventCategory + EventCategory + RollbackStrategy）
 ```
 
