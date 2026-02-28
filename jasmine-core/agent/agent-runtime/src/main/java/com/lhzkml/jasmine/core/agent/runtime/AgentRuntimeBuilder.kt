@@ -157,7 +157,7 @@ class AgentRuntimeBuilder(private val configRepo: ConfigRepository) {
     ): SystemContextCollector {
         val collector = SystemContextCollector()
 
-        // Agent 模式：注入结构化行为指引
+        // Agent 模式：注入结构化行为指引（包含系统信息、时间、工作区）
         if (isAgentMode) {
             collector.register(AgentPromptContextProvider(
                 agentName = agentName,
@@ -165,16 +165,16 @@ class AgentRuntimeBuilder(private val configRepo: ConfigRepository) {
             ))
         }
 
-        // Agent 模式：注入工作区路径
+        // Agent 模式：注入工作区路径说明
         if (isAgentMode && workspacePath.isNotEmpty()) {
             collector.register(WorkspaceContextProvider(workspacePath))
         }
 
-        // 系统信息
-        collector.register(SystemInfoContextProvider())
-
-        // 当前时间
-        collector.register(CurrentTimeContextProvider())
+        // 非 Agent 模式：单独注入系统信息和时间
+        if (!isAgentMode) {
+            collector.register(SystemInfoContextProvider())
+            collector.register(CurrentTimeContextProvider())
+        }
 
         return collector
     }

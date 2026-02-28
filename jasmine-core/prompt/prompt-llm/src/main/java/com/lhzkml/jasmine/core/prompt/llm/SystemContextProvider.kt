@@ -233,11 +233,7 @@ class AgentPromptContextProvider(
         val sdkInt = try {
             android.os.Build.VERSION.SDK_INT
         } catch (_: Exception) { -1 }
-        val device = try {
-            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
-        } catch (_: Exception) { "Unknown" }
         appendLine("System: Android $sdkInt ($os $arch)")
-        appendLine("Device: $device")
         
         // 当前时间
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm (EEEE)", java.util.Locale.getDefault())
