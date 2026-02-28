@@ -117,10 +117,14 @@ class CurrentTimeContextProvider : SystemContextProvider {
  *
  * @param agentName Agent 名称
  * @param workspacePath 工作区路径
+ * @param modelName 当前使用的模型名称
+ * @param modelDescription 模型描述（可选）
  */
 class AgentPromptContextProvider(
     private val agentName: String = "Jasmine",
-    private val workspacePath: String = ""
+    private val workspacePath: String = "",
+    private val modelName: String = "",
+    private val modelDescription: String = ""
 ) : SystemContextProvider {
 
     override val name = "agent_prompt"
@@ -241,8 +245,15 @@ class AgentPromptContextProvider(
         appendLine()
         
         appendLine("<model_information>")
-        appendLine("Name: [Model Name]")
-        appendLine("Description: [Model Description]")
+        if (modelName.isNotEmpty()) {
+            appendLine("Name: $modelName")
+            if (modelDescription.isNotEmpty()) {
+                appendLine("Description: $modelDescription")
+            }
+        } else {
+            appendLine("Name: [Model Name]")
+            appendLine("Description: [Model Description]")
+        }
         appendLine("</model_information>")
         appendLine()
         

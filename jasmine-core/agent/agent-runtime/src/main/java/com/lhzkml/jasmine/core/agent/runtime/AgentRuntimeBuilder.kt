@@ -148,12 +148,16 @@ class AgentRuntimeBuilder(private val configRepo: ConfigRepository) {
      * @param isAgentMode 是否为 Agent 模式
      * @param workspacePath 工作区路径
      * @param agentName Agent 名称
+     * @param modelName 当前使用的模型名称
+     * @param modelDescription 模型描述（可选）
      * @return 配置好的 SystemContextCollector
      */
     fun buildSystemContext(
         isAgentMode: Boolean,
         workspacePath: String = "",
-        agentName: String = "Jasmine"
+        agentName: String = "Jasmine",
+        modelName: String = "",
+        modelDescription: String = ""
     ): SystemContextCollector {
         val collector = SystemContextCollector()
 
@@ -161,7 +165,9 @@ class AgentRuntimeBuilder(private val configRepo: ConfigRepository) {
         if (isAgentMode) {
             collector.register(AgentPromptContextProvider(
                 agentName = agentName,
-                workspacePath = workspacePath
+                workspacePath = workspacePath,
+                modelName = modelName,
+                modelDescription = modelDescription
             ))
         }
 

@@ -137,7 +137,20 @@ class MainActivity : AppCompatActivity() {
     private fun refreshContextCollector() {
         val isAgent = ProviderManager.isAgentMode(this)
         val wsPath = ProviderManager.getWorkspacePath(this)
-        contextCollector = runtimeBuilder.buildSystemContext(isAgent, wsPath)
+        
+        // 获取当前模型信息
+        val activeId = ProviderManager.getActiveId()
+        val modelName = if (activeId != null) {
+            overrideModel ?: ProviderManager.getModel(this, activeId)
+        } else {
+            ""
+        }
+        
+        contextCollector = runtimeBuilder.buildSystemContext(
+            isAgentMode = isAgent,
+            workspacePath = wsPath,
+            modelName = modelName
+        )
     }
 
     /**
