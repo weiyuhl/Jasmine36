@@ -37,6 +37,13 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
     var brightDataKey: String = ""
 
     /**
+     * 用户交互工具回调
+     * 由 app 层提供实现
+     */
+    var sayToUserHandler: ((String) -> Unit)? = null
+    var askUserHandler: (suspend (String) -> String)? = null
+
+    /**
      * 构建工具注册表
      *
      * @param isAgentMode 是否为 Agent 模式
@@ -127,6 +134,20 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
 
             // Agent 显式完成工具
             if (isEnabled("attempt_completion")) register(AttemptCompletionTool)
+
+            // 用户交互工具
+            if (isEnabled("user_interaction")) {
+                // SayToUser - 向用户显示消息
+                if (sayToUserHandler != null) {
+                    register(SayToUserTool(sayToUserHandler!!))
+                }
+                // AskUser - 询问用户输入
+                if (askUserHandler != null) {
+                    register(AskUserTool(askUserHandler!!))
+                }
+                // Exit - 结束对话
+                register(ExitTool)
+            }
         }
     }
 }
