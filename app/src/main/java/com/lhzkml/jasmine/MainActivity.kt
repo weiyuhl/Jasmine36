@@ -183,6 +183,134 @@ class MainActivity : AppCompatActivity() {
             }
             deferred.await()
         }
+        
+        toolRegistryBuilder.singleSelectHandler = { question, options ->
+            val deferred = CompletableDeferred<String>()
+            withContext(Dispatchers.Main) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("AI 询问")
+                    .setMessage(question)
+                    .setItems(options.toTypedArray()) { _, which ->
+                        deferred.complete(options[which])
+                    }
+                    .setNegativeButton("取消") { _, _ ->
+                        deferred.complete("(用户取消)")
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+            deferred.await()
+        }
+        
+        toolRegistryBuilder.multiSelectHandler = { question, options ->
+            val deferred = CompletableDeferred<List<String>>()
+            withContext(Dispatchers.Main) {
+                val selected = BooleanArray(options.size) { false }
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("AI 询问")
+                    .setMessage(question)
+                    .setMultiChoiceItems(options.toTypedArray(), selected) { _, which, isChecked ->
+                        selected[which] = isChecked
+                    }
+                    .setPositiveButton("确定") { _, _ ->
+                        val result = options.filterIndexed { index, _ -> selected[index] }
+                        deferred.complete(result.ifEmpty { listOf("(未选择)") })
+                    }
+                    .setNegativeButton("取消") { _, _ ->
+                        deferred.complete(listOf("(用户取消)"))
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+            deferred.await()
+        }
+        
+        toolRegistryBuilder.rankPrioritiesHandler = { question, items ->
+            val deferred = CompletableDeferred<List<String>>()
+            withContext(Dispatchers.Main) {
+                val ranked = items.toMutableList()
+                val adapter = android.widget.ArrayAdapter(
+                    this@MainActivity,
+                    android.R.layout.simple_list_item_1,
+                    ranked
+                )
+                val listView = android.widget.ListView(this@MainActivity).apply {
+                    this.adapter = adapter
+                    setPadding(dp(16), dp(8), dp(16), dp(8))
+                }
+                
+                // 简单实现：点击项目上移
+                listView.setOnItemClickListener { _, _, position, _ ->
+                    if (position > 0) {
+                        val item = ranked.removeAt(position)
+                        ranked.add(position - 1, item)
+                        adapter.notifyDataSetChanged()
+                    }
+                }
+                
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("AI 询问 - 排序优先级")
+                    .setMessage("$question\n\n点击项目向上移动")
+                    .setView(listView)
+                    .setPositiveButton("确定") { _, _ ->
+                        deferred.complete(ranked)
+                    }
+                    .setNegativeButton("取消") { _, _ ->
+                        deferred.complete(items)
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+            deferred.await()
+        }
+        
+        toolRegistryBuilder.askMultipleQuestionsHandler = { questions ->
+            val deferred = CompletableDeferred<List<String>>()
+            withContext(Dispatchers.Main) {
+                val answers = mutableListOf<String>()
+                val inputs = questions.map { question ->
+                    val layout = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(16), dp(8), dp(16), dp(8))
+                    }
+                    val label = TextView(this@MainActivity).apply {
+                        text = question
+                        setPadding(0, 0, 0, dp(8))
+                    }
+                    val input = EditText(this@MainActivity).apply {
+                        hint = "请输入回复"
+                    }
+                    layout.addView(label)
+                    layout.addView(input)
+                    layout to input
+                }
+                
+                val scrollView = ScrollView(this@MainActivity).apply {
+                    val container = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        inputs.forEach { (layout, _) -> addView(layout) }
+                    }
+                    addView(container)
+                }
+                
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("AI 询问 (${questions.size} 个问题)")
+                    .setView(scrollView)
+                    .setPositiveButton("发送") { _, _ ->
+                        inputs.forEach { (_, input) ->
+                            answers.add(input.text.toString().trim().ifEmpty { "(无回复)" })
+                        }
+                        deferred.complete(answers)
+                    }
+                    .setNegativeButton("取消") { _, _ ->
+                        deferred.complete(List(questions.size) { "(用户取消)" })
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+            deferred.await()
+        }
+        
         return toolRegistryBuilder.build(ProviderManager.isAgentMode(this))
     }
 

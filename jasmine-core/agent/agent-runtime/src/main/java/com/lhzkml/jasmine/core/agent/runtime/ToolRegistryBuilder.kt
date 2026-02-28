@@ -41,6 +41,10 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
      * 由 app 层提供实现
      */
     var askUserHandler: (suspend (String) -> String)? = null
+    var singleSelectHandler: (suspend (String, List<String>) -> String)? = null
+    var multiSelectHandler: (suspend (String, List<String>) -> List<String>)? = null
+    var rankPrioritiesHandler: (suspend (String, List<String>) -> List<String>)? = null
+    var askMultipleQuestionsHandler: (suspend (List<String>) -> List<String>)? = null
 
     /**
      * 构建工具注册表
@@ -139,6 +143,22 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
                 // AskUser - 询问用户输入
                 if (askUserHandler != null) {
                     register(AskUserTool(askUserHandler!!))
+                }
+                // SingleSelect - 单选
+                if (singleSelectHandler != null) {
+                    register(SingleSelectTool(singleSelectHandler!!))
+                }
+                // MultiSelect - 多选
+                if (multiSelectHandler != null) {
+                    register(MultiSelectTool(multiSelectHandler!!))
+                }
+                // RankPriorities - 排序
+                if (rankPrioritiesHandler != null) {
+                    register(RankPrioritiesTool(rankPrioritiesHandler!!))
+                }
+                // AskMultipleQuestions - 多问题
+                if (askMultipleQuestionsHandler != null) {
+                    register(AskMultipleQuestionsTool(askMultipleQuestionsHandler!!))
                 }
             }
         }
