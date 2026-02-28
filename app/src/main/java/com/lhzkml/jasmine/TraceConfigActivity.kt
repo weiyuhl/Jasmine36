@@ -6,7 +6,7 @@ import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import android.widget.TextView
-import com.lhzkml.jasmine.core.agent.tools.trace.TraceEventCategory
+import com.lhzkml.jasmine.core.agent.observe.trace.TraceEventCategory
 
 /**
  * 追踪配置界面

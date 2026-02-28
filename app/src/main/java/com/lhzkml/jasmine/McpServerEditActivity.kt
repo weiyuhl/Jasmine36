@@ -9,8 +9,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
-import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
-import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
+import com.lhzkml.jasmine.core.agent.mcp.HttpMcpClient
+import com.lhzkml.jasmine.core.agent.mcp.SseMcpClient
 import com.lhzkml.jasmine.core.config.McpTransportType
 import com.lhzkml.jasmine.core.config.McpServerConfig
 import kotlinx.coroutines.CoroutineScope

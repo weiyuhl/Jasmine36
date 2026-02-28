@@ -13,9 +13,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolDefinition
-import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
+import com.lhzkml.jasmine.core.agent.mcp.HttpMcpClient
+import com.lhzkml.jasmine.core.agent.mcp.McpToolDefinition
+import com.lhzkml.jasmine.core.agent.mcp.SseMcpClient
 import com.lhzkml.jasmine.core.config.McpServerConfig
 import com.lhzkml.jasmine.core.config.McpTransportType
 import kotlinx.coroutines.CoroutineScope

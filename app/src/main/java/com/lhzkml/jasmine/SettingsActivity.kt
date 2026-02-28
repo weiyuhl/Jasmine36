@@ -451,9 +451,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         val autoStr = if (auto) "自动检查点" else "手动检查点"
         val rollbackName = when (rollback) {
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE -> "从节点重启"
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.SKIP_NODE -> "跳过节点"
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> "默认输出"
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.RESTART_FROM_NODE -> "从节点重启"
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.SKIP_NODE -> "跳过节点"
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> "默认输出"
         }
         tvSnapshotInfo.text = "$storageName · $autoStr · $rollbackName"
     }

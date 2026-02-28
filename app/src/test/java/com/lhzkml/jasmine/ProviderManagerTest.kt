@@ -10,9 +10,9 @@ import com.lhzkml.jasmine.core.config.ToolSelectionStrategyType
 import com.lhzkml.jasmine.core.config.ToolChoiceMode
 import com.lhzkml.jasmine.core.config.SnapshotStorageType
 import com.lhzkml.jasmine.core.agent.tools.ShellPolicy
-import com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy
-import com.lhzkml.jasmine.core.agent.tools.trace.TraceEventCategory
-import com.lhzkml.jasmine.core.agent.tools.event.EventCategory
+import com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy
+import com.lhzkml.jasmine.core.agent.observe.trace.TraceEventCategory
+import com.lhzkml.jasmine.core.agent.observe.event.EventCategory
 import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
 import org.junit.Assert.*
 import org.junit.Test

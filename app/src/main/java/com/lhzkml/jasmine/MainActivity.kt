@@ -44,19 +44,19 @@ import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.conversation.storage.TimedMessage
 import com.lhzkml.jasmine.core.agent.tools.*
-import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMPlanner
-import com.lhzkml.jasmine.core.agent.tools.planner.SimpleLLMWithCriticPlanner
-import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
-import com.lhzkml.jasmine.core.agent.tools.graph.GenericAgentEnvironment
-import com.lhzkml.jasmine.core.agent.tools.graph.GraphAgent
-import com.lhzkml.jasmine.core.agent.tools.graph.PredefinedStrategies
-import com.lhzkml.jasmine.core.agent.tools.graph.ToolCalls
-import com.lhzkml.jasmine.core.agent.tools.graph.ToolSelectionStrategy
-import com.lhzkml.jasmine.core.agent.tools.event.EventHandler
-import com.lhzkml.jasmine.core.agent.tools.event.*
-import com.lhzkml.jasmine.core.agent.tools.snapshot.Persistence
-import com.lhzkml.jasmine.core.agent.tools.snapshot.AgentCheckpoint
-import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
+import com.lhzkml.jasmine.core.agent.planner.SimpleLLMPlanner
+import com.lhzkml.jasmine.core.agent.planner.SimpleLLMWithCriticPlanner
+import com.lhzkml.jasmine.core.agent.graph.graph.AgentGraphContext
+import com.lhzkml.jasmine.core.agent.graph.graph.GenericAgentEnvironment
+import com.lhzkml.jasmine.core.agent.graph.graph.GraphAgent
+import com.lhzkml.jasmine.core.agent.graph.graph.PredefinedStrategies
+import com.lhzkml.jasmine.core.agent.graph.graph.ToolCalls
+import com.lhzkml.jasmine.core.agent.graph.graph.ToolSelectionStrategy
+import com.lhzkml.jasmine.core.agent.observe.event.EventHandler
+import com.lhzkml.jasmine.core.agent.observe.event.*
+import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
+import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
+import com.lhzkml.jasmine.core.agent.observe.trace.Tracing
 import com.lhzkml.jasmine.core.config.ActiveProviderConfig
 import com.lhzkml.jasmine.core.agent.runtime.AgentRuntimeBuilder
 import com.lhzkml.jasmine.core.agent.runtime.CompressionStrategyBuilder
@@ -1356,9 +1356,9 @@ class MainActivity : AppCompatActivity() {
 
         val rollbackStrategy = ProviderManager.getSnapshotRollbackStrategy(this@MainActivity)
         val strategyName = when (rollbackStrategy) {
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE -> "重新执行"
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.SKIP_NODE -> "仅恢复上下文"
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> "使用默认输出"
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.RESTART_FROM_NODE -> "重新执行"
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.SKIP_NODE -> "仅恢复上下文"
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> "使用默认输出"
         }
 
         val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
@@ -1402,12 +1402,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         when (rollbackStrategy) {
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.RESTART_FROM_NODE -> {
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.RESTART_FROM_NODE -> {
                 withContext(Dispatchers.Main) {
                     sendMessage(originalMessage)
                 }
             }
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.SKIP_NODE -> {
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.SKIP_NODE -> {
                 val skipLine = "[Snapshot] 已恢复到该轮对话状态，可继续发送新消息。\n"
                 agentLogBuilder.append(skipLine)
                 withContext(Dispatchers.Main) {
@@ -1419,7 +1419,7 @@ class MainActivity : AppCompatActivity() {
                     conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
                 }
             }
-            com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> {
+            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> {
                 val defaultReply = "抱歉，之前的处理过程中遇到了问题。已恢复到 [${selectedCheckpoint.nodePath}]。请重新描述您的需求。"
                 val assistantMsg = ChatMessage.assistant(defaultReply)
                 messageHistory.add(assistantMsg)

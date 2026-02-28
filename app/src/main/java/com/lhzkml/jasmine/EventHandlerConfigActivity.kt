@@ -7,7 +7,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
-import com.lhzkml.jasmine.core.agent.tools.event.EventCategory
+import com.lhzkml.jasmine.core.agent.observe.event.EventCategory
 
 class EventHandlerConfigActivity : AppCompatActivity() {
 

@@ -23,6 +23,7 @@ android {
 dependencies {
     api(project(":jasmine-core:prompt:prompt-executor"))
     api(project(":jasmine-core:agent:agent-tools"))
+    api(project(":jasmine-core:agent:agent-observe"))
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
 }

@@ -9,7 +9,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
-import com.lhzkml.jasmine.core.agent.tools.snapshot.RollbackStrategy
+import com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy
 import com.lhzkml.jasmine.core.config.SnapshotStorageType
 
 class SnapshotConfigActivity : AppCompatActivity() {

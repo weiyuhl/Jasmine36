@@ -1,8 +1,8 @@
 package com.lhzkml.jasmine.core.agent.tools
 
-import com.lhzkml.jasmine.core.agent.tools.trace.TraceError
-import com.lhzkml.jasmine.core.agent.tools.trace.TraceEvent
-import com.lhzkml.jasmine.core.agent.tools.trace.Tracing
+import com.lhzkml.jasmine.core.agent.observe.trace.TraceError
+import com.lhzkml.jasmine.core.agent.observe.trace.TraceEvent
+import com.lhzkml.jasmine.core.agent.observe.trace.Tracing
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
 import com.lhzkml.jasmine.core.prompt.llm.LLMWriteSession

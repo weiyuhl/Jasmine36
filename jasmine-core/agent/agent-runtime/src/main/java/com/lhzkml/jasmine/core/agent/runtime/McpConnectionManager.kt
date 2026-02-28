@@ -1,12 +1,12 @@
 package com.lhzkml.jasmine.core.agent.runtime
 
 import com.lhzkml.jasmine.core.agent.tools.ToolRegistry
-import com.lhzkml.jasmine.core.agent.tools.mcp.HttpMcpClient
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpClient
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolAdapter
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolDefinition
-import com.lhzkml.jasmine.core.agent.tools.mcp.McpToolRegistryProvider
-import com.lhzkml.jasmine.core.agent.tools.mcp.SseMcpClient
+import com.lhzkml.jasmine.core.agent.mcp.HttpMcpClient
+import com.lhzkml.jasmine.core.agent.mcp.McpClient
+import com.lhzkml.jasmine.core.agent.mcp.McpToolAdapter
+import com.lhzkml.jasmine.core.agent.mcp.McpToolDefinition
+import com.lhzkml.jasmine.core.agent.mcp.McpToolRegistryProvider
+import com.lhzkml.jasmine.core.agent.mcp.SseMcpClient
 import com.lhzkml.jasmine.core.config.ConfigRepository
 import com.lhzkml.jasmine.core.config.McpServerConfig
 import com.lhzkml.jasmine.core.config.McpTransportType

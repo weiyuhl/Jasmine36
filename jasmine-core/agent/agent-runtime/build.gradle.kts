@@ -22,6 +22,10 @@ android {
 
 dependencies {
     api(project(":jasmine-core:agent:agent-tools"))
+    api(project(":jasmine-core:agent:agent-observe"))
+    api(project(":jasmine-core:agent:agent-graph"))
+    api(project(":jasmine-core:agent:agent-planner"))
+    api(project(":jasmine-core:agent:agent-mcp"))
     api(project(":jasmine-core:config:config-manager"))
     api(project(":jasmine-core:conversation:conversation-storage"))
     implementation(libs.kotlinx.coroutines.core)

@@ -1,8 +1,8 @@
 package com.lhzkml.jasmine.core.agent.runtime
 
-import com.lhzkml.jasmine.core.agent.tools.snapshot.AgentCheckpoint
-import com.lhzkml.jasmine.core.agent.tools.snapshot.FilePersistenceStorageProvider
-import com.lhzkml.jasmine.core.agent.tools.snapshot.Persistence
+import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
+import com.lhzkml.jasmine.core.agent.observe.snapshot.FilePersistenceStorageProvider
+import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import java.io.File
 

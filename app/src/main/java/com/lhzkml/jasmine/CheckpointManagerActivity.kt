@@ -13,7 +13,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.lhzkml.jasmine.core.agent.tools.snapshot.AgentCheckpoint
+import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.runtime.CheckpointService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
