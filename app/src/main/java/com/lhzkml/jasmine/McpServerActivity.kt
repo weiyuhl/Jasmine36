@@ -13,9 +13,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.lhzkml.jasmine.core.agent.mcp.HttpMcpClient
 import com.lhzkml.jasmine.core.agent.mcp.McpToolDefinition
-import com.lhzkml.jasmine.core.agent.mcp.SseMcpClient
+import com.lhzkml.jasmine.core.agent.runtime.McpConnectionManager
 import com.lhzkml.jasmine.core.config.McpServerConfig
 import com.lhzkml.jasmine.core.config.McpTransportType
 import kotlinx.coroutines.CoroutineScope
@@ -105,7 +104,13 @@ class McpServerActivity : AppCompatActivity() {
         if (requestCode == REQUEST_EDIT && resultCode == RESULT_OK) {
             connectionResults.clear()
             refreshList()
-            autoConnectAll()
+            // 配置变更，通过全局 McpConnectionManager 重新连接
+            CoroutineScope(Dispatchers.IO).launch {
+                AppConfig.mcpConnectionManager().reconnect()
+                withContext(Dispatchers.Main) {
+                    syncFromGlobalCache()
+                }
+            }
         }
     }
 
@@ -117,15 +122,17 @@ class McpServerActivity : AppCompatActivity() {
         rvServers.visibility = if (servers.isEmpty()) View.GONE else View.VISIBLE
     }
 
-    /** 自动连接所有启用的服务器（跳过已有缓存的） */
+    /** 自动连接所有启用的服务器（复用全局 McpConnectionManager） */
     private fun autoConnectAll() {
         val config = AppConfig.configRepo()
         val servers = config.getMcpServers()
-        val cache = AppConfig.mcpConnectionManager().getConnectionCache()
+        val manager = AppConfig.mcpConnectionManager()
+        val cache = manager.getConnectionCache()
 
+        // 先从全局缓存填充已有结果
+        var needsConnect = false
         servers.forEachIndexed { index, server ->
             if (server.enabled && server.url.isNotBlank()) {
-                // 如果全局缓存中已有该服务器的连接结果，直接复用
                 val cached = cache[server.name]
                 if (cached != null) {
                     connectionResults[index] = ConnectionResult(
@@ -134,13 +141,29 @@ class McpServerActivity : AppCompatActivity() {
                         error = cached.error
                     )
                 } else {
-                    connectServer(index)
+                    connectionResults[index] = ConnectionResult(success = null)
+                    needsConnect = true
                 }
             }
         }
         refreshList()
+
+        // 有未连接的服务器，触发全局 preconnect 并等待结果
+        if (needsConnect) {
+            CoroutineScope(Dispatchers.IO).launch {
+                manager.preconnect()
+                // preconnect 完成后，从全局缓存同步结果到 UI
+                withContext(Dispatchers.Main) {
+                    syncFromGlobalCache()
+                }
+            }
+        }
     }
 
+    /**
+     * 测试单个服务器连接（手动点击"测试"按钮）
+     * 通过全局 McpConnectionManager 连接，结果写入全局缓存。
+     */
     private fun connectServer(index: Int) {
         val config = AppConfig.configRepo()
         val servers = config.getMcpServers()
@@ -151,37 +174,44 @@ class McpServerActivity : AppCompatActivity() {
         connectionResults[index] = ConnectionResult(success = null)
         refreshList()
 
+        val manager = AppConfig.mcpConnectionManager()
         CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val headers = buildHeaders(server)
-                val client = when (server.transportType) {
-                    McpTransportType.SSE ->
-                        SseMcpClient(server.url, customHeaders = headers)
-                    McpTransportType.STREAMABLE_HTTP ->
-                        HttpMcpClient(server.url, headers)
-                }
-                client.connect()
-                val tools = client.listTools()
-                client.close()
-
-                // 更新连接结果
-                withContext(Dispatchers.Main) {
-                    connectionResults[index] = ConnectionResult(
-                        success = true,
-                        tools = tools
-                    )
-                    refreshList()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    connectionResults[index] = ConnectionResult(
-                        success = false,
-                        error = e.message ?: "未知错误"
-                    )
-                    refreshList()
-                }
+            manager.connectSingleServerByName(server.name)
+            withContext(Dispatchers.Main) {
+                syncServerFromGlobalCache(index, server.name)
             }
         }
+    }
+
+    /** 从全局缓存同步所有服务器状态到 UI */
+    private fun syncFromGlobalCache() {
+        val config = AppConfig.configRepo()
+        val servers = config.getMcpServers()
+        val cache = AppConfig.mcpConnectionManager().getConnectionCache()
+        servers.forEachIndexed { index, server ->
+            val cached = cache[server.name]
+            if (cached != null) {
+                connectionResults[index] = ConnectionResult(
+                    success = cached.success,
+                    tools = cached.tools,
+                    error = cached.error
+                )
+            }
+        }
+        refreshList()
+    }
+
+    /** 从全局缓存同步单个服务器状态到 UI */
+    private fun syncServerFromGlobalCache(index: Int, serverName: String) {
+        val cached = AppConfig.mcpConnectionManager().getServerStatus(serverName)
+        if (cached != null) {
+            connectionResults[index] = ConnectionResult(
+                success = cached.success,
+                tools = cached.tools,
+                error = cached.error
+            )
+        }
+        refreshList()
     }
 
     private fun showServerActions(index: Int, server: McpServerConfig) {
@@ -223,14 +253,6 @@ class McpServerActivity : AppCompatActivity() {
             }
             .setNegativeButton("取消", null)
             .show()
-    }
-
-    private fun buildHeaders(server: McpServerConfig): Map<String, String> {
-        val headers = mutableMapOf<String, String>()
-        if (server.headerName.isNotBlank() && server.headerValue.isNotBlank()) {
-            headers[server.headerName] = server.headerValue
-        }
-        return headers
     }
 
     // ========== RecyclerView Adapter ==========
