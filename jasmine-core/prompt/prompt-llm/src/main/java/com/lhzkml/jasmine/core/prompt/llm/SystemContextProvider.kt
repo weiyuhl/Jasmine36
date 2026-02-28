@@ -220,6 +220,9 @@ class AgentPromptContextProvider(
         appendLine()
         
         appendLine("<long_running_commands_warning>")
+        appendLine("- NEVER use shell commands for long-running processes or interactive applications")
+        appendLine("- Commands that block execution will cause issues")
+        appendLine("- Instead, recommend that users run these commands manually in their terminal")
         appendLine("</long_running_commands_warning>")
         appendLine()
         
