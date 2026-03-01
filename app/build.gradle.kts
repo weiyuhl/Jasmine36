@@ -42,6 +42,17 @@ dependencies {
     implementation(libs.material)
     implementation("androidx.viewpager2:viewpager2:1.1.0")
 
+    // Lifecycle (ViewModel, LiveData)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    
+    // Activity KTX for viewModels()
+    implementation("androidx.activity:activity-ktx:1.8.0")
+    
+    // Fragment KTX
+    implementation("androidx.fragment:fragment-ktx:1.6.2")
+
     // Jasmine 框架核心
     implementation(project(":jasmine-core:prompt:prompt-executor"))
     implementation(project(":jasmine-core:conversation:conversation-storage"))
