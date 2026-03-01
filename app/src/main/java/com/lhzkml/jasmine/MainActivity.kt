@@ -1,7 +1,10 @@
 ﻿package com.lhzkml.jasmine
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -17,6 +20,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -123,6 +128,8 @@ class MainActivity : AppCompatActivity() {
     private var agentLogBuilder = StringBuilder()
     /** 用户是否手动向上滚动（流式回复期间暂停自动滚动） */
     private var userScrolledUp = false
+    /** App 是否在可见前台状态 */
+    private var isAppInForeground = false
     /** 系统上下文收集器 — 自动拼接环境信息到 system prompt */
     private var contextCollector = SystemContextCollector()
     /** Agent 运行时构建器 */
@@ -583,18 +590,40 @@ class MainActivity : AppCompatActivity() {
 
         // APP 启动时后台预连接 MCP 服务器
         preconnectMcpServers()
+
+        // Android 13+ 运行时请求通知权限（前台服务通知需要）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    1001
+                )
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        isAppInForeground = true
         refreshAgentModeUI()
         refreshModelSelector()
+        
+        // 回到前台时，关闭常驻通知（如果任务还在进行，协程仍在运行不受影响）
+        AgentForegroundService.stop(this)
     }
 
     override fun onPause() {
         super.onPause()
+        isAppInForeground = false
         // 保存当前会话 ID，下次恢复时自动加载
         ProviderManager.setLastConversationId(this, currentConversationId ?: "")
+        
+        // 如果任务正在执行，且启用了 Agent 模式，退到后台时启动前台服务保持存活
+        if (currentJob?.isActive == true && ProviderManager.isToolsEnabled(this)) {
+            AgentForegroundService.start(this)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -962,6 +991,7 @@ class MainActivity : AppCompatActivity() {
         val userMsg = ChatMessage.user(message)
 
         currentJob = CoroutineScope(Dispatchers.IO).launch {
+            var foregroundHandled = false
             try {
                 val toolsEnabled = ProviderManager.isToolsEnabled(this@MainActivity)
 
@@ -1356,6 +1386,15 @@ class MainActivity : AppCompatActivity() {
                         result = result.take(200),
                         totalIterations = 0
                     ))
+
+                    // Agent 完成：仅在后台时发送通知
+                    if (!isAppInForeground) {
+                        AgentForegroundService.notifyComplete(
+                            this@MainActivity,
+                            result.take(100).ifEmpty { "任务已完成" }
+                        )
+                        foregroundHandled = true
+                    }
                 } else {
                     // 普通流式输出（支持超时续传）
                     withContext(Dispatchers.Main) {
@@ -1480,6 +1519,8 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: CancellationException) {
                 // 用户主动停止，已渲染文字保留，不追加任何内容
+                AgentForegroundService.stop(this@MainActivity)
+                foregroundHandled = true
             } catch (e: ChatClientException) {
                 val errorMsg = when (e.errorType) {
                     ErrorType.NETWORK -> "网络错误: ${e.message}\n请检查网络连接后重试"
@@ -1500,6 +1541,11 @@ class MainActivity : AppCompatActivity() {
                     appendRendered("\n$errorMsg\n\n")
                     autoScrollToBottom()
                 }
+                // Agent 失败：仅在后台时发送通知
+                if (!isAppInForeground && ProviderManager.isToolsEnabled(this@MainActivity)) {
+                    AgentForegroundService.notifyFailed(this@MainActivity, errorMsg.take(100))
+                    foregroundHandled = true
+                }
                 // 快照恢复：检查是否有可用检查点
                 tryOfferCheckpointRecovery(e, message)
             } catch (e: Exception) {
@@ -1513,9 +1559,17 @@ class MainActivity : AppCompatActivity() {
                     appendRendered("\n未知错误: ${e.message}\n\n")
                     autoScrollToBottom()
                 }
+                // Agent 失败：仅在后台时发送通知
+                if (!isAppInForeground && ProviderManager.isToolsEnabled(this@MainActivity)) {
+                    AgentForegroundService.notifyFailed(this@MainActivity, "未知错误: ${e.message?.take(80) ?: "未知"}")
+                    foregroundHandled = true
+                }
                 // 快照恢复：检查是否有可用检查点
                 tryOfferCheckpointRecovery(e, message)
             } finally {
+                if (!foregroundHandled) {
+                    AgentForegroundService.stop(this@MainActivity)
+                }
                 withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
                     updateSendButtonState(ButtonState.IDLE)
                     currentJob = null
