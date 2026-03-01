@@ -89,7 +89,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mainContent: LinearLayout
     private lateinit var etInput: EditText
     private lateinit var btnSend: MaterialButton
-    private lateinit var tvOutput: TextView
+    private lateinit var llChatContainer: LinearLayout
     private lateinit var scrollView: ScrollView
     private lateinit var tvDrawerEmpty: TextView
     private lateinit var rvDrawerConversations: RecyclerView
@@ -128,6 +128,8 @@ class MainActivity : AppCompatActivity() {
     private var agentLogBuilder = StringBuilder()
     /** 用户是否手动向上滚动（流式回复期间暂停自动滚动） */
     private var userScrolledUp = false
+    private var currentChatRole = ""
+    private var currentChatTextView: TextView? = null
     /** App 是否在可见前台状态 */
     private var isAppInForeground = false
     /** 系统上下文收集器 — 自动拼接环境信息到 system prompt */
@@ -432,8 +434,8 @@ class MainActivity : AppCompatActivity() {
         drawerLayout = findViewById(R.id.drawerLayout)
         mainContent = findViewById(R.id.mainContent)
         etInput = findViewById(R.id.etInput)
+        llChatContainer = findViewById(R.id.llChatContainer)
         btnSend = findViewById(R.id.btnSend)
-        tvOutput = findViewById(R.id.tvOutput)
         scrollView = findViewById(R.id.scrollView)
 
         // 点击聊天区域时取消输入框焦点并隐藏键盘
@@ -844,7 +846,9 @@ class MainActivity : AppCompatActivity() {
     private fun startNewConversation() {
         currentConversationId = null
         messageHistory.clear()
-        tvOutput.text = ""
+        llChatContainer.removeAllViews()
+        currentChatRole = ""
+        currentChatTextView = null
     }
 
     private fun loadConversation(conversationId: String) {
@@ -863,29 +867,28 @@ class MainActivity : AppCompatActivity() {
                 // 只将 user/assistant/system/tool 消息加入 LLM 上下文，排除 agent_log
                 messageHistory.addAll(messages.filter { it.role != "agent_log" })
 
-                val sb = StringBuilder()
+                llChatContainer.removeAllViews()
+                currentChatRole = ""
+                currentChatTextView = null
+
                 var usageIndex = 0
                 for (msg in timedMessages) {
-                    val time = formatTime(msg.createdAt)
                     when (msg.role) {
-                        "user" -> sb.append("You: ${msg.content}\n$time\n\n")
-                        "agent_log" -> {
-                            // 渲染中间过程日志（thinking, tool calls, trace, events 等）
-                            sb.append(msg.content)
-                            if (!msg.content.endsWith("\n")) sb.append("\n")
+                        "user" -> {
+                            appendRendered(msg.content, "user")
                         }
-                        "assistant" -> {
-                            sb.append("AI: ${msg.content}")
-                            val usage = usageList.getOrNull(usageIndex)
-                            if (usage != null) {
-                                sb.append("\n[提示: ${usage.promptTokens} tokens | 回复: ${usage.completionTokens} tokens | 总计: ${usage.totalTokens} tokens]")
+                        "agent_log", "assistant" -> {
+                            appendRendered(msg.content, msg.role)
+                            if (msg.role == "assistant") {
+                                val usage = usageList.getOrNull(usageIndex)
+                                if (usage != null) {
+                                    appendRendered(formatUsageLine(usage))
+                                }
+                                usageIndex++
                             }
-                            sb.append("\n$time\n\n")
-                            usageIndex++
                         }
                     }
                 }
-                tvOutput.setText(sb.toString(), android.widget.TextView.BufferType.NORMAL)
                 autoScrollToBottom()
             }
 
@@ -984,8 +987,15 @@ class MainActivity : AppCompatActivity() {
         updateSendButtonState(ButtonState.GENERATING)
         userScrolledUp = false
         val now = formatTime(System.currentTimeMillis())
-        tvOutput.append("You: $message\n$now\n\n")
+        
+        val userView = layoutInflater.inflate(R.layout.item_chat_user, llChatContainer, false)
+        userView.findViewById<TextView>(R.id.tvUserText).text = message
+        llChatContainer.addView(userView)
+        currentChatRole = "user"
+        currentChatTextView = null
+        
         etInput.text.clear()
+        autoScrollToBottom()
 
         val client = getOrCreateClient(config)
         val userMsg = ChatMessage.user(message)
@@ -1068,13 +1078,13 @@ class MainActivity : AppCompatActivity() {
                         override suspend fun onToolCallStart(toolName: String, arguments: String) {
                             withContext(Dispatchers.Main) {
                                 if (thinkingStarted) {
-                                    tvOutput.append("\n")
+                                    appendRendered("\n", "agent_log")
                                     agentLogBuilder.append("\n")
                                     thinkingStarted = false
                                 }
                                 val argsPreview = if (arguments.length > 80) arguments.take(80) + "…" else arguments
-                                val line = "\n[Tool] 调用工具: $toolName($argsPreview)\n"
-                                appendRendered(line)
+                                val line = "[Tool] 调用工具: $toolName($argsPreview)"
+                                appendRendered(line, "agent_log")
                                 agentLogBuilder.append(line)
                                 autoScrollToBottom()
                             }
@@ -1082,8 +1092,8 @@ class MainActivity : AppCompatActivity() {
                         override suspend fun onToolCallResult(toolName: String, result: String) {
                             withContext(Dispatchers.Main) {
                                 val preview = if (result.length > 200) result.take(200) + "…" else result
-                                val line = "[Result] $toolName 结果: $preview\n\n"
-                                appendRendered(line)
+                                val line = "[Result] $toolName 结果: $preview"
+                                appendRendered(line, "agent_log")
                                 agentLogBuilder.append(line)
                                 autoScrollToBottom()
                             }
@@ -1091,11 +1101,11 @@ class MainActivity : AppCompatActivity() {
                         override suspend fun onThinking(content: String) {
                             withContext(Dispatchers.Main) {
                                 if (!thinkingStarted) {
-                                    appendRendered("[Think] ")
+                                    appendRendered("[Think] ", "agent_log")
                                     agentLogBuilder.append("[Think] ")
                                     thinkingStarted = true
                                 }
-                                tvOutput.append(content)
+                                appendRendered(content, "agent_log")
                                 agentLogBuilder.append(content)
                                 autoScrollToBottom()
                             }
@@ -1163,7 +1173,7 @@ class MainActivity : AppCompatActivity() {
                                     appendRendered(stepLine)
                                     agentLogBuilder.append(stepLine)
                                 }
-                                tvOutput.append("\n")
+                                appendRendered("\n")
                                 agentLogBuilder.append("\n")
                                 autoScrollToBottom()
                             }
@@ -1201,7 +1211,7 @@ class MainActivity : AppCompatActivity() {
                                 agentPrompt, config.model
                             ) { chunk ->
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append(chunk)
+                                    appendRendered(chunk)
                                     autoScrollToBottom()
                                 }
                             }
@@ -1287,7 +1297,7 @@ class MainActivity : AppCompatActivity() {
 
                             val chunkCallback: (suspend (String) -> Unit)? = { chunk: String ->
                                 withContext(Dispatchers.Main) {
-                                    tvOutput.append(chunk)
+                                    appendRendered(chunk)
                                     autoScrollToBottom()
                                 }
                             }
@@ -1300,7 +1310,7 @@ class MainActivity : AppCompatActivity() {
                                         agentLogBuilder.append("[Think] ")
                                         graphThinkingStarted = true
                                     }
-                                    tvOutput.append(text)
+                                    appendRendered(text)
                                     agentLogBuilder.append(text)
                                     autoScrollToBottom()
                                 }
@@ -1420,7 +1430,7 @@ class MainActivity : AppCompatActivity() {
                                         appendRendered("\n\nAI: ")
                                         thinkingStarted = false
                                     }
-                                    tvOutput.append(chunk)
+                                    appendRendered(chunk)
                                     autoScrollToBottom()
                                 }
                             },
@@ -1431,7 +1441,7 @@ class MainActivity : AppCompatActivity() {
                                         agentLogBuilder.append("[Think] ")
                                         thinkingStarted = true
                                     }
-                                    tvOutput.append(text)
+                                    appendRendered(text)
                                     agentLogBuilder.append(text)
                                     autoScrollToBottom()
                                 }
@@ -1452,7 +1462,7 @@ class MainActivity : AppCompatActivity() {
                                         appendRendered("\n\nAI: ")
                                         thinkingStarted = false
                                     }
-                                    tvOutput.append(chunk)
+                                    appendRendered(chunk)
                                     autoScrollToBottom()
                                 }
                             },
@@ -1463,14 +1473,13 @@ class MainActivity : AppCompatActivity() {
                                         agentLogBuilder.append("[Think] ")
                                         thinkingStarted = true
                                     }
-                                    tvOutput.append(text)
+                                    appendRendered(text)
                                     agentLogBuilder.append(text)
                                     autoScrollToBottom()
                                 }
                             }
                         )
                     }
-
                     result = streamResult.content
                     usage = streamResult.usage
 
@@ -1763,7 +1772,7 @@ class MainActivity : AppCompatActivity() {
             override suspend fun onSummaryChunk(chunk: String) {
                 agentLogBuilder.append(chunk)
                 withContext(Dispatchers.Main) {
-                    tvOutput.append(chunk)
+                    appendRendered(chunk)
                     autoScrollToBottom()
                 }
             }
@@ -1825,9 +1834,41 @@ class MainActivity : AppCompatActivity() {
         return CompressionStrategyBuilder.build(AppConfig.configRepo(), contextManager)
     }
 
-    /** 追加文本到聊天输出 */
-    private fun appendRendered(text: String) {
-        tvOutput.append(text)
+    /** 追加文本到聊天输出气泡容器 */
+    private fun appendRendered(text: String, originalRole: String = "assistant") {
+        val role = if (originalRole == "agent_log") "assistant" else originalRole
+        // --- User bubble: standalone ---
+        if (role == "user") {
+            currentChatRole = "user"
+            currentChatTextView = null
+            val view = layoutInflater.inflate(R.layout.item_chat_user, llChatContainer, false)
+            currentChatTextView = view.findViewById(R.id.tvUserText)
+            llChatContainer.addView(view)
+            currentChatTextView?.append(text)
+            return
+        }
+
+        // --- Assistant / agent_log: plain text ---
+        if (currentChatRole != role || currentChatTextView == null) {
+            currentChatRole = role
+            val tv = TextView(this@MainActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    val margin = (16 * resources.displayMetrics.density).toInt()
+                    setMargins(margin, margin/4, margin, margin/4)
+                }
+                setTextColor(resources.getColor(R.color.text_primary, theme))
+                textSize = 15f
+                setLineSpacing(0f, 1.4f)
+                setTextIsSelectable(true)
+            }
+            llChatContainer.addView(tv)
+            currentChatTextView = tv
+        }
+
+        currentChatTextView?.append(text)
     }
 
     /** 自动滚动到底部（用户手动向上滚动时跳过） */

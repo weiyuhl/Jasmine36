@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="start"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/tvAiTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="4dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="10sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/llAiContentContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_bubble_ai"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="12dp"
+        android:maxWidth="320dp"
+        android:orientation="vertical">
+
+        <!-- Dynamic content goes here: TextViews for assistant text, and item_chat_log for tool calls -->
+    </LinearLayout>
+    
+    <TextView
+        android:id="@+id/tvAiStats"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginTop="4dp"
+        android:textColor="#AAAAAA"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</LinearLayout>
