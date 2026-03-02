@@ -8,13 +8,9 @@ sealed class ChatItem {
     ) : ChatItem()
 
     data class AiMessage(
-        val content: String,
+        val blocks: List<ContentBlock> = emptyList(),
         val time: String = "",
         val usageLine: String = "",
         val isStreaming: Boolean = false
-    ) : ChatItem()
-
-    data class LogMessage(
-        val content: String
     ) : ChatItem()
 }

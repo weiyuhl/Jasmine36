@@ -1,7 +1,14 @@
 package com.lhzkml.jasmine
 
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,7 +20,6 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     companion object {
         private const val TYPE_USER = 0
         private const val TYPE_AI = 1
-        private const val TYPE_LOG = 2
         private const val DEBOUNCE_MS = 50L
     }
 
@@ -27,7 +33,6 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     override fun getItemViewType(position: Int): Int = when (items[position]) {
         is ChatItem.UserMessage -> TYPE_USER
         is ChatItem.AiMessage -> TYPE_AI
-        is ChatItem.LogMessage -> TYPE_LOG
     }
 
     override fun getItemCount(): Int = items.size
@@ -37,7 +42,6 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         return when (viewType) {
             TYPE_USER -> UserViewHolder(inflater.inflate(R.layout.item_chat_user, parent, false))
             TYPE_AI -> AiViewHolder(inflater.inflate(R.layout.item_chat_ai, parent, false))
-            TYPE_LOG -> LogViewHolder(inflater.inflate(R.layout.item_chat_log, parent, false))
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
     }
@@ -50,7 +54,6 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 aiHolder.bind(item)
                 if (item.isStreaming) streamingViewHolder = aiHolder
             }
-            is ChatItem.LogMessage -> (holder as LogViewHolder).bind(item)
         }
     }
 
@@ -58,51 +61,29 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         if (holder === streamingViewHolder) streamingViewHolder = null
     }
 
-    // ========== Public API for MainActivity ==========
+    // ========== Public API ==========
 
     fun addItem(item: ChatItem) {
         items.add(item)
         notifyItemInserted(items.size - 1)
     }
 
-    fun appendToStreamingAi(chunk: String) {
+    fun updateStreamingAi(blocks: List<ContentBlock>) {
         val idx = findStreamingAiIndex()
         if (idx == null) {
-            items.add(ChatItem.AiMessage(content = chunk, isStreaming = true))
+            items.add(ChatItem.AiMessage(blocks = blocks, isStreaming = true))
             notifyItemInserted(items.size - 1)
             return
         }
         val item = items[idx] as ChatItem.AiMessage
-        items[idx] = item.copy(content = item.content + chunk)
+        items[idx] = item.copy(blocks = blocks)
         scheduleStreamRender(idx)
-    }
-
-    private fun findStreamingAiIndex(): Int? {
-        for (i in items.lastIndex downTo 0) {
-            val item = items[i]
-            if (item is ChatItem.AiMessage && item.isStreaming) return i
-        }
-        return null
-    }
-
-    fun appendLog(text: String) {
-        val lastIndex = items.lastIndex
-        if (lastIndex >= 0) {
-            val last = items[lastIndex]
-            if (last is ChatItem.LogMessage) {
-                items[lastIndex] = ChatItem.LogMessage(last.content + text)
-                notifyItemChanged(lastIndex)
-                return
-            }
-        }
-        addItem(ChatItem.LogMessage(text))
     }
 
     fun finalizeStreamingAi(usageLine: String, time: String) {
         flushPendingRender()
         val idx = findStreamingAiIndex() ?: return
         val item = items[idx] as ChatItem.AiMessage
-
         items[idx] = item.copy(
             isStreaming = false,
             usageLine = usageLine,
@@ -121,6 +102,14 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     fun getItems(): List<ChatItem> = items.toList()
+
+    private fun findStreamingAiIndex(): Int? {
+        for (i in items.lastIndex downTo 0) {
+            val item = items[i]
+            if (item is ChatItem.AiMessage && item.isStreaming) return i
+        }
+        return null
+    }
 
     // ========== Debounced stream rendering ==========
 
@@ -167,7 +156,7 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private val tvMeta: TextView = view.findViewById(R.id.tvMeta)
 
         fun bind(item: ChatItem.AiMessage) {
-            tvContent.text = item.content
+            tvContent.text = renderBlocks(item.blocks)
 
             if (item.usageLine.isNotEmpty() || item.time.isNotEmpty()) {
                 tvMeta.visibility = View.VISIBLE
@@ -183,13 +172,69 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 tvMeta.visibility = View.GONE
             }
         }
-    }
 
-    class LogViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        private val tvLog: TextView = view.findViewById(R.id.tvLog)
+        private fun renderBlocks(blocks: List<ContentBlock>): CharSequence {
+            if (blocks.isEmpty()) return ""
+            if (blocks.size == 1 && blocks[0] is ContentBlock.Text) {
+                return (blocks[0] as ContentBlock.Text).content
+            }
 
-        fun bind(item: ChatItem.LogMessage) {
-            tvLog.text = item.content
+            val sb = SpannableStringBuilder()
+            for ((i, block) in blocks.withIndex()) {
+                if (i > 0 && sb.isNotEmpty() && sb[sb.length - 1] != '\n') {
+                    sb.append("\n")
+                }
+                when (block) {
+                    is ContentBlock.Text -> sb.append(block.content)
+                    is ContentBlock.Thinking -> appendStyled(sb, "[Think] ${block.content}", COLOR_THINKING)
+                    is ContentBlock.ToolCall -> appendStyled(sb, "[Tool] ${block.toolName}(${block.arguments})", COLOR_TOOL)
+                    is ContentBlock.ToolResult -> appendStyled(sb, "[Result] ${block.toolName}: ${block.result}", COLOR_RESULT)
+                    is ContentBlock.Plan -> appendPlan(sb, block)
+                    is ContentBlock.GraphLog -> appendStyled(sb, block.content, COLOR_GRAPH, mono = true)
+                    is ContentBlock.Error -> appendStyled(sb, block.message, COLOR_ERROR, bold = true)
+                    is ContentBlock.SystemLog -> appendStyled(sb, block.content, COLOR_SYSTEM_LOG)
+                }
+            }
+            return sb
+        }
+
+        private fun appendStyled(
+            sb: SpannableStringBuilder,
+            text: String,
+            color: Int,
+            bold: Boolean = false,
+            mono: Boolean = false
+        ) {
+            val start = sb.length
+            sb.append(text)
+            val end = sb.length
+            sb.setSpan(ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (bold) {
+                sb.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            if (mono) {
+                sb.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+
+        private fun appendPlan(sb: SpannableStringBuilder, plan: ContentBlock.Plan) {
+            val start = sb.length
+            val text = buildString {
+                append("[Plan] 目标: ${plan.goal}\n")
+                plan.steps.forEachIndexed { i, step -> append("  ${i + 1}. $step\n") }
+            }
+            sb.append(text)
+            sb.setSpan(ForegroundColorSpan(COLOR_PLAN), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+
+        companion object {
+            private const val COLOR_THINKING = 0xFF9E9E9E.toInt()
+            private const val COLOR_TOOL = 0xFF42A5F5.toInt()
+            private const val COLOR_RESULT = 0xFF66BB6A.toInt()
+            private const val COLOR_PLAN = 0xFFAB47BC.toInt()
+            private const val COLOR_GRAPH = 0xFF78909C.toInt()
+            private const val COLOR_ERROR = 0xFFF44336.toInt()
+            private const val COLOR_SYSTEM_LOG = 0xFF9E9E9E.toInt()
         }
     }
 }

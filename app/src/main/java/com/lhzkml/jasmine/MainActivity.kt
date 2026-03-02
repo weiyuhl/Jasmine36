@@ -86,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSend: MaterialButton
     private lateinit var rvChat: RecyclerView
     private lateinit var chatAdapter: ChatAdapter
+    private lateinit var chatStateManager: ChatStateManager
     private lateinit var chatLayoutManager: LinearLayoutManager
     private var pendingScroll: Runnable? = null
     private lateinit var tvDrawerEmpty: TextView
@@ -121,8 +122,6 @@ class MainActivity : AppCompatActivity() {
     private var persistence: Persistence? = null
     /** 预加载的 MCP 工具（APP 启动时后台连接，全局共享实例） */
     private val mcpConnectionManager get() = AppConfig.mcpConnectionManager()
-    /** 中间过程日志收集器，用于持久化到对话历史 */
-    private var agentLogBuilder = StringBuilder()
     /** 用户是否手动向上滚动（流式回复期间暂停自动滚动） */
     private var userScrolledUp = false
     /** 系统上下文收集器 — 自动拼接环境信息到 system prompt */
@@ -394,10 +393,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun buildEventHandler(): EventHandler? {
         return runtimeBuilder.buildEventHandler { line ->
-            agentLogBuilder.append(line)
             withContext(Dispatchers.Main) {
-                chatAdapter.appendLog(line)
-                autoScrollToBottom()
+                chatStateManager.handleSystemLog(line)
             }
         }
     }
@@ -430,6 +427,7 @@ class MainActivity : AppCompatActivity() {
         btnSend = findViewById(R.id.btnSend)
         rvChat = findViewById(R.id.rvChat)
         chatAdapter = ChatAdapter()
+        chatStateManager = ChatStateManager(chatAdapter) { autoScrollToBottom() }
         chatLayoutManager = LinearLayoutManager(this)
         rvChat.layoutManager = chatLayoutManager
         rvChat.adapter = chatAdapter
@@ -830,7 +828,7 @@ class MainActivity : AppCompatActivity() {
     private fun startNewConversation() {
         currentConversationId = null
         messageHistory.clear()
-        chatAdapter.clearAll()
+        chatStateManager.clearAll()
     }
 
     private fun loadConversation(conversationId: String) {
@@ -848,28 +846,28 @@ class MainActivity : AppCompatActivity() {
                 messageHistory.clear()
                 messageHistory.addAll(messages.filter { it.role != "agent_log" })
 
-                chatAdapter.clearAll()
+                chatStateManager.clearAll()
                 var usageIndex = 0
                 for (msg in timedMessages) {
                     val time = formatTime(msg.createdAt)
                     when (msg.role) {
                         "user" -> {
-                            chatAdapter.addItem(ChatItem.UserMessage(msg.content, time))
+                            chatStateManager.addUserMessage(msg.content, time)
                         }
                         "agent_log" -> {
                             val logText = if (msg.content.endsWith("\n")) msg.content else msg.content + "\n"
-                            chatAdapter.addItem(ChatItem.LogMessage(logText))
+                            chatStateManager.addHistoryLogBlocks(listOf(ContentBlock.SystemLog(logText)))
                         }
                         "assistant" -> {
                             val usage = usageList.getOrNull(usageIndex)
                             val usageLine = if (usage != null) {
                                 "[提示: ${usage.promptTokens} | 回复: ${usage.completionTokens} | 总计: ${usage.totalTokens}]"
                             } else ""
-                            chatAdapter.addItem(ChatItem.AiMessage(
-                                content = msg.content,
-                                time = time,
-                                usageLine = usageLine
-                            ))
+                            chatStateManager.addHistoryAiMessage(
+                                blocks = listOf(ContentBlock.Text(msg.content)),
+                                usageLine = usageLine,
+                                time = time
+                            )
                             usageIndex++
                         }
                     }
@@ -972,8 +970,7 @@ class MainActivity : AppCompatActivity() {
         updateSendButtonState(ButtonState.GENERATING)
         userScrolledUp = false
         val now = formatTime(System.currentTimeMillis())
-        chatAdapter.addItem(ChatItem.UserMessage(message, now))
-        autoScrollToBottom()
+        chatStateManager.addUserMessage(message, now)
         etInput.text.clear()
 
         val client = getOrCreateClient(config)
@@ -1043,8 +1040,10 @@ class MainActivity : AppCompatActivity() {
 
                 var result: String = ""
                 var usage: Usage? = null
-                // 重置中间过程日志收集器
-                agentLogBuilder = StringBuilder()
+
+                withContext(Dispatchers.Main) {
+                    chatStateManager.startStreaming()
+                }
 
                 // 构建快照/持久化（所有模式通用，每轮对话结束后创建检查点）
                 persistence = buildPersistence()
@@ -1052,39 +1051,19 @@ class MainActivity : AppCompatActivity() {
                 if (toolsEnabled && registry != null) {
                     // Agent 模式：使用 ToolExecutor 自动循环
                     val listener = object : AgentEventListener {
-                        var thinkingStarted = false
                         override suspend fun onToolCallStart(toolName: String, arguments: String) {
                             withContext(Dispatchers.Main) {
-                                if (thinkingStarted) {
-                                    agentLogBuilder.append("\n")
-                                    thinkingStarted = false
-                                }
-                                val argsPreview = if (arguments.length > 80) arguments.take(80) + "…" else arguments
-                                val line = "\n[Tool] 调用工具: $toolName($argsPreview)\n"
-                                chatAdapter.appendLog(line)
-                                agentLogBuilder.append(line)
-                                autoScrollToBottom()
+                                chatStateManager.handleToolCall(toolName, arguments)
                             }
                         }
                         override suspend fun onToolCallResult(toolName: String, result: String) {
                             withContext(Dispatchers.Main) {
-                                val preview = if (result.length > 200) result.take(200) + "…" else result
-                                val line = "[Result] $toolName 结果: $preview\n\n"
-                                chatAdapter.appendLog(line)
-                                agentLogBuilder.append(line)
-                                autoScrollToBottom()
+                                chatStateManager.handleToolResult(toolName, result)
                             }
                         }
                         override suspend fun onThinking(content: String) {
                             withContext(Dispatchers.Main) {
-                                if (!thinkingStarted) {
-                                    chatAdapter.appendLog("[Think] ")
-                                    agentLogBuilder.append("[Think] ")
-                                    thinkingStarted = true
-                                }
-                                chatAdapter.appendLog(content)
-                                agentLogBuilder.append(content)
-                                autoScrollToBottom()
+                                chatStateManager.handleThinking(content)
                             }
                         }
                     }
@@ -1141,26 +1120,16 @@ class MainActivity : AppCompatActivity() {
                             planReadSession.close()
 
                             withContext(Dispatchers.Main) {
-                                val planLog = buildString {
-                                    append("[Plan] 任务规划:\n")
-                                    append("[Goal] 目标: ${plan.goal}\n")
-                                    plan.steps.forEachIndexed { index, step ->
-                                        append("  ${index + 1}. ${step.description}\n")
-                                    }
-                                    append("\n")
-                                }
-                                chatAdapter.appendLog(planLog)
-                                agentLogBuilder.append(planLog)
-                                autoScrollToBottom()
+                                chatStateManager.handlePlan(
+                                    plan.goal,
+                                    plan.steps.map { it.description }
+                                )
                             }
 
                             // 快照：规划完成后不再单独创建检查点，统一在对话轮次结束后创建
                         } catch (e: Exception) {
                             withContext(Dispatchers.Main) {
-                                val line = "[Plan] [规划跳过: ${e.message}]\n\n"
-                                chatAdapter.appendLog(line)
-                                agentLogBuilder.append(line)
-                                autoScrollToBottom()
+                                chatStateManager.handleSystemLog("[Plan] [规划跳过: ${e.message}]\n\n")
                             }
                         }
                     }
@@ -1182,18 +1151,16 @@ class MainActivity : AppCompatActivity() {
                                 agentPrompt, config.model
                             ) { chunk ->
                                 withContext(Dispatchers.Main) {
-                                    chatAdapter.appendToStreamingAi(chunk)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleChunk(chunk)
                                 }
                             }
                             result = streamResult.content
                             usage = streamResult.usage
                             withContext(Dispatchers.Main) {
-                                chatAdapter.finalizeStreamingAi(
+                                chatStateManager.finalizeStream(
                                     formatUsageShort(usage),
                                     formatTime(System.currentTimeMillis())
                                 )
-                                autoScrollToBottom()
                             }
                         }
 
@@ -1257,36 +1224,19 @@ class MainActivity : AppCompatActivity() {
                             val finalGraphPrompt = if (toolChoice != null) graphPrompt.withToolChoice(toolChoice) else graphPrompt
 
                             withContext(Dispatchers.Main) {
-                                val header = "┌─ [Graph] 图策略执行 ─────────────\n│ [>] Start\n"
-                                chatAdapter.appendLog(header)
-                                agentLogBuilder.append(header)
-                                autoScrollToBottom()
-                            }
-
-                            withContext(Dispatchers.Main) {
-                                val footer = "└─────────────────────────\n"
-                                chatAdapter.appendLog(footer)
-                                agentLogBuilder.append(footer)
+                                chatStateManager.handleGraphLog("┌─ [Graph] 图策略执行 ─────────────\n│ [>] Start\n")
+                                chatStateManager.handleGraphLog("└─────────────────────────\n")
                             }
 
                             val chunkCallback: (suspend (String) -> Unit)? = { chunk: String ->
                                 withContext(Dispatchers.Main) {
-                                    chatAdapter.appendToStreamingAi(chunk)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleChunk(chunk)
                                 }
                             }
 
-                            var graphThinkingStarted = false
                             val thinkingCallback: (suspend (String) -> Unit)? = { text: String ->
                                 withContext(Dispatchers.Main) {
-                                    if (!graphThinkingStarted) {
-                                        chatAdapter.appendLog("[Think] ")
-                                        agentLogBuilder.append("[Think] ")
-                                        graphThinkingStarted = true
-                                    }
-                                    chatAdapter.appendLog(text)
-                                    agentLogBuilder.append(text)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleThinking(text)
                                 }
                             }
 
@@ -1297,31 +1247,22 @@ class MainActivity : AppCompatActivity() {
                                     nodeName.contains("Send", true) -> "[Send]"
                                     else -> "[Node]"
                                 }
-                                val line = "│ $icon $nodeName ...\n"
-                                agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
-                                    chatAdapter.appendLog(line)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleGraphLog("│ $icon $nodeName ...\n")
                                 }
                             }
 
                             val nodeExitCallback: suspend (String, Boolean) -> Unit = { nodeName, success ->
                                 val status = if (success) "[OK]" else "[FAIL]"
-                                val line = "│ $status $nodeName 完成\n"
-                                agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
-                                    chatAdapter.appendLog(line)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleGraphLog("│ $status $nodeName 完成\n")
                                 }
                             }
 
                             val edgeCallback: suspend (String, String, String) -> Unit = { from, to, label ->
                                 val labelStr = if (label.isNotEmpty()) " ($label)" else ""
-                                val line = "│  ↓ $from → $to$labelStr\n"
-                                agentLogBuilder.append(line)
                                 withContext(Dispatchers.Main) {
-                                    chatAdapter.appendLog(line)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleGraphLog("│  ↓ $from → $to$labelStr\n")
                                 }
                             }
 
@@ -1331,21 +1272,13 @@ class MainActivity : AppCompatActivity() {
                                 onChunk = chunkCallback,
                                 onThinking = thinkingCallback,
                                 onToolCallStart = { toolName, args ->
-                                    val argsPreview = if (args.length > 80) args.take(80) + "…" else args
-                                    val line = "│  [Tool] $toolName($argsPreview)\n"
-                                    agentLogBuilder.append(line)
                                     withContext(Dispatchers.Main) {
-                                        chatAdapter.appendLog(line)
-                                        autoScrollToBottom()
+                                        chatStateManager.handleToolCall(toolName, args)
                                     }
                                 },
                                 onToolCallResult = { toolName, toolResult ->
-                                    val preview = if (toolResult.length > 200) toolResult.take(200) + "…" else toolResult
-                                    val line = "│  [Result] $toolName -> $preview\n"
-                                    agentLogBuilder.append(line)
                                     withContext(Dispatchers.Main) {
-                                        chatAdapter.appendLog(line)
-                                        autoScrollToBottom()
+                                        chatStateManager.handleToolResult(toolName, toolResult)
                                     }
                                 },
                                 onNodeEnter = nodeEnterCallback,
@@ -1356,11 +1289,10 @@ class MainActivity : AppCompatActivity() {
                             result = graphResult ?: ""
 
                             withContext(Dispatchers.Main) {
-                                chatAdapter.finalizeStreamingAi(
+                                chatStateManager.finalizeStream(
                                     "",
                                     formatTime(System.currentTimeMillis())
                                 )
-                                autoScrollToBottom()
                             }
                         }
                     }
@@ -1373,7 +1305,6 @@ class MainActivity : AppCompatActivity() {
                         totalIterations = 0
                     ))
                 } else {
-                    var thinkingStarted = false
                     val resumeEnabled = ProviderManager.isStreamResumeEnabled(this@MainActivity)
 
                     val streamResult = if (resumeEnabled) {
@@ -1388,29 +1319,17 @@ class MainActivity : AppCompatActivity() {
                             samplingParams = samplingParams,
                             onChunk = { chunk ->
                                 withContext(Dispatchers.Main) {
-                                    if (thinkingStarted) {
-                                        thinkingStarted = false
-                                    }
-                                    chatAdapter.appendToStreamingAi(chunk)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleChunk(chunk)
                                 }
                             },
                             onThinking = { text ->
                                 withContext(Dispatchers.Main) {
-                                    if (!thinkingStarted) {
-                                        chatAdapter.appendLog("[Think] ")
-                                        agentLogBuilder.append("[Think] ")
-                                        thinkingStarted = true
-                                    }
-                                    chatAdapter.appendLog(text)
-                                    agentLogBuilder.append(text)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleThinking(text)
                                 }
                             },
                             onResumeAttempt = { attempt ->
                                 withContext(Dispatchers.Main) {
-                                    chatAdapter.appendLog("\n[网络超时，正在续传... 第${attempt}次]\n")
-                                    autoScrollToBottom()
+                                    chatStateManager.handleSystemLog("\n[网络超时，正在续传... 第${attempt}次]\n")
                                 }
                             }
                         )
@@ -1419,23 +1338,12 @@ class MainActivity : AppCompatActivity() {
                             trimmedMessages, config.model, maxTokens, samplingParams,
                             onChunk = { chunk ->
                                 withContext(Dispatchers.Main) {
-                                    if (thinkingStarted) {
-                                        thinkingStarted = false
-                                    }
-                                    chatAdapter.appendToStreamingAi(chunk)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleChunk(chunk)
                                 }
                             },
                             onThinking = { text ->
                                 withContext(Dispatchers.Main) {
-                                    if (!thinkingStarted) {
-                                        chatAdapter.appendLog("[Think] ")
-                                        agentLogBuilder.append("[Think] ")
-                                        thinkingStarted = true
-                                    }
-                                    chatAdapter.appendLog(text)
-                                    agentLogBuilder.append(text)
-                                    autoScrollToBottom()
+                                    chatStateManager.handleThinking(text)
                                 }
                             }
                         )
@@ -1444,13 +1352,12 @@ class MainActivity : AppCompatActivity() {
                     result = streamResult.content
                     usage = streamResult.usage
 
-                    withContext(Dispatchers.Main) {
-                        chatAdapter.finalizeStreamingAi(
-                            formatUsageShort(usage),
-                            formatTime(System.currentTimeMillis())
-                        )
-                        autoScrollToBottom()
-                    }
+                            withContext(Dispatchers.Main) {
+                                chatStateManager.finalizeStream(
+                                    formatUsageShort(usage),
+                                    formatTime(System.currentTimeMillis())
+                                )
+                            }
                 }
 
                 val assistantMsg = ChatMessage.assistant(result)
@@ -1465,8 +1372,7 @@ class MainActivity : AppCompatActivity() {
                     messageHistory = listOf(userMsg, assistantMsg)
                 )
 
-                // 保存中间过程日志（thinking, tool calls, trace, events, graph flow 等）
-                val logContent = agentLogBuilder.toString()
+                val logContent = chatStateManager.getLogContent()
                 if (logContent.isNotBlank()) {
                     conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
                 }
@@ -1509,8 +1415,7 @@ class MainActivity : AppCompatActivity() {
                     throwable = e
                 ))
                 withContext(Dispatchers.Main) {
-                    chatAdapter.appendLog("\n$errorMsg\n\n")
-                    autoScrollToBottom()
+                    chatStateManager.handleError("\n$errorMsg\n\n")
                 }
                 tryOfferCheckpointRecovery(e, message)
             } catch (e: Exception) {
@@ -1520,14 +1425,13 @@ class MainActivity : AppCompatActivity() {
                     throwable = e
                 ))
                 withContext(Dispatchers.Main) {
-                    chatAdapter.appendLog("\n未知错误: ${e.message}\n\n")
-                    autoScrollToBottom()
+                    chatStateManager.handleError("\n未知错误: ${e.message}\n\n")
                 }
                 // 快照恢复：检查是否有可用检查点
                 tryOfferCheckpointRecovery(e, message)
             } finally {
                 withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
-                    chatAdapter.finalizeStreamingAi("", "")
+                    chatStateManager.cancelStream()
                     updateSendButtonState(ButtonState.IDLE)
                     currentJob = null
                 }
@@ -1587,9 +1491,8 @@ class MainActivity : AppCompatActivity() {
 
         val totalMsgs = rebuiltHistory.size
         val line = "[Snapshot] 恢复到 ${selectedCheckpoint.nodePath} [$totalMsgs 条消息]\n"
-        agentLogBuilder.append(line)
         withContext(Dispatchers.Main) {
-            chatAdapter.appendLog(line)
+            chatStateManager.handleSystemLog(line)
             autoScrollToBottom()
         }
 
@@ -1601,14 +1504,8 @@ class MainActivity : AppCompatActivity() {
             }
             com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.SKIP_NODE -> {
                 val skipLine = "[Snapshot] 已恢复到该轮对话状态，可继续发送新消息。\n"
-                agentLogBuilder.append(skipLine)
                 withContext(Dispatchers.Main) {
-                    chatAdapter.appendLog(skipLine)
-                    autoScrollToBottom()
-                }
-                val logContent = agentLogBuilder.toString()
-                if (logContent.isNotBlank() && currentConversationId != null) {
-                    conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
+                    chatStateManager.handleSystemLog(skipLine)
                 }
             }
             com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> {
@@ -1616,21 +1513,16 @@ class MainActivity : AppCompatActivity() {
                 val assistantMsg = ChatMessage.assistant(defaultReply)
                 messageHistory.add(assistantMsg)
 
-                val defaultLine = "[Snapshot] 使用默认输出恢复\n"
-                agentLogBuilder.append(defaultLine)
                 withContext(Dispatchers.Main) {
-                    chatAdapter.appendLog(defaultLine)
-                    chatAdapter.addItem(ChatItem.AiMessage(
-                        content = defaultReply,
+                    chatStateManager.handleSystemLog("[Snapshot] 使用默认输出恢复\n")
+                    chatStateManager.addHistoryAiMessage(
+                        blocks = listOf(ContentBlock.Text(defaultReply)),
+                        usageLine = "",
                         time = formatTime(System.currentTimeMillis())
-                    ))
+                    )
                     autoScrollToBottom()
                 }
                 if (currentConversationId != null) {
-                    val logContent = agentLogBuilder.toString()
-                    if (logContent.isNotBlank()) {
-                        conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
-                    }
                     conversationRepo.addMessage(currentConversationId!!, assistantMsg)
                 }
             }
@@ -1693,7 +1585,7 @@ class MainActivity : AppCompatActivity() {
             messageHistory.addAll(rebuilt)
 
             val line = "[Snapshot] 启动恢复: 从 $totalTurns 个检查点重建对话历史 [${rebuilt.size} 条消息]\n\n"
-            chatAdapter.appendLog(line)
+            chatStateManager.handleSystemLog(line)
             autoScrollToBottom()
         }
     }
@@ -1713,34 +1605,23 @@ class MainActivity : AppCompatActivity() {
         // 创建压缩事件监听器，实时显示压缩过程
         val listener = object : CompressionEventListener {
             override suspend fun onCompressionStart(strategyName: String, originalMessageCount: Int) {
-                val line = "[Compress] 开始压缩上下文 [策略: $strategyName, 原始消息: ${originalMessageCount} 条]\n"
-                agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    chatAdapter.appendLog(line)
-                    autoScrollToBottom()
+                    chatStateManager.handleSystemLog("[Compress] 开始压缩上下文 [策略: $strategyName, 原始消息: ${originalMessageCount} 条]\n")
                 }
             }
             override suspend fun onSummaryChunk(chunk: String) {
-                agentLogBuilder.append(chunk)
                 withContext(Dispatchers.Main) {
-                    chatAdapter.appendLog(chunk)
-                    autoScrollToBottom()
+                    chatStateManager.handleSystemLog(chunk)
                 }
             }
             override suspend fun onBlockCompressed(blockIndex: Int, totalBlocks: Int) {
-                val line = "\n[Block] 块 $blockIndex/$totalBlocks 压缩完成\n"
-                agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    chatAdapter.appendLog(line)
-                    autoScrollToBottom()
+                    chatStateManager.handleSystemLog("\n[Block] 块 $blockIndex/$totalBlocks 压缩完成\n")
                 }
             }
             override suspend fun onCompressionDone(compressedMessageCount: Int) {
-                val line = "\n[OK] 上下文压缩完成 [压缩后: ${compressedMessageCount} 条消息]\n\n"
-                agentLogBuilder.append(line)
                 withContext(Dispatchers.Main) {
-                    chatAdapter.appendLog(line)
-                    autoScrollToBottom()
+                    chatStateManager.handleSystemLog("\n[OK] 上下文压缩完成 [压缩后: ${compressedMessageCount} 条消息]\n\n")
                 }
             }
         }
@@ -1765,12 +1646,8 @@ class MainActivity : AppCompatActivity() {
             messageHistory.clear()
             messageHistory.addAll(compressed)
         } catch (e: Exception) {
-            // 压缩失败不影响正常对话
-            val line = "\n[WARN] 压缩失败: ${e.message}]\n\n"
-            agentLogBuilder.append(line)
             withContext(Dispatchers.Main) {
-                chatAdapter.appendLog(line)
-                autoScrollToBottom()
+                chatStateManager.handleSystemLog("\n[WARN] 压缩失败: ${e.message}]\n\n")
             }
         } finally {
             session.close()
