@@ -10,8 +10,42 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val JasmineLightColorScheme = lightColorScheme(
+    primary = BgPrimary,
+    onPrimary = TextPrimary,
+    primaryContainer = BgPrimary,
+    onPrimaryContainer = TextPrimary,
+    secondary = BgPrimary,
+    onSecondary = TextPrimary,
+    secondaryContainer = BgPrimary,
+    onSecondaryContainer = TextPrimary,
+    tertiary = BgPrimary,
+    onTertiary = TextPrimary,
+    tertiaryContainer = BgPrimary,
+    onTertiaryContainer = TextPrimary,
+    error = BgPrimary,
+    onError = TextPrimary,
+    errorContainer = BgPrimary,
+    onErrorContainer = TextPrimary,
+    background = BgPrimary,
+    onBackground = TextPrimary,
     surface = BgPrimary,
-    onSurface = TextPrimary
+    onSurface = TextPrimary,
+    surfaceVariant = BgPrimary,
+    onSurfaceVariant = TextPrimary,
+    surfaceTint = BgPrimary,
+    inverseSurface = TextPrimary,
+    inverseOnSurface = BgPrimary,
+    inversePrimary = BgPrimary,
+    outline = Divider,
+    outlineVariant = Divider,
+    scrim = TextPrimary,
+    surfaceBright = BgPrimary,
+    surfaceDim = BgPrimary,
+    surfaceContainer = BgPrimary,
+    surfaceContainerHigh = BgPrimary,
+    surfaceContainerHighest = BgPrimary,
+    surfaceContainerLow = BgPrimary,
+    surfaceContainerLowest = BgPrimary
 )
 
 @Composable
