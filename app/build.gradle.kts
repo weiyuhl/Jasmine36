@@ -53,6 +53,7 @@ dependencies {
     implementation(project(":jasmine-core:agent:agent-runtime"))
     implementation(project(":jasmine-core:config:config-manager"))
 
+
     // Coroutines（UI 层需要协程来调用框架）
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

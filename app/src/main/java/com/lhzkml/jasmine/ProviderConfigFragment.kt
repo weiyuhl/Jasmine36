@@ -1,9 +1,11 @@
 package com.lhzkml.jasmine
 
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -305,6 +307,9 @@ class ProviderConfigFragment : Fragment() {
         }
 
         config.setActiveProviderId(provider.id)
+        view?.clearFocus()
+        val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(view?.windowToken, 0)
         Toast.makeText(ctx, "已保存并启用 ${provider.name}", Toast.LENGTH_SHORT).show()
     }
 }
