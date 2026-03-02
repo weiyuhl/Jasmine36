@@ -130,6 +130,7 @@ class ChatExecutor(
 
             var result = ""
             var usage: Usage? = null
+            var contentBlocks: List<ContentBlock> = emptyList()
 
             withContext(Dispatchers.Main) {
                 chatStateManager.startStreaming()
@@ -144,12 +145,14 @@ class ChatExecutor(
                 )
                 result = agentResult.first
                 usage = agentResult.second
+                contentBlocks = agentResult.third
             } else {
                 val chatResult = executeChatMode(
                     client, config, trimmedMessages, maxTokens, samplingParams
                 )
                 result = chatResult.first
                 usage = chatResult.second
+                contentBlocks = chatResult.third
             }
 
             val assistantMsg = ChatMessage.assistant(result)
@@ -162,12 +165,8 @@ class ChatExecutor(
                 messageHistory = listOf(userMsg, assistantMsg)
             )
 
-            val currentBlocks = withContext(Dispatchers.Main) {
-                chatStateManager.getCurrentBlocks()
-            }
-            
-            if (currentBlocks.isNotEmpty()) {
-                val blocksJson = serializeContentBlocks(currentBlocks)
+            if (contentBlocks.isNotEmpty()) {
+                val blocksJson = serializeContentBlocks(contentBlocks)
                 conversationRepo.addMessage(currentConversationId()!!, ChatMessage("content_blocks", blocksJson))
             }
 
@@ -235,9 +234,10 @@ class ChatExecutor(
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
         samplingParams: com.lhzkml.jasmine.core.prompt.model.SamplingParams
-    ): Pair<String, Usage?> {
+    ): Triple<String, Usage?, List<ContentBlock>> {
         var result = ""
         var usage: Usage? = null
+        var contentBlocks: List<ContentBlock> = emptyList()
 
         val listener = object : AgentEventListener {
             override suspend fun onToolCallStart(toolName: String, arguments: String) {
@@ -339,6 +339,9 @@ class ChatExecutor(
                 }
                 result = streamResult.content
                 usage = streamResult.usage
+                contentBlocks = withContext(Dispatchers.Main) {
+                    chatStateManager.getCurrentBlocks()
+                }
                 withContext(Dispatchers.Main) {
                     chatStateManager.finalizeStream(
                         formatUsageShort(usage),
@@ -353,6 +356,9 @@ class ChatExecutor(
                     maxTokens, samplingParams, agentRunId
                 )
                 result = graphResult ?: ""
+                contentBlocks = withContext(Dispatchers.Main) {
+                    chatStateManager.getCurrentBlocks()
+                }
 
                 withContext(Dispatchers.Main) {
                     chatStateManager.finalizeStream(
@@ -370,7 +376,7 @@ class ChatExecutor(
             totalIterations = 0
         ))
 
-        return result to usage
+        return Triple(result, usage, contentBlocks)
     }
 
     private suspend fun executeGraphStrategy(
@@ -506,7 +512,7 @@ class ChatExecutor(
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
         samplingParams: com.lhzkml.jasmine.core.prompt.model.SamplingParams
-    ): Pair<String, Usage?> {
+    ): Triple<String, Usage?, List<ContentBlock>> {
         val resumeEnabled = ProviderManager.isStreamResumeEnabled(context)
 
         val streamResult = if (resumeEnabled) {
@@ -553,6 +559,9 @@ class ChatExecutor(
 
         val result = streamResult.content
         val usage = streamResult.usage
+        val contentBlocks = withContext(Dispatchers.Main) {
+            chatStateManager.getCurrentBlocks()
+        }
 
         withContext(Dispatchers.Main) {
             chatStateManager.finalizeStream(
@@ -561,7 +570,7 @@ class ChatExecutor(
             )
         }
 
-        return result to usage
+        return Triple(result, usage, contentBlocks)
     }
 
     private fun serializeContentBlocks(blocks: List<ContentBlock>): String {
