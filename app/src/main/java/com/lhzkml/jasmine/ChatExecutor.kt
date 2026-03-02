@@ -162,9 +162,13 @@ class ChatExecutor(
                 messageHistory = listOf(userMsg, assistantMsg)
             )
 
-            val logContent = chatStateManager.getLogContent()
-            if (logContent.isNotBlank()) {
-                conversationRepo.addMessage(currentConversationId()!!, ChatMessage("agent_log", logContent))
+            val currentBlocks = withContext(Dispatchers.Main) {
+                chatStateManager.getCurrentBlocks()
+            }
+            
+            if (currentBlocks.isNotEmpty()) {
+                val blocksJson = serializeContentBlocks(currentBlocks)
+                conversationRepo.addMessage(currentConversationId()!!, ChatMessage("content_blocks", blocksJson))
             }
 
             conversationRepo.addMessage(currentConversationId()!!, assistantMsg)
@@ -558,6 +562,42 @@ class ChatExecutor(
         }
 
         return result to usage
+    }
+
+    private fun serializeContentBlocks(blocks: List<ContentBlock>): String {
+        val jsonArray = StringBuilder("[")
+        blocks.forEachIndexed { index, block ->
+            if (index > 0) jsonArray.append(",")
+            jsonArray.append(serializeBlock(block))
+        }
+        jsonArray.append("]")
+        return jsonArray.toString()
+    }
+
+    private fun serializeBlock(block: ContentBlock): String {
+        return when (block) {
+            is ContentBlock.Text -> """{"type":"text","content":${escapeJson(block.content)}}"""
+            is ContentBlock.Thinking -> """{"type":"thinking","content":${escapeJson(block.content)}}"""
+            is ContentBlock.ToolCall -> """{"type":"tool_call","toolName":${escapeJson(block.toolName)},"arguments":${escapeJson(block.arguments)}}"""
+            is ContentBlock.ToolResult -> """{"type":"tool_result","toolName":${escapeJson(block.toolName)},"result":${escapeJson(block.result)}}"""
+            is ContentBlock.Plan -> {
+                val stepsJson = block.steps.joinToString(",") { escapeJson(it) }
+                """{"type":"plan","goal":${escapeJson(block.goal)},"steps":[$stepsJson]}"""
+            }
+            is ContentBlock.GraphLog -> """{"type":"graph_log","content":${escapeJson(block.content)}}"""
+            is ContentBlock.Error -> """{"type":"error","message":${escapeJson(block.message)}}"""
+            is ContentBlock.SystemLog -> """{"type":"system_log","content":${escapeJson(block.content)}}"""
+        }
+    }
+
+    private fun escapeJson(str: String): String {
+        val escaped = str
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        return "\"$escaped\""
     }
 
     companion object {
