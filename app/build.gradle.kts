@@ -54,6 +54,20 @@ dependencies {
     implementation(project(":jasmine-core:config:config-manager"))
 
 
+    // Markdown 渲染（底层使用 CommonMark，与 Claude App 相同解析引擎）
+    implementation("io.noties.markwon:core:4.6.2")
+    implementation("io.noties.markwon:image:4.6.2")
+    implementation("io.noties.markwon:ext-tables:4.6.2")
+    implementation("io.noties.markwon:ext-strikethrough:4.6.2")
+    implementation("io.noties.markwon:ext-tasklist:4.6.2")
+    implementation("io.noties.markwon:html:4.6.2")
+    implementation("io.noties.markwon:linkify:4.6.2")
+
+    // 数学公式渲染（与 Claude App 完全相同的库）
+    implementation("com.github.gregcockroft:AndroidMath:v1.1.0") {
+        exclude(group = "com.google.guava", module = "guava")
+    }
+
     // Coroutines（UI 层需要协程来调用框架）
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

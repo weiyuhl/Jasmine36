@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.method.LinkMovementMethod
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
@@ -184,9 +185,10 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     class AiViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val tvContent: TextView = view.findViewById(R.id.tvContent)
         private val tvMeta: TextView = view.findViewById(R.id.tvMeta)
+        private val mdRenderer: MarkdownRenderer by lazy { MarkdownRenderer(view.context) }
 
         fun bind(item: ChatItem.AiMessage) {
-            tvContent.text = renderBlocks(item.blocks)
+            renderBlocks(item.blocks, item.isStreaming)
 
             if (item.usageLine.isNotEmpty() || item.time.isNotEmpty()) {
                 tvMeta.visibility = View.VISIBLE
@@ -203,10 +205,17 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             }
         }
 
-        private fun renderBlocks(blocks: List<ContentBlock>): CharSequence {
-            if (blocks.isEmpty()) return ""
+        private fun renderBlocks(blocks: List<ContentBlock>, isStreaming: Boolean) {
+            if (blocks.isEmpty()) {
+                tvContent.text = ""
+                return
+            }
+
             if (blocks.size == 1 && blocks[0] is ContentBlock.Text) {
-                return (blocks[0] as ContentBlock.Text).content
+                val text = (blocks[0] as ContentBlock.Text).content
+                tvContent.text = mdRenderer.render(text, tvContent)
+                tvContent.movementMethod = LinkMovementMethod.getInstance()
+                return
             }
 
             val sb = SpannableStringBuilder()
@@ -215,7 +224,10 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     sb.append("\n")
                 }
                 when (block) {
-                    is ContentBlock.Text -> sb.append(block.content)
+                    is ContentBlock.Text -> {
+                        val rendered = mdRenderer.render(block.content, tvContent)
+                        sb.append(rendered)
+                    }
                     is ContentBlock.Thinking -> appendStyled(sb, "[Think] ${block.content}", COLOR_THINKING)
                     is ContentBlock.ToolCall -> appendStyled(sb, "[Tool] ${block.toolName}(${block.arguments})", COLOR_TOOL)
                     is ContentBlock.ToolResult -> appendStyled(sb, "[Result] ${block.toolName}: ${block.result}", COLOR_RESULT)
@@ -225,7 +237,10 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     is ContentBlock.SystemLog -> appendStyled(sb, block.content, COLOR_SYSTEM_LOG)
                 }
             }
-            return sb
+            tvContent.text = sb
+            if (!isStreaming) {
+                tvContent.movementMethod = LinkMovementMethod.getInstance()
+            }
         }
 
         private fun appendStyled(

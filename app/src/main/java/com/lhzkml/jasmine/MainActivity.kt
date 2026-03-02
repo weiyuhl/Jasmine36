@@ -4,15 +4,12 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -22,57 +19,35 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
-import com.lhzkml.jasmine.core.prompt.llm.ChatClientException
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientRouter
-import com.lhzkml.jasmine.core.prompt.llm.chatStreamWithUsageAndThinking
 import com.lhzkml.jasmine.core.prompt.llm.CompressionEventListener
 import com.lhzkml.jasmine.core.prompt.llm.ContextManager
-import com.lhzkml.jasmine.core.prompt.llm.ErrorType
 import com.lhzkml.jasmine.core.prompt.llm.HistoryCompressionStrategy
 import com.lhzkml.jasmine.core.prompt.llm.LLMWriteSession
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
-import com.lhzkml.jasmine.core.prompt.llm.TokenEstimator
-import com.lhzkml.jasmine.core.prompt.llm.StreamResumeHelper
-import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
+import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.Prompt
 import com.lhzkml.jasmine.core.prompt.model.Usage
-import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
-import com.lhzkml.jasmine.core.conversation.storage.TimedMessage
 import com.lhzkml.jasmine.core.agent.tools.*
-import com.lhzkml.jasmine.core.agent.planner.SimpleLLMPlanner
-import com.lhzkml.jasmine.core.agent.planner.SimpleLLMWithCriticPlanner
-import com.lhzkml.jasmine.core.agent.graph.graph.AgentGraphContext
-import com.lhzkml.jasmine.core.agent.graph.graph.GenericAgentEnvironment
-import com.lhzkml.jasmine.core.agent.graph.graph.GraphAgent
-import com.lhzkml.jasmine.core.agent.graph.graph.PredefinedStrategies
-import com.lhzkml.jasmine.core.agent.graph.graph.ToolCalls
-import com.lhzkml.jasmine.core.agent.graph.graph.ToolSelectionStrategy
 import com.lhzkml.jasmine.core.agent.observe.event.EventHandler
-import com.lhzkml.jasmine.core.agent.observe.event.*
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
-import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.observe.trace.Tracing
 import com.lhzkml.jasmine.core.config.ActiveProviderConfig
 import com.lhzkml.jasmine.core.agent.runtime.AgentRuntimeBuilder
 import com.lhzkml.jasmine.core.agent.runtime.CompressionStrategyBuilder
 import com.lhzkml.jasmine.core.agent.runtime.McpConnectionManager
 import com.lhzkml.jasmine.core.agent.runtime.ToolRegistryBuilder
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -120,6 +95,7 @@ class MainActivity : AppCompatActivity() {
     private var tracing: Tracing? = null
     private var eventHandler: EventHandler? = null
     private var persistence: Persistence? = null
+    private lateinit var checkpointRecovery: CheckpointRecovery
     /** 预加载的 MCP 工具（APP 启动时后台连接，全局共享实例） */
     private val mcpConnectionManager get() = AppConfig.mcpConnectionManager()
     /** 用户是否手动向上滚动（流式回复期间暂停自动滚动） */
@@ -161,187 +137,7 @@ class MainActivity : AppCompatActivity() {
     private fun buildToolRegistry(): ToolRegistry {
         toolRegistryBuilder.workspacePath = ProviderManager.getWorkspacePath(this)
         toolRegistryBuilder.fallbackBasePath = getExternalFilesDir(null)?.absolutePath
-        toolRegistryBuilder.shellConfirmationHandler = { command, _ ->
-            val deferred = CompletableDeferred<Boolean>()
-            withContext(Dispatchers.Main) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("执行命令确认")
-                    .setMessage("AI 请求执行以下命令：\n\n$command\n\n是否允许？")
-                    .setPositiveButton("允许") { _, _ -> deferred.complete(true) }
-                    .setNegativeButton("拒绝") { _, _ -> deferred.complete(false) }
-                    .setCancelable(false)
-                    .show()
-            }
-            deferred.await()
-        }
-        toolRegistryBuilder.askUserHandler = { question ->
-            val deferred = CompletableDeferred<String>()
-            withContext(Dispatchers.Main) {
-                val input = EditText(this@MainActivity).apply {
-                    hint = "请输入回复"
-                    setPadding(dp(16), dp(16), dp(16), dp(16))
-                }
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("AI 询问")
-                    .setMessage(question)
-                    .setView(input)
-                    .setPositiveButton("发送") { _, _ ->
-                        val answer = input.text.toString().trim()
-                        deferred.complete(answer.ifEmpty { "(无回复)" })
-                    }
-                    .setNegativeButton("取消") { _, _ ->
-                        deferred.complete("(用户取消)")
-                    }
-                    .setCancelable(false)
-                    .show()
-            }
-            deferred.await()
-        }
-        
-        toolRegistryBuilder.singleSelectHandler = { question, options ->
-            val deferred = CompletableDeferred<String>()
-            withContext(Dispatchers.Main) {
-                var selectedIndex = -1
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle(question)
-                    .setSingleChoiceItems(options.toTypedArray(), -1) { _, which ->
-                        selectedIndex = which
-                    }
-                    .setPositiveButton("确定") { _, _ ->
-                        if (selectedIndex >= 0) {
-                            deferred.complete(options[selectedIndex])
-                        } else {
-                            deferred.complete("(未选择)")
-                        }
-                    }
-                    .setNegativeButton("取消") { _, _ ->
-                        deferred.complete("(用户取消)")
-                    }
-                    .setCancelable(false)
-                    .show()
-            }
-            deferred.await()
-        }
-        
-        toolRegistryBuilder.multiSelectHandler = { question, options ->
-            val deferred = CompletableDeferred<List<String>>()
-            withContext(Dispatchers.Main) {
-                val selected = BooleanArray(options.size) { false }
-                var dialog: AlertDialog? = null
-                
-                // 使用单选样式但支持多选
-                val builder = AlertDialog.Builder(this@MainActivity)
-                    .setTitle(question)
-                    .setSingleChoiceItems(options.toTypedArray(), -1) { _, which ->
-                        // 切换选中状态
-                        selected[which] = !selected[which]
-                        // 刷新列表以显示多选状态
-                        dialog?.listView?.setItemChecked(which, selected[which])
-                    }
-                    .setPositiveButton("确定") { _, _ ->
-                        val result = options.filterIndexed { index, _ -> selected[index] }
-                        deferred.complete(result.ifEmpty { listOf("(未选择)") })
-                    }
-                    .setNegativeButton("取消") { _, _ ->
-                        deferred.complete(listOf("(用户取消)"))
-                    }
-                    .setCancelable(false)
-                
-                dialog = builder.create()
-                dialog.show()
-                
-                // 设置为多选模式
-                dialog.listView?.choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
-            }
-            deferred.await()
-        }
-        
-        toolRegistryBuilder.rankPrioritiesHandler = { question, items ->
-            val deferred = CompletableDeferred<List<String>>()
-            withContext(Dispatchers.Main) {
-                val ranked = items.toMutableList()
-                val adapter = android.widget.ArrayAdapter(
-                    this@MainActivity,
-                    android.R.layout.simple_list_item_1,
-                    ranked
-                )
-                val listView = android.widget.ListView(this@MainActivity).apply {
-                    this.adapter = adapter
-                    setPadding(dp(16), dp(8), dp(16), dp(8))
-                }
-                
-                // 简单实现：点击项目上移
-                listView.setOnItemClickListener { _, _, position, _ ->
-                    if (position > 0) {
-                        val item = ranked.removeAt(position)
-                        ranked.add(position - 1, item)
-                        adapter.notifyDataSetChanged()
-                    }
-                }
-                
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("AI 询问 - 排序优先级")
-                    .setMessage("$question\n\n点击项目向上移动")
-                    .setView(listView)
-                    .setPositiveButton("确定") { _, _ ->
-                        deferred.complete(ranked)
-                    }
-                    .setNegativeButton("取消") { _, _ ->
-                        deferred.complete(items)
-                    }
-                    .setCancelable(false)
-                    .show()
-            }
-            deferred.await()
-        }
-        
-        toolRegistryBuilder.askMultipleQuestionsHandler = { questions ->
-            val deferred = CompletableDeferred<List<String>>()
-            withContext(Dispatchers.Main) {
-                val answers = mutableListOf<String>()
-                val inputs = questions.map { question ->
-                    val layout = LinearLayout(this@MainActivity).apply {
-                        orientation = LinearLayout.VERTICAL
-                        setPadding(dp(16), dp(8), dp(16), dp(8))
-                    }
-                    val label = TextView(this@MainActivity).apply {
-                        text = question
-                        setPadding(0, 0, 0, dp(8))
-                    }
-                    val input = EditText(this@MainActivity).apply {
-                        hint = "请输入回复"
-                    }
-                    layout.addView(label)
-                    layout.addView(input)
-                    layout to input
-                }
-                
-                val scrollView = ScrollView(this@MainActivity).apply {
-                    val container = LinearLayout(this@MainActivity).apply {
-                        orientation = LinearLayout.VERTICAL
-                        inputs.forEach { (layout, _) -> addView(layout) }
-                    }
-                    addView(container)
-                }
-                
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("AI 询问 (${questions.size} 个问题)")
-                    .setView(scrollView)
-                    .setPositiveButton("发送") { _, _ ->
-                        inputs.forEach { (_, input) ->
-                            answers.add(input.text.toString().trim().ifEmpty { "(无回复)" })
-                        }
-                        deferred.complete(answers)
-                    }
-                    .setNegativeButton("取消") { _, _ ->
-                        deferred.complete(List(questions.size) { "(用户取消)" })
-                    }
-                    .setCancelable(false)
-                    .show()
-            }
-            deferred.await()
-        }
-        
+        DialogHandlers.register(this, toolRegistryBuilder)
         return toolRegistryBuilder.build(ProviderManager.isAgentMode(this))
     }
 
@@ -428,6 +224,14 @@ class MainActivity : AppCompatActivity() {
         rvChat = findViewById(R.id.rvChat)
         chatAdapter = ChatAdapter()
         chatStateManager = ChatStateManager(chatAdapter) { autoScrollToBottom() }
+        checkpointRecovery = CheckpointRecovery(
+            activity = this,
+            chatStateManager = chatStateManager,
+            messageHistory = messageHistory,
+            conversationRepo = conversationRepo,
+            autoScroll = { autoScrollToBottom() },
+            sendMessage = { sendMessage(it) }
+        )
         chatLayoutManager = LinearLayoutManager(this)
         rvChat.layoutManager = chatLayoutManager
         rvChat.adapter = chatAdapter
@@ -969,625 +773,56 @@ class MainActivity : AppCompatActivity() {
 
         updateSendButtonState(ButtonState.GENERATING)
         userScrolledUp = false
-        val now = formatTime(System.currentTimeMillis())
+        val now = ChatExecutor.formatTime(System.currentTimeMillis())
         chatStateManager.addUserMessage(message, now)
         etInput.text.clear()
 
         val client = getOrCreateClient(config)
         val userMsg = ChatMessage.user(message)
 
-        currentJob = CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val toolsEnabled = ProviderManager.isToolsEnabled(this@MainActivity)
-
-                // Agent 模式：先构建工具注册表，再刷新上下文（确保工具列表包含在 system prompt 中）
-                val registry = if (toolsEnabled) {
-                    val r = buildToolRegistry()
-                    loadMcpToolsInto(r)
-                    r
-                } else null
-
-                // 刷新上下文收集器（工作区、系统信息、时间等，工具通过 API tools 参数发送）
-                refreshContextCollector()
-
-                if (currentConversationId == null) {
-                    val title = if (message.length > 20) message.substring(0, 20) + "..." else message
-                    val basePrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
-                    // 自动拼接环境上下文到 system prompt（工作区路径、系统信息、时间等）
-                    val systemPrompt = contextCollector.buildSystemPrompt(basePrompt)
-                    currentConversationId = conversationRepo.createConversation(
-                        title = title,
-                        providerId = config.providerId,
-                        model = config.model,
-                        systemPrompt = systemPrompt,
-                        workspacePath = if (ProviderManager.isAgentMode(this@MainActivity))
-                            ProviderManager.getWorkspacePath(this@MainActivity) else ""
-                    )
-                    val systemMsg = ChatMessage.system(systemPrompt)
-                    messageHistory.add(systemMsg)
-                    conversationRepo.addMessage(currentConversationId!!, systemMsg)
-                } else {
-                    // 已有对话：更新 system prompt 中的动态上下文（工具列表、时间等）
-                    val basePrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
-                    val updatedSystemPrompt = contextCollector.buildSystemPrompt(basePrompt)
-                    if (messageHistory.isNotEmpty() && messageHistory[0].role == "system") {
-                        messageHistory[0] = ChatMessage.system(updatedSystemPrompt)
-                    }
-                }
-
-                messageHistory.add(userMsg)
-                conversationRepo.addMessage(currentConversationId!!, userMsg)
-
-                // 构建追踪系统
-                tracing?.close()
-                tracing = buildTracing()
-
-                // 上下文窗口裁剪，避免超出模型 token 限制
-                val trimmedMessages = contextManager.trimMessages(messageHistory.toList())
-
-                val maxTokensVal = ProviderManager.getMaxTokens(this@MainActivity)
-                val maxTokens = if (maxTokensVal > 0) maxTokensVal else 8192
-
-                // 采样参数
-                val tempVal = ProviderManager.getTemperature(this@MainActivity)
-                val topPVal = ProviderManager.getTopP(this@MainActivity)
-                val topKVal = ProviderManager.getTopK(this@MainActivity)
-                val samplingParams = com.lhzkml.jasmine.core.prompt.model.SamplingParams(
-                    temperature = if (tempVal >= 0f) tempVal.toDouble() else null,
-                    topP = if (topPVal >= 0f) topPVal.toDouble() else null,
-                    topK = if (topKVal >= 0) topKVal else null
-                )
-
-                var result: String = ""
-                var usage: Usage? = null
-
-                withContext(Dispatchers.Main) {
-                    chatStateManager.startStreaming()
-                }
-
-                // 构建快照/持久化（所有模式通用，每轮对话结束后创建检查点）
-                persistence = buildPersistence()
-
-                if (toolsEnabled && registry != null) {
-                    // Agent 模式：使用 ToolExecutor 自动循环
-                    val listener = object : AgentEventListener {
-                        override suspend fun onToolCallStart(toolName: String, arguments: String) {
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.handleToolCall(toolName, arguments)
-                            }
-                        }
-                        override suspend fun onToolCallResult(toolName: String, result: String) {
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.handleToolResult(toolName, result)
-                            }
-                        }
-                        override suspend fun onThinking(content: String) {
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.handleThinking(content)
-                            }
-                        }
-                    }
-                    val executor = ToolExecutor(client, registry, eventListener = listener, tracing = tracing)
-
-                    // 构建事件处理器
-                    eventHandler = buildEventHandler()
-
-                    // 触发 Agent 开始事件
-                    val agentRunId = tracing?.newRunId() ?: java.util.UUID.randomUUID().toString()
-                    eventHandler?.fireAgentStarting(AgentStartingContext(
-                        runId = agentRunId,
-                        agentId = currentConversationId ?: "unknown",
-                        model = config.model,
-                        toolCount = registry.descriptors().size
-                    ))
-
-                    // 任务规划（Agent 模式下可选）— 使用 SimpleLLMPlanner 结构化输出
-                    if (ProviderManager.isPlannerEnabled(this@MainActivity)) {
-                        try {
-                            val planPrompt = Prompt.build("planner") {
-                                for (msg in trimmedMessages) {
-                                    when (msg.role) {
-                                        "system" -> system(msg.content)
-                                        "user" -> user(msg.content)
-                                        "assistant" -> assistant(msg.content)
-                                    }
-                                }
-                            }
-                            val planSession = LLMWriteSession(client, config.model, planPrompt)
-                            val planReadSession = com.lhzkml.jasmine.core.prompt.llm.LLMReadSession(client, config.model, planPrompt)
-                            val planContext = AgentGraphContext(
-                                agentId = currentConversationId ?: "planner",
-                                runId = agentRunId,
-                                client = client,
-                                model = config.model,
-                                session = planSession,
-                                readSession = planReadSession,
-                                toolRegistry = registry,
-                                environment = GenericAgentEnvironment(
-                                    currentConversationId ?: "planner", registry
-                                ),
-                                tracing = tracing
-                            )
-
-                            val maxIter = ProviderManager.getPlannerMaxIterations(this@MainActivity)
-                            val planner = if (ProviderManager.isPlannerCriticEnabled(this@MainActivity)) {
-                                SimpleLLMWithCriticPlanner(maxIterations = maxIter)
-                            } else {
-                                SimpleLLMPlanner(maxIterations = maxIter)
-                            }
-                            val plan = planner.buildPlanPublic(planContext, message, null)
-                            planSession.close()
-                            planReadSession.close()
-
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.handlePlan(
-                                    plan.goal,
-                                    plan.steps.map { it.description }
-                                )
-                            }
-
-                            // 快照：规划完成后不再单独创建检查点，统一在对话轮次结束后创建
-                        } catch (e: Exception) {
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.handleSystemLog("[Plan] [规划跳过: ${e.message}]\n\n")
-                            }
-                        }
-                    }
-
-                    val agentStrategy = ProviderManager.getAgentStrategy(this@MainActivity)
-
-                    when (agentStrategy) {
-                        com.lhzkml.jasmine.core.config.AgentStrategyType.SIMPLE_LOOP -> {
-                            val agentPrompt = Prompt.build("agent") {
-                                for (msg in trimmedMessages) {
-                                    when (msg.role) {
-                                        "system" -> system(msg.content)
-                                        "user" -> user(msg.content)
-                                        "assistant" -> assistant(msg.content)
-                                    }
-                                }
-                            }.copy(maxTokens = maxTokens, samplingParams = samplingParams)
-                            val streamResult = executor.executeStream(
-                                agentPrompt, config.model
-                            ) { chunk ->
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleChunk(chunk)
-                                }
-                            }
-                            result = streamResult.content
-                            usage = streamResult.usage
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.finalizeStream(
-                                    formatUsageShort(usage),
-                                    formatTime(System.currentTimeMillis())
-                                )
-                            }
-                        }
-
-                        com.lhzkml.jasmine.core.config.AgentStrategyType.SINGLE_RUN_GRAPH -> {
-                            // 图策略模式：使用 GraphAgent + PredefinedStrategies（流式）
-                            // 读取工具调用模式设置
-                            val toolCallMode = when (ProviderManager.getGraphToolCallMode(this@MainActivity)) {
-                                com.lhzkml.jasmine.core.config.GraphToolCallMode.SEQUENTIAL -> ToolCalls.SEQUENTIAL
-                                com.lhzkml.jasmine.core.config.GraphToolCallMode.PARALLEL -> ToolCalls.PARALLEL
-                                com.lhzkml.jasmine.core.config.GraphToolCallMode.SINGLE_RUN_SEQUENTIAL -> ToolCalls.SINGLE_RUN_SEQUENTIAL
-                            }
-
-                            // 读取工具选择策略设置
-                            val toolSelStrategy = when (ProviderManager.getToolSelectionStrategy(this@MainActivity)) {
-                                com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.ALL -> ToolSelectionStrategy.ALL
-                                com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.NONE -> ToolSelectionStrategy.NONE
-                                com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.BY_NAME -> {
-                                    val names = ProviderManager.getToolSelectionNames(this@MainActivity)
-                                    if (names.isNotEmpty()) ToolSelectionStrategy.ByName(names) else ToolSelectionStrategy.ALL
-                                }
-                                com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK -> {
-                                    val desc = ProviderManager.getToolSelectionTaskDesc(this@MainActivity)
-                                    if (desc.isNotEmpty()) ToolSelectionStrategy.AutoSelectForTask(desc) else ToolSelectionStrategy.ALL
-                                }
-                            }
-
-                            val strategy = PredefinedStrategies.singleRunStreamStrategy(toolCallMode, toolSelStrategy)
-
-                            val graphAgent = GraphAgent(
-                                client = client,
-                                model = config.model,
-                                strategy = strategy,
-                                toolRegistry = registry,
-                                tracing = tracing,
-                                agentId = currentConversationId ?: "graph-agent"
-                            )
-
-                            // 构建初始 Prompt（系统提示 + 历史消息，不含最后一条 user）
-                            val graphPrompt = Prompt.build("graph-agent") {
-                                for (msg in trimmedMessages.dropLast(1)) {
-                                    when (msg.role) {
-                                        "system" -> system(msg.content)
-                                        "user" -> user(msg.content)
-                                        "assistant" -> assistant(msg.content)
-                                    }
-                                }
-                            }.copy(maxTokens = maxTokens, samplingParams = samplingParams)
-
-                            // 读取 ToolChoice 设置并应用到 Prompt
-                            val toolChoiceMode = ProviderManager.getToolChoiceMode(this@MainActivity)
-                            val toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice? = when (toolChoiceMode) {
-                                com.lhzkml.jasmine.core.config.ToolChoiceMode.DEFAULT -> null
-                                com.lhzkml.jasmine.core.config.ToolChoiceMode.AUTO -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Auto
-                                com.lhzkml.jasmine.core.config.ToolChoiceMode.REQUIRED -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Required
-                                com.lhzkml.jasmine.core.config.ToolChoiceMode.NONE -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.None
-                                com.lhzkml.jasmine.core.config.ToolChoiceMode.NAMED -> {
-                                    val name = ProviderManager.getToolChoiceNamedTool(this@MainActivity)
-                                    if (name.isNotEmpty()) com.lhzkml.jasmine.core.prompt.model.ToolChoice.Named(name) else null
-                                }
-                            }
-                            val finalGraphPrompt = if (toolChoice != null) graphPrompt.withToolChoice(toolChoice) else graphPrompt
-
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.handleGraphLog("┌─ [Graph] 图策略执行 ─────────────\n│ [>] Start\n")
-                                chatStateManager.handleGraphLog("└─────────────────────────\n")
-                            }
-
-                            val chunkCallback: (suspend (String) -> Unit)? = { chunk: String ->
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleChunk(chunk)
-                                }
-                            }
-
-                            val thinkingCallback: (suspend (String) -> Unit)? = { text: String ->
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleThinking(text)
-                                }
-                            }
-
-                            val nodeEnterCallback: suspend (String) -> Unit = { nodeName ->
-                                val icon = when {
-                                    nodeName.contains("LLM", true) -> "[LLM]"
-                                    nodeName.contains("Tool", true) -> "[Tool]"
-                                    nodeName.contains("Send", true) -> "[Send]"
-                                    else -> "[Node]"
-                                }
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleGraphLog("│ $icon $nodeName ...\n")
-                                }
-                            }
-
-                            val nodeExitCallback: suspend (String, Boolean) -> Unit = { nodeName, success ->
-                                val status = if (success) "[OK]" else "[FAIL]"
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleGraphLog("│ $status $nodeName 完成\n")
-                                }
-                            }
-
-                            val edgeCallback: suspend (String, String, String) -> Unit = { from, to, label ->
-                                val labelStr = if (label.isNotEmpty()) " ($label)" else ""
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleGraphLog("│  ↓ $from → $to$labelStr\n")
-                                }
-                            }
-
-                            val graphResult = graphAgent.runWithCallbacks(
-                                prompt = finalGraphPrompt,
-                                input = message,
-                                onChunk = chunkCallback,
-                                onThinking = thinkingCallback,
-                                onToolCallStart = { toolName, args ->
-                                    withContext(Dispatchers.Main) {
-                                        chatStateManager.handleToolCall(toolName, args)
-                                    }
-                                },
-                                onToolCallResult = { toolName, toolResult ->
-                                    withContext(Dispatchers.Main) {
-                                        chatStateManager.handleToolResult(toolName, toolResult)
-                                    }
-                                },
-                                onNodeEnter = nodeEnterCallback,
-                                onNodeExit = nodeExitCallback,
-                                onEdge = edgeCallback
-                            )
-
-                            result = graphResult ?: ""
-
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.finalizeStream(
-                                    "",
-                                    formatTime(System.currentTimeMillis())
-                                )
-                            }
-                        }
-                    }
-
-                    // 触发 Agent 完成事件
-                    eventHandler?.fireAgentCompleted(AgentCompletedContext(
-                        runId = agentRunId,
-                        agentId = currentConversationId ?: "unknown",
-                        result = result.take(200),
-                        totalIterations = 0
-                    ))
-                } else {
-                    val resumeEnabled = ProviderManager.isStreamResumeEnabled(this@MainActivity)
-
-                    val streamResult = if (resumeEnabled) {
-                        val helper = StreamResumeHelper(
-                            maxResumes = ProviderManager.getStreamResumeMaxRetries(this@MainActivity)
-                        )
-                        helper.streamWithResume(
-                            client = client,
-                            messages = trimmedMessages,
-                            model = config.model,
-                            maxTokens = maxTokens,
-                            samplingParams = samplingParams,
-                            onChunk = { chunk ->
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleChunk(chunk)
-                                }
-                            },
-                            onThinking = { text ->
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleThinking(text)
-                                }
-                            },
-                            onResumeAttempt = { attempt ->
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleSystemLog("\n[网络超时，正在续传... 第${attempt}次]\n")
-                                }
-                            }
-                        )
-                    } else {
-                        client.chatStreamWithUsageAndThinking(
-                            trimmedMessages, config.model, maxTokens, samplingParams,
-                            onChunk = { chunk ->
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleChunk(chunk)
-                                }
-                            },
-                            onThinking = { text ->
-                                withContext(Dispatchers.Main) {
-                                    chatStateManager.handleThinking(text)
-                                }
-                            }
-                        )
-                    }
-
-                    result = streamResult.content
-                    usage = streamResult.usage
-
-                            withContext(Dispatchers.Main) {
-                                chatStateManager.finalizeStream(
-                                    formatUsageShort(usage),
-                                    formatTime(System.currentTimeMillis())
-                                )
-                            }
-                }
-
-                val assistantMsg = ChatMessage.assistant(result)
-                messageHistory.add(assistantMsg)
-
-                // 快照：每轮完整对话（user + assistant）结束后创建检查点
-                // 一个检查点 = 当轮的对话交互（user + assistant），恢复时拼接之前所有检查点重建历史
-                persistence?.createCheckpoint(
-                    agentId = currentConversationId ?: "unknown",
-                    nodePath = "turn:${messageHistory.count { it.role == "user" }}",
-                    lastInput = message,
-                    messageHistory = listOf(userMsg, assistantMsg)
-                )
-
-                val logContent = chatStateManager.getLogContent()
-                if (logContent.isNotBlank()) {
-                    conversationRepo.addMessage(currentConversationId!!, ChatMessage("agent_log", logContent))
-                }
-
-                conversationRepo.addMessage(currentConversationId!!, assistantMsg)
-
-                // 记录 token 用量
-                if (usage != null) {
-                    conversationRepo.recordUsage(
-                        conversationId = currentConversationId!!,
-                        providerId = config.providerId,
-                        model = config.model,
-                        usage = usage
-                    )
-                }
-
-                // 智能上下文压缩
-                if (ProviderManager.isCompressionEnabled(this@MainActivity)) {
-                    withContext(Dispatchers.Main) {
-                        updateSendButtonState(ButtonState.COMPRESSING)
-                    }
-                    tryCompressHistory(client, config.model)
-                }
-            } catch (e: CancellationException) {
-                // 用户主动停止，已渲染文字保留，不追加任何内容
-            } catch (e: ChatClientException) {
-                val errorMsg = when (e.errorType) {
-                    ErrorType.NETWORK -> "网络错误: ${e.message}\n请检查网络连接后重试"
-                    ErrorType.AUTHENTICATION -> "认证失败: ${e.message}\n请检查 API Key 是否正确"
-                    ErrorType.RATE_LIMIT -> "请求过于频繁: ${e.message}\n请稍后再试"
-                    ErrorType.MODEL_UNAVAILABLE -> "模型不可用: ${e.message}\n请检查模型名称或稍后重试"
-                    ErrorType.INVALID_REQUEST -> "请求参数错误: ${e.message}"
-                    ErrorType.SERVER_ERROR -> "服务器错误: ${e.message}\n请稍后重试"
-                    else -> "错误: ${e.message}"
-                }
-                // 触发 Agent 失败事件
-                eventHandler?.fireAgentExecutionFailed(AgentExecutionFailedContext(
-                    runId = tracing?.newRunId() ?: "",
-                    agentId = currentConversationId ?: "unknown",
-                    throwable = e
-                ))
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleError("\n$errorMsg\n\n")
-                }
-                tryOfferCheckpointRecovery(e, message)
-            } catch (e: Exception) {
-                eventHandler?.fireAgentExecutionFailed(AgentExecutionFailedContext(
-                    runId = tracing?.newRunId() ?: "",
-                    agentId = currentConversationId ?: "unknown",
-                    throwable = e
-                ))
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleError("\n未知错误: ${e.message}\n\n")
-                }
-                // 快照恢复：检查是否有可用检查点
-                tryOfferCheckpointRecovery(e, message)
-            } finally {
-                withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
-                    chatStateManager.cancelStream()
+        val executor = ChatExecutor(
+            context = this,
+            chatStateManager = chatStateManager,
+            conversationRepo = conversationRepo,
+            contextCollector = { contextCollector },
+            contextManager = { contextManager },
+            currentConversationId = { currentConversationId },
+            setConversationId = { currentConversationId = it },
+            messageHistory = messageHistory,
+            buildToolRegistry = { buildToolRegistry() },
+            loadMcpTools = { loadMcpToolsInto(it) },
+            refreshContextCollector = { refreshContextCollector() },
+            buildTracing = { buildTracing() },
+            setTracing = { tracing = it },
+            getTracing = { tracing },
+            buildEventHandler = { buildEventHandler() },
+            buildPersistence = { buildPersistence() },
+            getPersistence = { persistence },
+            setPersistence = { persistence = it },
+            tryOfferCheckpointRecovery = { e, msg -> tryOfferCheckpointRecovery(e, msg) },
+            tryCompressHistory = { c, m -> tryCompressHistory(c, m) },
+            onUpdateButtonState = { isCompressing ->
+                if (isCompressing) updateSendButtonState(ButtonState.COMPRESSING)
+                else {
                     updateSendButtonState(ButtonState.IDLE)
                     currentJob = null
                 }
             }
+        )
+
+        currentJob = CoroutineScope(Dispatchers.IO).launch {
+            executor.execute(message, userMsg, client, config)
         }
     }
 
-    /**
-     * 快照恢复：执行失败时，检查是否有可用检查点，弹窗询问用户恢复到某一轮对话。
-     * 每个检查点只保存当轮的 user + assistant，恢复时拼接 system prompt + 所有检查点到选中轮次。
-     */
     private suspend fun tryOfferCheckpointRecovery(error: Exception, originalMessage: String) {
-        val p = persistence ?: return
-        val agentId = currentConversationId ?: return
-
-        val allCheckpoints = p.getCheckpoints(agentId)
-        if (allCheckpoints.isEmpty()) return
-
-        val rollbackStrategy = ProviderManager.getSnapshotRollbackStrategy(this@MainActivity)
-        val strategyName = when (rollbackStrategy) {
-            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.RESTART_FROM_NODE -> "重新执行"
-            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.SKIP_NODE -> "仅恢复上下文"
-            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> "使用默认输出"
-        }
-
-        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-        val sortedCps = allCheckpoints.sortedBy { it.createdAt }
-        val sortedCpsDesc = sortedCps.reversed()
-        val checkpointLabels = sortedCpsDesc.map { cp ->
-            val time = timeFormat.format(java.util.Date(cp.createdAt))
-            val userMsg = cp.messageHistory.firstOrNull { it.role == "user" }?.content?.take(30) ?: ""
-            "[$time] ${cp.nodePath} - $userMsg"
-        }.toTypedArray()
-
-        val deferred = CompletableDeferred<Int?>()
-        withContext(Dispatchers.Main) {
-            AlertDialog.Builder(this@MainActivity)
-                .setTitle("恢复到历史对话轮次 [$strategyName]")
-                .setMessage("执行失败: ${error.message?.take(100)}\n\n选择要恢复到的对话轮次:")
-                .setItems(checkpointLabels) { _, which ->
-                    deferred.complete(which)
-                }
-                .setNegativeButton("取消") { _, _ -> deferred.complete(null) }
-                .setCancelable(false)
-                .show()
-        }
-
-        val selectedIndex = deferred.await() ?: return
-        val selectedCheckpoint = sortedCpsDesc[selectedIndex]
-
-        // 重建消息历史：system prompt + 所有检查点到选中轮次的消息
-        val selectedIndexInAsc = sortedCps.indexOf(selectedCheckpoint)
-        val rebuiltHistory = rebuildHistoryFromCheckpoints(sortedCps.take(selectedIndexInAsc + 1))
-
-        messageHistory.clear()
-        messageHistory.addAll(rebuiltHistory)
-
-        val totalMsgs = rebuiltHistory.size
-        val line = "[Snapshot] 恢复到 ${selectedCheckpoint.nodePath} [$totalMsgs 条消息]\n"
-        withContext(Dispatchers.Main) {
-            chatStateManager.handleSystemLog(line)
-            autoScrollToBottom()
-        }
-
-        when (rollbackStrategy) {
-            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.RESTART_FROM_NODE -> {
-                withContext(Dispatchers.Main) {
-                    sendMessage(originalMessage)
-                }
-            }
-            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.SKIP_NODE -> {
-                val skipLine = "[Snapshot] 已恢复到该轮对话状态，可继续发送新消息。\n"
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleSystemLog(skipLine)
-                }
-            }
-            com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.USE_DEFAULT_OUTPUT -> {
-                val defaultReply = "抱歉，之前的处理过程中遇到了问题。已恢复到 [${selectedCheckpoint.nodePath}]。请重新描述您的需求。"
-                val assistantMsg = ChatMessage.assistant(defaultReply)
-                messageHistory.add(assistantMsg)
-
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleSystemLog("[Snapshot] 使用默认输出恢复\n")
-                    chatStateManager.addHistoryAiMessage(
-                        blocks = listOf(ContentBlock.Text(defaultReply)),
-                        usageLine = "",
-                        time = formatTime(System.currentTimeMillis())
-                    )
-                    autoScrollToBottom()
-                }
-                if (currentConversationId != null) {
-                    conversationRepo.addMessage(currentConversationId!!, assistantMsg)
-                }
-            }
-        }
+        checkpointRecovery.tryOfferCheckpointRecovery(
+            persistence, currentConversationId, error, originalMessage
+        )
     }
 
-    /**
-     * 从检查点列表重建完整消息历史。
-     * 委托给框架层 Persistence.rebuildHistoryFromCheckpoints()
-     */
-    private fun rebuildHistoryFromCheckpoints(checkpoints: List<AgentCheckpoint>): List<ChatMessage> {
-        val systemPrompt = ProviderManager.getDefaultSystemPrompt(this)
-        return Persistence.rebuildHistoryFromCheckpoints(checkpoints, systemPrompt)
-    }
-
-    /**
-     * 启动恢复：加载对话时检查是否有检查点，提示用户可以恢复到某一轮对话。
-     * 每个检查点只保存当轮 user + assistant，恢复时拼接重建完整历史。
-     */
     private suspend fun tryOfferStartupRecovery(conversationId: String) {
-        val service = AppConfig.checkpointService() ?: return
-
-        val allCheckpoints = service.getCheckpoints(conversationId)
-        if (allCheckpoints.isEmpty()) return
-
-        // 检查点总轮数 vs 当前对话轮数
-        val totalTurns = allCheckpoints.size
-        val currentTurns = messageHistory.count { it.role == "user" }
-        if (totalTurns <= currentTurns) return
-
-        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-        val latest = allCheckpoints.maxByOrNull { it.createdAt } ?: return
-        val timeStr = timeFormat.format(java.util.Date(latest.createdAt))
-
-        val deferred = CompletableDeferred<Boolean>()
-        withContext(Dispatchers.Main) {
-            AlertDialog.Builder(this@MainActivity)
-                .setTitle("检测到可恢复的对话状态")
-                .setMessage(
-                    "此对话有更完整的检查点记录:\n\n" +
-                    "共 $totalTurns 轮对话检查点\n" +
-                    "最后轮次: ${latest.nodePath}\n" +
-                    "时间: $timeStr\n\n" +
-                    "是否从检查点恢复完整对话？"
-                )
-                .setPositiveButton("恢复") { _, _ -> deferred.complete(true) }
-                .setNegativeButton("忽略") { _, _ -> deferred.complete(false) }
-                .setCancelable(true)
-                .setOnCancelListener { deferred.complete(false) }
-                .show()
-        }
-
-        if (!deferred.await()) return
-
-        val systemPrompt = ProviderManager.getDefaultSystemPrompt(this@MainActivity)
-        val rebuilt = service.rebuildHistory(conversationId, systemPrompt = systemPrompt)
-
-        withContext(Dispatchers.Main) {
-            messageHistory.clear()
-            messageHistory.addAll(rebuilt)
-
-            val line = "[Snapshot] 启动恢复: 从 $totalTurns 个检查点重建对话历史 [${rebuilt.size} 条消息]\n\n"
-            chatStateManager.handleSystemLog(line)
-            autoScrollToBottom()
-        }
+        checkpointRecovery.tryOfferStartupRecovery(conversationId)
     }
 
     /**
@@ -1684,50 +919,7 @@ class MainActivity : AppCompatActivity() {
         rvChat.postDelayed(runnable, 30)
     }
 
-    private fun formatUsageShort(usage: Usage?): String {
-        if (usage == null) return ""
-        return "[提示: ${usage.promptTokens} | 回复: ${usage.completionTokens} | 总计: ${usage.totalTokens}]"
-    }
-
     private fun formatTime(timestamp: Long): String {
-        return SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(Date(timestamp))
-    }
-
-    /** 侧边栏对话列表适配器 */
-    private class DrawerConversationAdapter : RecyclerView.Adapter<DrawerConversationAdapter.VH>() {
-        private var items = listOf<ConversationInfo>()
-        var onItemClick: ((ConversationInfo) -> Unit)? = null
-        var onDeleteClick: ((ConversationInfo) -> Unit)? = null
-
-        fun submitList(list: List<ConversationInfo>) {
-            items = list
-            notifyDataSetChanged()
-        }
-
-        override fun getItemCount() = items.size
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_drawer_conversation, parent, false)
-            return VH(view)
-        }
-
-        override fun onBindViewHolder(holder: VH, position: Int) {
-            val info = items[position]
-            holder.tvTitle.text = info.title
-            val providerName = ProviderManager.getAllProviders()
-                .find { it.id == info.providerId }?.name ?: info.providerId
-            val dateStr = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
-                .format(Date(info.updatedAt))
-            holder.tvMeta.text = "$providerName · $dateStr"
-            holder.itemView.setOnClickListener { onItemClick?.invoke(info) }
-            holder.btnDelete.setOnClickListener { onDeleteClick?.invoke(info) }
-        }
-
-        class VH(view: View) : RecyclerView.ViewHolder(view) {
-            val tvTitle: TextView = view.findViewById(R.id.tvTitle)
-            val tvMeta: TextView = view.findViewById(R.id.tvMeta)
-            val btnDelete: TextView = view.findViewById(R.id.btnDelete)
-        }
+        return ChatExecutor.formatTime(timestamp)
     }
 }
