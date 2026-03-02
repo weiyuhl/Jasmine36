@@ -45,7 +45,7 @@ class LauncherActivity : ComponentActivity() {
             ProviderManager.setTraceEnabled(this, true)
             ProviderManager.setEventHandlerEnabled(this, true)
             ProviderManager.setWorkspacePath(this, displayPath)
-            ProviderManager.setWorkspaceUri(it.toString())
+            ProviderManager.setWorkspaceUri(this, it.toString())
 
             Toast.makeText(this, "工作区: $displayPath", Toast.LENGTH_SHORT).show()
             ProviderManager.setLastSession(this, true)
