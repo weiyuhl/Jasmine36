@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Jasmine</string>
+    <string name="typing_indicator_content_description">模型正在思考</string>
 </resources>

@@ -13,4 +13,7 @@ sealed class ChatItem {
         val usageLine: String = "",
         val isStreaming: Boolean = false
     ) : ChatItem()
+
+    /** 等待模型回复时的动画占位（参考 Claude App 的 THINKING 态） */
+    data object TypingIndicator : ChatItem()
 }

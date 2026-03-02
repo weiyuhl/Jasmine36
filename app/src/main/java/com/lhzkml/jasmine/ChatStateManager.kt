@@ -18,6 +18,8 @@ class ChatStateManager(
 
     fun startStreaming() {
         streamProcessor = StreamProcessor()
+        adapter.addTypingIndicator()
+        onScrollNeeded()
     }
 
     fun handleChunk(chunk: String) {
@@ -87,6 +89,7 @@ class ChatStateManager(
     }
 
     fun cancelStream() {
+        adapter.removeTypingIndicator()
         adapter.finalizeStreamingAi("", "")
         streamProcessor = null
     }

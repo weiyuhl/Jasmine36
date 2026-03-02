@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine
 
+import android.graphics.drawable.AnimationDrawable
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Handler
@@ -12,6 +13,7 @@ import android.text.style.TypefaceSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
@@ -20,6 +22,7 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     companion object {
         private const val TYPE_USER = 0
         private const val TYPE_AI = 1
+        private const val TYPE_TYPING = 2
         private const val DEBOUNCE_MS = 50L
     }
 
@@ -33,6 +36,7 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     override fun getItemViewType(position: Int): Int = when (items[position]) {
         is ChatItem.UserMessage -> TYPE_USER
         is ChatItem.AiMessage -> TYPE_AI
+        is ChatItem.TypingIndicator -> TYPE_TYPING
     }
 
     override fun getItemCount(): Int = items.size
@@ -42,6 +46,7 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         return when (viewType) {
             TYPE_USER -> UserViewHolder(inflater.inflate(R.layout.item_chat_user, parent, false))
             TYPE_AI -> AiViewHolder(inflater.inflate(R.layout.item_chat_ai, parent, false))
+            TYPE_TYPING -> TypingViewHolder(inflater.inflate(R.layout.item_chat_typing, parent, false))
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
     }
@@ -54,6 +59,7 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 aiHolder.bind(item)
                 if (item.isStreaming) streamingViewHolder = aiHolder
             }
+            is ChatItem.TypingIndicator -> (holder as TypingViewHolder).bind()
         }
     }
 
@@ -69,6 +75,7 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     fun updateStreamingAi(blocks: List<ContentBlock>) {
+        removeTypingIndicatorIfPresent()
         val idx = findStreamingAiIndex()
         if (idx == null) {
             items.add(ChatItem.AiMessage(blocks = blocks, isStreaming = true))
@@ -80,7 +87,26 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         scheduleStreamRender(idx)
     }
 
+    fun addTypingIndicator() {
+        if (findTypingIndicatorIndex() >= 0) return
+        items.add(ChatItem.TypingIndicator)
+        notifyItemInserted(items.size - 1)
+    }
+
+    fun removeTypingIndicator() {
+        val idx = findTypingIndicatorIndex()
+        if (idx >= 0) {
+            items.removeAt(idx)
+            notifyItemRemoved(idx)
+        }
+    }
+
+    private fun removeTypingIndicatorIfPresent() {
+        removeTypingIndicator()
+    }
+
     fun finalizeStreamingAi(usageLine: String, time: String) {
+        removeTypingIndicatorIfPresent()
         flushPendingRender()
         val idx = findStreamingAiIndex() ?: return
         val item = items[idx] as ChatItem.AiMessage
@@ -109,6 +135,10 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             if (item is ChatItem.AiMessage && item.isStreaming) return i
         }
         return null
+    }
+
+    private fun findTypingIndicatorIndex(): Int {
+        return items.indexOfFirst { it is ChatItem.TypingIndicator }
     }
 
     // ========== Debounced stream rendering ==========
@@ -235,6 +265,17 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             private const val COLOR_GRAPH = 0xFF78909C.toInt()
             private const val COLOR_ERROR = 0xFFF44336.toInt()
             private const val COLOR_SYSTEM_LOG = 0xFF9E9E9E.toInt()
+        }
+    }
+
+    class TypingViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        private val ivAnimation: ImageView = view.findViewById(R.id.ivTypingAnimation)
+
+        fun bind() {
+            val drawable = ivAnimation.drawable
+            if (drawable is AnimationDrawable) {
+                drawable.start()
+            }
         }
     }
 }
