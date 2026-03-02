@@ -33,9 +33,11 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -44,7 +46,6 @@ import kotlinx.serialization.json.put
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import kotlin.coroutines.coroutineContext
 import java.security.KeyFactory
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
@@ -264,13 +265,13 @@ class VertexAIClient(
                         val body = try { response.bodyAsText() } catch (_: Exception) { null }
                         throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                     }
-                    val channel: ByteReadChannel = response.bodyAsChannel()
-                    while (!channel.isClosedForRead) {
-                        coroutineContext.ensureActive()
-                        val line = try { channel.readUTF8Line() } catch (_: Exception) { break } ?: break
-                        if (line.startsWith("data: ")) {
-                            val data = line.removePrefix("data: ").trim()
-                            if (data.isEmpty()) continue
+
+                    val sseChannel = Channel<String>(Channel.BUFFERED)
+
+                    coroutineScope {
+                        launch { SseEventParser.parse(response.bodyAsChannel(), sseChannel) }
+
+                        for (data in sseChannel) {
                             try {
                                 val chunk = json.decodeFromString<GeminiResponse>(data)
                                 chunk.usageMetadata?.let {
@@ -285,7 +286,7 @@ class VertexAIClient(
                                         toolCalls.add(ToolCall(id = "vertex_${fc.name}_${System.nanoTime()}", name = fc.name, arguments = fc.args?.toString() ?: "{}"))
                                     }
                                 }
-                            } catch (_: Exception) { /* skip */ }
+                            } catch (_: Exception) { }
                         }
                     }
                 }

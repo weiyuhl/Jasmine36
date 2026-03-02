@@ -33,9 +33,11 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -43,7 +45,6 @@ import kotlinx.serialization.json.put
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import kotlin.coroutines.coroutineContext
 
 /**
  * Google Gemini 客户端
@@ -251,20 +252,12 @@ open class GeminiClient(
                         throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                     }
 
-                    val channel: ByteReadChannel = response.bodyAsChannel()
+                    val sseChannel = Channel<String>(Channel.BUFFERED)
 
-                    while (!channel.isClosedForRead) {
-                        coroutineContext.ensureActive()
-                        val line = try {
-                            channel.readUTF8Line()
-                        } catch (_: Exception) {
-                            break
-                        } ?: break
+                    coroutineScope {
+                        launch { SseEventParser.parse(response.bodyAsChannel(), sseChannel) }
 
-                        if (line.startsWith("data: ")) {
-                            val data = line.removePrefix("data: ").trim()
-                            if (data.isEmpty()) continue
-
+                        for (data in sseChannel) {
                             try {
                                 val chunk = json.decodeFromString<GeminiResponse>(data)
                                 chunk.usageMetadata?.let {
@@ -278,14 +271,12 @@ open class GeminiClient(
                                 if (firstCandidate?.finishReason != null) {
                                     lastFinishReason = firstCandidate.finishReason
                                 }
-                                // 提取文本
                                 firstCandidate?.content?.parts?.forEach { part ->
                                     val text = part.text
                                     if (!text.isNullOrEmpty()) {
                                         fullContent.append(text)
                                         onChunk(text)
                                     }
-                                    // 提取 functionCall
                                     part.functionCall?.let { fc ->
                                         toolCalls.add(ToolCall(
                                             id = "gemini_${fc.name}_${System.nanoTime()}",
@@ -294,9 +285,7 @@ open class GeminiClient(
                                         ))
                                     }
                                 }
-                            } catch (_: Exception) {
-                                // 跳过无法解析的行
-                            }
+                            } catch (_: Exception) { }
                         }
                     }
                 }

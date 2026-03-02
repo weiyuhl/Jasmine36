@@ -33,9 +33,11 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -47,7 +49,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import kotlin.coroutines.coroutineContext
 
 /**
  * OpenAI 兼容 API 的基础客户端
@@ -216,51 +217,48 @@ abstract class OpenAICompatibleClient(
                         throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                     }
 
-                    val channel: ByteReadChannel = response.bodyAsChannel()
-                    val lineBuffer = StringBuilder()
-                    while (!channel.isClosedForRead) {
-                        coroutineContext.ensureActive()
-                        val line = try { channel.readUTF8Line() } catch (_: Exception) { break } ?: break
-                        if (line.isEmpty()) continue
-                        if (line.startsWith("data: ")) {
-                            val data = line.removePrefix("data: ").trim()
-                            if (data == "[DONE]") return@execute
-                            if (data.isNotEmpty()) {
-                                try {
-                                    val chunk = json.decodeFromString<ChatStreamResponse>(data)
-                                    if (chunk.usage != null) lastUsage = chunk.usage
-                                    val firstChoice = chunk.choices.firstOrNull()
-                                    if (firstChoice?.finishReason != null) lastFinishReason = firstChoice.finishReason
-                                    val content = firstChoice?.delta?.content
-                                    if (!content.isNullOrEmpty()) {
-                                        fullContent.append(content)
-                                        onChunk(content)
-                                    }
-                                    // 推理过程（DeepSeek R1 等）
-                                    val reasoning = firstChoice?.delta?.reasoningContent
-                                    if (!reasoning.isNullOrEmpty()) {
-                                        thinkingContent.append(reasoning)
-                                        onThinking(reasoning)
-                                    }
-                                    // 累积流式 tool_calls
-                                    firstChoice?.delta?.toolCalls?.forEach { stc ->
-                                        val tcId = stc.id
-                                        if (tcId != null) {
-                                            toolCallAccumulator[stc.index] = Triple(
-                                                tcId,
-                                                stc.function?.name ?: "",
-                                                StringBuilder(stc.function?.arguments ?: "")
-                                            )
-                                        } else {
-                                            toolCallAccumulator[stc.index]?.let { (_, _, args) ->
-                                                args.append(stc.function?.arguments ?: "")
-                                            }
+                    val sseChannel = Channel<String>(Channel.BUFFERED)
+
+                    coroutineScope {
+                        launch {
+                            SseEventParser.parse(
+                                response.bodyAsChannel(),
+                                sseChannel,
+                                doneSignals = setOf("[DONE]")
+                            )
+                        }
+
+                        for (data in sseChannel) {
+                            try {
+                                val chunk = json.decodeFromString<ChatStreamResponse>(data)
+                                if (chunk.usage != null) lastUsage = chunk.usage
+                                val firstChoice = chunk.choices.firstOrNull()
+                                if (firstChoice?.finishReason != null) lastFinishReason = firstChoice.finishReason
+                                val content = firstChoice?.delta?.content
+                                if (!content.isNullOrEmpty()) {
+                                    fullContent.append(content)
+                                    onChunk(content)
+                                }
+                                val reasoning = firstChoice?.delta?.reasoningContent
+                                if (!reasoning.isNullOrEmpty()) {
+                                    thinkingContent.append(reasoning)
+                                    onThinking(reasoning)
+                                }
+                                firstChoice?.delta?.toolCalls?.forEach { stc ->
+                                    val tcId = stc.id
+                                    if (tcId != null) {
+                                        toolCallAccumulator[stc.index] = Triple(
+                                            tcId,
+                                            stc.function?.name ?: "",
+                                            StringBuilder(stc.function?.arguments ?: "")
+                                        )
+                                    } else {
+                                        toolCallAccumulator[stc.index]?.let { (_, _, args) ->
+                                            args.append(stc.function?.arguments ?: "")
                                         }
                                     }
-                                } catch (_: Exception) {
-                                    // 单个 chunk 解析失败，跳过继续读取下一个
                                 }
-                            }
+                            } catch (_: Exception) { }
                         }
                     }
                 }

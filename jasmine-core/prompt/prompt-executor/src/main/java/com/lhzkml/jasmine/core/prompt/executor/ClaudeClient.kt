@@ -32,9 +32,11 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -44,7 +46,6 @@ import kotlinx.serialization.json.putJsonObject
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import kotlin.coroutines.coroutineContext
 
 /**
  * Anthropic Claude 客户端
@@ -221,11 +222,9 @@ open class ClaudeClient(
                 var inputTokens = 0
                 var outputTokens = 0
                 var stopReason: String? = null
-                // 流式 tool_use 累积
                 val toolCallAccumulator = mutableMapOf<Int, Triple<String, String, StringBuilder>>()
                 var currentBlockIndex = -1
                 var currentBlockType = ""
-                // thinking 内容累积
                 val thinkingContent = StringBuilder()
 
                 statement.execute { response ->
@@ -234,20 +233,12 @@ open class ClaudeClient(
                         throw ChatClientException.fromStatusCode(provider.name, response.status.value, body)
                     }
 
-                    val channel: ByteReadChannel = response.bodyAsChannel()
+                    val sseChannel = Channel<String>(Channel.BUFFERED)
 
-                    while (!channel.isClosedForRead) {
-                        coroutineContext.ensureActive()
-                        val line = try {
-                            channel.readUTF8Line()
-                        } catch (_: Exception) {
-                            break
-                        } ?: break
+                    coroutineScope {
+                        launch { SseEventParser.parse(response.bodyAsChannel(), sseChannel) }
 
-                        if (line.startsWith("data: ")) {
-                            val data = line.removePrefix("data: ").trim()
-                            if (data.isEmpty()) continue
-
+                        for (data in sseChannel) {
                             try {
                                 val event = json.decodeFromString<ClaudeStreamEvent>(data)
                                 when (event.type) {
@@ -301,9 +292,7 @@ open class ClaudeClient(
                                         event.delta?.stopReason?.let { stopReason = it }
                                     }
                                 }
-                            } catch (_: Exception) {
-                                // 跳过无法解析的行
-                            }
+                            } catch (_: Exception) { }
                         }
                     }
                 }
