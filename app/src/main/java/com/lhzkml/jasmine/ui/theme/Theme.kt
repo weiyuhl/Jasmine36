@@ -10,19 +10,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val JasmineLightColorScheme = lightColorScheme(
-    primary = Accent,
-    onPrimary = BgPrimary,
-    secondary = Accent,
-    onSecondary = BgPrimary,
-    background = BgPrimary,
-    onBackground = TextPrimary,
     surface = BgPrimary,
-    onSurface = TextPrimary,
-    surfaceVariant = AiBubble,
-    onSurfaceVariant = TextSecondary,
-    outline = Divider,
-    error = ErrorColor,
-    onError = BgPrimary
+    onSurface = TextPrimary
 )
 
 @Composable
