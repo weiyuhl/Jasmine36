@@ -1,68 +1,77 @@
 package com.lhzkml.jasmine
 
+import android.os.Handler
+import android.os.Looper
+
 /**
- * Centralized chat state manager, inspired by Claude App's e2 (ChatViewModel).
- * Coordinates StreamProcessor, ChatAdapter, and scroll behavior.
+ * Centralized chat state manager.
+ * Operates on a MutableList<ChatItem> (backed by SnapshotStateList in Compose).
  * All public methods must be called on the Main thread.
  */
 class ChatStateManager(
-    private val adapter: ChatAdapter,
+    private val items: MutableList<ChatItem>,
     private val onScrollNeeded: () -> Unit
 ) {
+    companion object {
+        private const val DEBOUNCE_MS = 50L
+    }
+
     private var streamProcessor: StreamProcessor? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var pendingStreamRender: Runnable? = null
 
     fun addUserMessage(content: String, time: String) {
-        adapter.addItem(ChatItem.UserMessage(content, time))
+        items.add(ChatItem.UserMessage(content, time))
         onScrollNeeded()
     }
 
     fun startStreaming() {
         streamProcessor = StreamProcessor()
-        adapter.addTypingIndicator()
+        items.add(ChatItem.TypingIndicator)
         onScrollNeeded()
     }
 
     fun handleChunk(chunk: String) {
         val proc = streamProcessor ?: return
         val update = proc.onChunk(chunk)
-        updateStreamingAi(update)
+        scheduleStreamUpdate(update)
     }
 
     fun handleThinking(text: String) {
         val proc = streamProcessor ?: return
         val update = proc.onThinking(text)
-        updateStreamingAi(update)
+        scheduleStreamUpdate(update)
     }
 
     fun handleToolCall(toolName: String, arguments: String) {
         val proc = streamProcessor ?: return
         val update = proc.onToolCallStart(toolName, arguments)
-        updateStreamingAi(update)
+        scheduleStreamUpdate(update)
     }
 
     fun handleToolResult(toolName: String, result: String) {
         val proc = streamProcessor ?: return
         val update = proc.onToolCallResult(toolName, result)
-        updateStreamingAi(update)
+        scheduleStreamUpdate(update)
     }
 
     fun handlePlan(goal: String, steps: List<String>) {
         val proc = streamProcessor ?: return
         val update = proc.onPlan(goal, steps)
-        updateStreamingAi(update)
+        scheduleStreamUpdate(update)
     }
 
     fun handleGraphLog(content: String) {
         val proc = streamProcessor ?: return
         val update = proc.onGraphLog(content)
-        updateStreamingAi(update)
+        scheduleStreamUpdate(update)
     }
 
     fun handleSystemLog(content: String) {
         val proc = streamProcessor
         if (proc != null) {
             val update = proc.onSystemLog(content)
-            updateStreamingAi(update)
+            scheduleStreamUpdate(update)
         } else {
             addHistoryLogBlocks(listOf(ContentBlock.SystemLog(content)))
             onScrollNeeded()
@@ -73,7 +82,7 @@ class ChatStateManager(
         val proc = streamProcessor
         if (proc != null) {
             val update = proc.onError(message)
-            updateStreamingAi(update)
+            scheduleStreamUpdate(update)
         } else {
             addHistoryLogBlocks(listOf(ContentBlock.Error(message)))
             onScrollNeeded()
@@ -83,38 +92,84 @@ class ChatStateManager(
     fun finalizeStream(usageLine: String, time: String) {
         val proc = streamProcessor ?: return
         proc.finalize()
-        adapter.finalizeStreamingAi(usageLine, time)
+        flushPendingRender()
+        removeTypingIndicator()
+        val idx = findStreamingAiIndex()
+        if (idx != null) {
+            val item = items[idx] as ChatItem.AiMessage
+            items[idx] = item.copy(isStreaming = false, usageLine = usageLine, time = time)
+        }
         streamProcessor = null
         onScrollNeeded()
     }
 
     fun cancelStream() {
-        adapter.removeTypingIndicator()
-        adapter.finalizeStreamingAi("", "")
+        flushPendingRender()
+        removeTypingIndicator()
+        val idx = findStreamingAiIndex()
+        if (idx != null) {
+            val item = items[idx] as ChatItem.AiMessage
+            items[idx] = item.copy(isStreaming = false)
+        }
         streamProcessor = null
     }
 
     fun getLogContent(): String = streamProcessor?.getLogContent() ?: ""
 
     fun addHistoryAiMessage(blocks: List<ContentBlock>, usageLine: String, time: String) {
-        adapter.addItem(ChatItem.AiMessage(
-            blocks = blocks,
-            usageLine = usageLine,
-            time = time
-        ))
+        items.add(ChatItem.AiMessage(blocks = blocks, usageLine = usageLine, time = time))
     }
 
     fun addHistoryLogBlocks(blocks: List<ContentBlock>) {
-        adapter.addItem(ChatItem.AiMessage(blocks = blocks))
+        items.add(ChatItem.AiMessage(blocks = blocks))
     }
 
     fun clearAll() {
+        flushPendingRender()
         streamProcessor = null
-        adapter.clearAll()
+        items.clear()
     }
 
-    private fun updateStreamingAi(update: StreamUpdate) {
-        adapter.updateStreamingAi(update.blocks)
+    private fun scheduleStreamUpdate(update: StreamUpdate) {
+        pendingStreamRender?.let { handler.removeCallbacks(it) }
+        val runnable = Runnable {
+            pendingStreamRender = null
+            applyStreamUpdate(update)
+        }
+        pendingStreamRender = runnable
+        handler.postDelayed(runnable, DEBOUNCE_MS)
+    }
+
+    private fun applyStreamUpdate(update: StreamUpdate) {
+        removeTypingIndicator()
+        val idx = findStreamingAiIndex()
+        if (idx == null) {
+            items.add(ChatItem.AiMessage(blocks = update.blocks, isStreaming = true))
+        } else {
+            val item = items[idx] as ChatItem.AiMessage
+            items[idx] = item.copy(blocks = update.blocks)
+        }
         onScrollNeeded()
+    }
+
+    private fun findStreamingAiIndex(): Int? {
+        for (i in items.lastIndex downTo 0) {
+            val item = items[i]
+            if (item is ChatItem.AiMessage && item.isStreaming) return i
+        }
+        return null
+    }
+
+    private fun removeTypingIndicator() {
+        val idx = items.indexOfFirst { it is ChatItem.TypingIndicator }
+        if (idx >= 0) items.removeAt(idx)
+    }
+
+    private fun flushPendingRender() {
+        pendingStreamRender?.let {
+            handler.removeCallbacks(it)
+            it.run()
+            pendingStreamRender = null
+        }
     }
 }

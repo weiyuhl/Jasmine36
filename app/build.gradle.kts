@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -33,6 +34,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs += listOf("-Xnested-type-aliases")
+    }
+    buildFeatures {
+        compose = true
     }
 }
 
@@ -67,6 +71,16 @@ dependencies {
     implementation("com.github.gregcockroft:AndroidMath:v1.1.0") {
         exclude(group = "com.google.guava", module = "guava")
     }
+
+    // Compose
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.activity.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.compose)
+    debugImplementation(libs.compose.ui.tooling)
 
     // Coroutines（UI 层需要协程来调用框架）
     implementation(libs.kotlinx.coroutines.core)
