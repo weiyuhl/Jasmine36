@@ -1,141 +1,87 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import android.view.View
-import android.widget.LinearLayout
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
-import android.widget.TextView
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.observe.trace.TraceEventCategory
+import com.lhzkml.jasmine.ui.theme.*
 
 /**
  * 追踪配置界面
  * 追踪系统专注于数据记录（Android Log + 文件），不负责 UI 显示。
  * UI 实时通知由事件处理器(EventHandler)负责。
  */
-class TraceConfigActivity : AppCompatActivity() {
-
-    private lateinit var switchEnabled: SwitchCompat
-    private lateinit var layoutConfigContent: LinearLayout
-    private lateinit var switchFileOutput: SwitchCompat
-    private lateinit var tvFileOutputPath: TextView
-    private lateinit var tvConfigSummary: TextView
-
-    // 事件过滤开关
-    private lateinit var switchFilterAgent: SwitchCompat
-    private lateinit var switchFilterLLM: SwitchCompat
-    private lateinit var switchFilterTool: SwitchCompat
-    private lateinit var switchFilterStrategy: SwitchCompat
-    private lateinit var switchFilterNode: SwitchCompat
-    private lateinit var switchFilterSubgraph: SwitchCompat
-    private lateinit var switchFilterCompression: SwitchCompat
-
-    private val categoryMap by lazy {
-        mapOf(
-            TraceEventCategory.AGENT to ::switchFilterAgent,
-            TraceEventCategory.LLM to ::switchFilterLLM,
-            TraceEventCategory.TOOL to ::switchFilterTool,
-            TraceEventCategory.STRATEGY to ::switchFilterStrategy,
-            TraceEventCategory.NODE to ::switchFilterNode,
-            TraceEventCategory.SUBGRAPH to ::switchFilterSubgraph,
-            TraceEventCategory.COMPRESSION to ::switchFilterCompression
-        )
-    }
-
+class TraceConfigActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_trace_config)
-
-        findViewById<android.view.View>(R.id.btnBack).setOnClickListener { finish() }
-
-        switchEnabled = findViewById(R.id.switchEnabled)
-        layoutConfigContent = findViewById(R.id.layoutConfigContent)
-
-        val config = AppConfig.configRepo()
-        switchEnabled.isChecked = config.isTraceEnabled()
-        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
-        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            config.setTraceEnabled(isChecked)
-            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
-        }
-
-        switchFileOutput = findViewById(R.id.switchFileOutput)
-        tvFileOutputPath = findViewById(R.id.tvFileOutputPath)
-        tvConfigSummary = findViewById(R.id.tvConfigSummary)
-
-        switchFilterAgent = findViewById(R.id.switchFilterAgent)
-        switchFilterLLM = findViewById(R.id.switchFilterLLM)
-        switchFilterTool = findViewById(R.id.switchFilterTool)
-        switchFilterStrategy = findViewById(R.id.switchFilterStrategy)
-        switchFilterNode = findViewById(R.id.switchFilterNode)
-        switchFilterSubgraph = findViewById(R.id.switchFilterSubgraph)
-        switchFilterCompression = findViewById(R.id.switchFilterCompression)
-
-        // 隐藏内联显示开关（追踪不再负责 UI 显示，由 EventHandler 负责）
-        // 内联显示卡片已从布局中移除
-
-        // 加载当前状态
-        switchFileOutput.isChecked = config.isTraceFileEnabled()
-
-        val currentFilter = config.getTraceEventFilter()
-        for ((cat, switchGetter) in categoryMap) {
-            switchGetter.get().isChecked = currentFilter.isEmpty() || cat in currentFilter
-        }
-
-        // 输出方式监听
-        switchFileOutput.setOnCheckedChangeListener { _, isChecked ->
-            config.setTraceFileEnabled(isChecked)
-            updateFileOutputPath()
-            refreshSummary()
-        }
-
-        // 事件过滤监听
-        val filterChangeListener = { _: android.widget.CompoundButton, _: Boolean ->
-            saveEventFilter()
-            refreshSummary()
-        }
-        for ((_, switchGetter) in categoryMap) {
-            switchGetter.get().setOnCheckedChangeListener(filterChangeListener)
-        }
-
-        updateFileOutputPath()
-        refreshSummary()
-    }
-
-    private fun updateFileOutputPath() {
-        if (switchFileOutput.isChecked) {
-            val traceDir = getExternalFilesDir("traces")
-            tvFileOutputPath.text = "保存到: ${traceDir?.absolutePath ?: "未知路径"}"
-        } else {
-            tvFileOutputPath.text = "保存追踪日志到本地文件"
+        setContent {
+            JasmineTheme {
+                TraceConfigScreen(
+                    onBack = { finish() },
+                    getTraceDir = { getExternalFilesDir("traces")?.absolutePath ?: "未知路径" }
+                )
+            }
         }
     }
+}
 
-    private fun saveEventFilter() {
-        val allChecked = categoryMap.all { (_, switchGetter) -> switchGetter.get().isChecked }
-        val noneChecked = categoryMap.none { (_, switchGetter) -> switchGetter.get().isChecked }
+@Composable
+fun TraceConfigScreen(
+    onBack: () -> Unit,
+    getTraceDir: () -> String
+) {
+    val config = AppConfig.configRepo()
+    
+    var enabled by remember { mutableStateOf(config.isTraceEnabled()) }
+    var fileOutputEnabled by remember { mutableStateOf(config.isTraceFileEnabled()) }
+    
+    val currentFilter = config.getTraceEventFilter()
+    var filterAgent by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.AGENT in currentFilter) }
+    var filterLLM by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.LLM in currentFilter) }
+    var filterTool by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.TOOL in currentFilter) }
+    var filterStrategy by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.STRATEGY in currentFilter) }
+    var filterNode by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.NODE in currentFilter) }
+    var filterSubgraph by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.SUBGRAPH in currentFilter) }
+    var filterCompression by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.COMPRESSION in currentFilter) }
 
-        val selected = if (allChecked || noneChecked) {
-            // 全选或全不选 = 空集合（追踪全部）
-            emptySet()
-        } else {
-            categoryMap.filter { (_, switchGetter) -> switchGetter.get().isChecked }.keys
-        }
-        AppConfig.configRepo().setTraceEventFilter(selected)
+    fun saveEventFilter() {
+        val filters = mutableSetOf<TraceEventCategory>()
+        if (filterAgent) filters.add(TraceEventCategory.AGENT)
+        if (filterLLM) filters.add(TraceEventCategory.LLM)
+        if (filterTool) filters.add(TraceEventCategory.TOOL)
+        if (filterStrategy) filters.add(TraceEventCategory.STRATEGY)
+        if (filterNode) filters.add(TraceEventCategory.NODE)
+        if (filterSubgraph) filters.add(TraceEventCategory.SUBGRAPH)
+        if (filterCompression) filters.add(TraceEventCategory.COMPRESSION)
+        
+        val allChecked = filters.size == 7
+        val noneChecked = filters.isEmpty()
+        
+        val selected = if (allChecked || noneChecked) emptySet() else filters
+        config.setTraceEventFilter(selected)
     }
 
-    private fun refreshSummary() {
-        val file = switchFileOutput.isChecked
-        val filter = AppConfig.configRepo().getTraceEventFilter()
-
+    fun getConfigSummary(): String {
         val sb = StringBuilder()
-
-        // 输出方式
         sb.append("输出: Android Log（默认）")
-        if (file) sb.append(" + 文件")
-
-        // 事件过滤
+        if (fileOutputEnabled) sb.append(" + 文件")
+        
         sb.append("\n过滤: ")
+        val filter = config.getTraceEventFilter()
         if (filter.isEmpty()) {
             sb.append("全部事件")
         } else {
@@ -152,7 +98,300 @@ class TraceConfigActivity : AppCompatActivity() {
             }
             sb.append(names.joinToString(", "))
         }
+        return sb.toString()
+    }
 
-        tvConfigSummary.text = sb.toString()
+    DisposableEffect(Unit) {
+        onDispose {
+            config.setTraceEnabled(enabled)
+            config.setTraceFileEnabled(fileOutputEnabled)
+            saveEventFilter()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        // 顶部栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .background(Color.White)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = onBack,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+            ) {
+                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+            }
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            Text(
+                text = "追踪配置",
+                fontSize = 17.sp,
+                color = TextPrimary,
+                modifier = Modifier.weight(1f),
+                style = androidx.compose.ui.text.font.FontWeight.Bold.let {
+                    TextStyle(fontWeight = it, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            )
+            
+            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+        ) {
+            // 启用开关
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .background(Color.White, RoundedCornerShape(16.dp))
+                    .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "启用执行追踪",
+                        fontSize = 15.sp,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "记录 Agent 工具调用和 LLM 请求",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                }
+                
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { 
+                        enabled = it
+                        config.setTraceEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Accent,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0)
+                    )
+                )
+            }
+
+            if (enabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 输出方式标题
+                Text(
+                    text = "输出方式",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // 角色说明
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 20.dp, vertical = 14.dp)
+                ) {
+                    Text(
+                        text = "追踪 vs 事件处理器",
+                        fontSize = 15.sp,
+                        color = TextPrimary,
+                        style = androidx.compose.ui.text.font.FontWeight.Bold.let {
+                            TextStyle(fontWeight = it)
+                        }
+                    )
+                    Text(
+                        text = "追踪(Trace): 纯数据记录，输出到 Android Log 和文件，用于调试和分析。\n事件处理器(EventHandler): UI 通知系统，在聊天界面实时显示 Agent 执行过程。",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 文件输出
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "文件输出",
+                            fontSize = 15.sp,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = if (fileOutputEnabled) "保存到: ${getTraceDir()}" else "保存追踪日志到本地文件",
+                            fontSize = 12.sp,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    
+                    Switch(
+                        checked = fileOutputEnabled,
+                        onCheckedChange = { 
+                            fileOutputEnabled = it
+                            config.setTraceFileEnabled(it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Accent,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color(0xFFE0E0E0)
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 事件过滤标题
+                Text(
+                    text = "事件过滤",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "选择需要追踪的事件类型，不选则追踪全部",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // 事件类型列表
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    EventFilterItem("Agent 生命周期", filterAgent) { 
+                        filterAgent = it
+                        saveEventFilter()
+                    }
+                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    
+                    EventFilterItem("LLM 调用", filterLLM) { 
+                        filterLLM = it
+                        saveEventFilter()
+                    }
+                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    
+                    EventFilterItem("工具调用", filterTool) { 
+                        filterTool = it
+                        saveEventFilter()
+                    }
+                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    
+                    EventFilterItem("策略执行", filterStrategy) { 
+                        filterStrategy = it
+                        saveEventFilter()
+                    }
+                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    
+                    EventFilterItem("节点执行", filterNode) { 
+                        filterNode = it
+                        saveEventFilter()
+                    }
+                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    
+                    EventFilterItem("子图执行", filterSubgraph) { 
+                        filterSubgraph = it
+                        saveEventFilter()
+                    }
+                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    
+                    EventFilterItem("压缩事件", filterCompression) { 
+                        filterCompression = it
+                        saveEventFilter()
+                    }
+                }
+
+                // 当前状态摘要
+                Spacer(modifier = Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "当前配置",
+                        fontSize = 15.sp,
+                        color = TextPrimary,
+                        style = androidx.compose.ui.text.font.FontWeight.Bold.let {
+                            TextStyle(fontWeight = it)
+                        }
+                    )
+                    Text(
+                        text = getConfigSummary(),
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EventFilterItem(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = TextPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Accent,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = Color(0xFFE0E0E0)
+            )
+        )
     }
 }
