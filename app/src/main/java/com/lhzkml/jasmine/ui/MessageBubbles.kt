@@ -161,10 +161,35 @@ private fun renderContentBlocks(
             is ContentBlock.Plan -> appendPlan(sb, block)
             is ContentBlock.GraphLog -> appendStyled(sb, block.content, 0xFF78909C.toInt(), mono = true)
             is ContentBlock.Error -> appendStyled(sb, block.message, 0xFFF44336.toInt(), bold = true)
-            is ContentBlock.SystemLog -> appendStyled(sb, block.content, 0xFF9E9E9E.toInt())
+            is ContentBlock.SystemLog -> appendSystemOrEventLog(sb, block.content)
         }
     }
     return sb
+}
+
+private fun appendSystemOrEventLog(sb: SpannableStringBuilder, content: String) {
+    val toolColor = 0xFF42A5F5.toInt()
+    val resultColor = 0xFF66BB6A.toInt()
+    val errorColor = 0xFFF44336.toInt()
+    val llmColor = 0xFF78909C.toInt()
+    val planColor = 0xFFAB47BC.toInt()
+    val nodeColor = 0xFF26A69A.toInt()
+    val systemColor = 0xFF9E9E9E.toInt()
+    content.split('\n').forEachIndexed { i, line ->
+        if (i > 0) sb.append("\n")
+        val color = when {
+            !line.startsWith("[EVENT]") -> systemColor
+            line.contains("工具完成") -> resultColor
+            line.contains("工具调用") -> toolColor
+            line.contains("失败") || line.contains("验证失败") -> errorColor
+            line.contains("策略") -> planColor
+            line.contains("节点") || line.contains("子图") -> nodeColor
+            line.contains("Agent ") -> toolColor
+            line.contains("LLM ") -> llmColor
+            else -> systemColor
+        }
+        appendStyled(sb, line, color)
+    }
 }
 
 private fun appendStyled(
