@@ -20,6 +20,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.config.ToolCatalog
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.TextFieldValue
 import com.lhzkml.jasmine.ui.theme.BgInput
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
@@ -270,27 +273,34 @@ fun ToolConfigScreen(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     
-                    TextField(
-                        value = brightDataKey,
-                        onValueChange = { brightDataKey = it },
-                        placeholder = { Text("输入 BrightData SERP API Key", fontSize = 14.sp, color = TextSecondary) },
-                        singleLine = true,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp),
-                        colors = TextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedContainerColor = BgInput,
-                            unfocusedContainerColor = BgInput,
-                            cursorColor = TextPrimary,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent
-                        ),
-                        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                        shape = MaterialTheme.shapes.small
-                    )
+                            .background(BgInput, MaterialTheme.shapes.small)
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                    ) {
+                        BasicTextField(
+                            value = brightDataKey,
+                            onValueChange = { brightDataKey = it },
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(
+                                fontSize = 14.sp,
+                                color = TextPrimary
+                            ),
+                            cursorBrush = SolidColor(TextPrimary),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { innerTextField ->
+                                if (brightDataKey.isEmpty()) {
+                                    Text(
+                                        "输入 BrightData SERP API Key",
+                                        fontSize = 14.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                    }
                 }
             }
         }
