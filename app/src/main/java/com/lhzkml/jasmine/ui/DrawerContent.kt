@@ -66,7 +66,11 @@ fun RightDrawerContent(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp)
         )
 
-        Box(modifier = Modifier.weight(1f)) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
             if (isEmpty) {
                 CustomText(
                     text = "暂无历史对话",

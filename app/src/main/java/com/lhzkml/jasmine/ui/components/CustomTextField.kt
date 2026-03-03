@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.theme.TextPrimary
@@ -32,7 +33,8 @@ fun CustomOutlinedTextField(
     ),
     focusedBorderColor: Color = TextPrimary,
     unfocusedBorderColor: Color = TextSecondary,
-    backgroundColor: Color = Color.Transparent
+    backgroundColor: Color = Color.Transparent,
+    visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -40,6 +42,7 @@ fun CustomOutlinedTextField(
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
+        visualTransformation = visualTransformation,
         modifier = modifier
             .background(backgroundColor, RoundedCornerShape(4.dp))
             .border(

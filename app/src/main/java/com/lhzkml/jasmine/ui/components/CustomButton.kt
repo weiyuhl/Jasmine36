@@ -6,6 +6,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,22 +30,25 @@ fun CustomButton(
     val interactionSource = remember { MutableInteractionSource() }
     val bg = colors?.containerColor ?: backgroundColor
     val effectiveBg = if (enabled) bg else (colors?.disabledContainerColor ?: bg.copy(alpha = 0.5f))
+    val effectiveContentColor = colors?.contentColor ?: contentColor
     
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .background(effectiveBg)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = enabled,
-                onClick = onClick
-            )
-            .padding(contentPadding),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-        content = content
-    )
+    CompositionLocalProvider(LocalContentColor provides effectiveContentColor) {
+        Row(
+            modifier = modifier
+                .clip(shape)
+                .background(effectiveBg)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    enabled = enabled,
+                    onClick = onClick
+                )
+                .padding(contentPadding),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
+    }
 }
 
 @Composable
@@ -58,20 +62,23 @@ fun CustomTextButton(
     content: @Composable RowScope.() -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val effectiveContentColor = colors?.contentColor ?: contentColor
     
-    Row(
-        modifier = modifier
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = enabled,
-                onClick = onClick
-            )
-            .padding(contentPadding),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-        content = content
-    )
+    CompositionLocalProvider(LocalContentColor provides effectiveContentColor) {
+        Row(
+            modifier = modifier
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    enabled = enabled,
+                    onClick = onClick
+                )
+                .padding(contentPadding),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
+    }
 }
 
 // ButtonDefaults 替代品

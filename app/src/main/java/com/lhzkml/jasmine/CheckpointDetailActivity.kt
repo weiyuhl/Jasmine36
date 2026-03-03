@@ -1,18 +1,31 @@
 package com.lhzkml.jasmine
 
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
-import android.view.View
-import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.runtime.CheckpointService
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
-import kotlinx.coroutines.CoroutineScope
+import com.lhzkml.jasmine.ui.components.*
+import com.lhzkml.jasmine.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -20,10 +33,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * 检查点详情页 — 展示完整的检查点信息和消息历史预览
- */
-class CheckpointDetailActivity : AppCompatActivity() {
+class CheckpointDetailActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_AGENT_ID = "agent_id"
@@ -32,19 +42,12 @@ class CheckpointDetailActivity : AppCompatActivity() {
         const val RESULT_RESTORED = 101
     }
 
-    private var agentId: String = ""
-    private var checkpointId: String = ""
-    private var checkpoint: AgentCheckpoint? = null
     private val checkpointService: CheckpointService? get() = AppConfig.checkpointService()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_checkpoint_detail)
-
-        findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
-
-        agentId = intent.getStringExtra(EXTRA_AGENT_ID) ?: ""
-        checkpointId = intent.getStringExtra(EXTRA_CHECKPOINT_ID) ?: ""
+        val agentId = intent.getStringExtra(EXTRA_AGENT_ID) ?: ""
+        val checkpointId = intent.getStringExtra(EXTRA_CHECKPOINT_ID) ?: ""
 
         if (agentId.isEmpty() || checkpointId.isEmpty()) {
             Toast.makeText(this, "参数错误", Toast.LENGTH_SHORT).show()
@@ -52,236 +55,397 @@ class CheckpointDetailActivity : AppCompatActivity() {
             return
         }
 
-        loadCheckpoint()
-    }
-
-    private fun loadCheckpoint() {
-        val service = checkpointService ?: return
-
-        CoroutineScope(Dispatchers.IO).launch {
-            val cp = service.getCheckpoint(agentId, checkpointId)
-
-            withContext(Dispatchers.Main) {
-                if (cp == null) {
-                    Toast.makeText(this@CheckpointDetailActivity, "检查点不存在", Toast.LENGTH_SHORT).show()
-                    finish()
-                    return@withContext
-                }
-                checkpoint = cp
-                renderInfo(cp)
-                renderMessages(cp)
-                setupButtons(cp)
-            }
-        }
-    }
-
-    private fun renderInfo(cp: AgentCheckpoint) {
-        val timeFormat = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault())
-        val sb = StringBuilder()
-        sb.append("节点路径: ${cp.nodePath}\n")
-        sb.append("创建时间: ${timeFormat.format(Date(cp.createdAt))}\n")
-        sb.append("版本: ${cp.version}\n")
-        sb.append("消息数: ${cp.messageHistory.size}\n")
-        sb.append("检查点 ID: ${cp.checkpointId}\n")
-        sb.append("会话 ID: $agentId")
-        if (cp.lastInput != null) {
-            sb.append("\n最后输入: ${cp.lastInput}")
-        }
-        findViewById<TextView>(R.id.tvInfo).text = sb.toString()
-    }
-
-    private fun renderMessages(cp: AgentCheckpoint) {
-        val container = findViewById<LinearLayout>(R.id.layoutMessages)
-        val header = findViewById<TextView>(R.id.tvMsgHeader)
-        container.removeAllViews()
-
-        if (cp.messageHistory.isEmpty()) {
-            header.text = "消息历史 (无)"
-            return
-        }
-
-        header.text = "消息历史 (${cp.messageHistory.size} 条)"
-
-        for ((index, msg) in cp.messageHistory.withIndex()) {
-            // 消息卡片
-            val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-                val lp = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                lp.bottomMargin = dp(6)
-                layoutParams = lp
-            }
-
-            // 角色标签 + 序号
-            val roleLabel = when (msg.role) {
-                "system" -> "[System]"
-                "user" -> "[User]"
-                "assistant" -> "[AI]"
-                "tool" -> "[Tool]"
-                "agent_log" -> "[Log]"
-                else -> "[${msg.role}]"
-            }
-
-            val roleColor = when (msg.role) {
-                "user" -> 0xFF2196F3.toInt()
-                "assistant" -> 0xFF4CAF50.toInt()
-                "system" -> 0xFF9E9E9E.toInt()
-                "tool" -> 0xFFFF9800.toInt()
-                else -> 0xFF757575.toInt()
-            }
-
-            val tvRole = TextView(this).apply {
-                text = "#${index + 1} $roleLabel"
-                textSize = 12f
-                setTextColor(roleColor)
-                setTypeface(null, Typeface.BOLD)
-            }
-            card.addView(tvRole)
-
-            // 消息内容
-            val content = msg.content
-            val tvContent = TextView(this).apply {
-                text = content
-                textSize = 13f
-                setTextColor(getColor(R.color.text_primary))
-                val contentLp = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                contentLp.topMargin = dp(3)
-                layoutParams = contentLp
-                // 默认折叠长消息
-                if (content.length > 200) {
-                    maxLines = 4
-                    setOnClickListener {
-                        maxLines = if (maxLines == 4) Int.MAX_VALUE else 4
-                    }
-                }
-            }
-            card.addView(tvContent)
-
-            // 长消息提示
-            if (content.length > 200) {
-                val tvHint = TextView(this).apply {
-                    text = "[点击展开/收起, ${content.length} 字符]"
-                    textSize = 11f
-                    setTextColor(0xFF2196F3.toInt())
-                    val hintLp = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    )
-                    hintLp.topMargin = dp(2)
-                    layoutParams = hintLp
-                }
-                tvHint.setOnClickListener {
-                    tvContent.maxLines = if (tvContent.maxLines == 4) Int.MAX_VALUE else 4
-                }
-                card.addView(tvHint)
-            }
-
-            // 背景色区分角色
-            val bgColor = when (msg.role) {
-                "user" -> 0xFFF3F8FE.toInt()
-                "assistant" -> 0xFFF3FBF3.toInt()
-                "system" -> 0xFFF5F5F5.toInt()
-                "tool" -> 0xFFFFF8E1.toInt()
-                else -> 0xFFFAFAFA.toInt()
-            }
-            card.setBackgroundColor(bgColor)
-
-            container.addView(card)
-        }
-    }
-
-    private fun setupButtons(cp: AgentCheckpoint) {
-        val btnRestore = findViewById<View>(R.id.btnRestore)
-        val btnDelete = findViewById<View>(R.id.btnDelete)
-
-        btnRestore.setOnClickListener { confirmRestore(cp) }
-        btnDelete.setOnClickListener { confirmDelete(cp) }
-    }
-
-    private fun confirmRestore(cp: AgentCheckpoint) {
-        val timeFormat = SimpleDateFormat("MM/dd HH:mm:ss", Locale.getDefault())
-        AlertDialog.Builder(this)
-            .setTitle("恢复到新对话")
-            .setMessage(
-                "节点: ${cp.nodePath}\n" +
-                "时间: ${timeFormat.format(Date(cp.createdAt))}\n" +
-                "消息: ${cp.messageHistory.size} 条\n\n" +
-                "将创建新对话并加载此检查点的消息历史。"
-            )
-            .setPositiveButton("恢复") { _, _ -> doRestore(cp) }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun doRestore(cp: AgentCheckpoint) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val repo = ConversationRepository(this@CheckpointDetailActivity)
-                val timeFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
-                val timeStr = timeFormat.format(Date(cp.createdAt))
-
-                val config = ProviderManager.getActiveConfig()
-                val title = "[恢复] ${cp.nodePath} $timeStr"
-                val systemPrompt = ProviderManager.getDefaultSystemPrompt(this@CheckpointDetailActivity)
-                val conversationId = repo.createConversation(
-                    title = title,
-                    providerId = config?.providerId ?: "unknown",
-                    model = config?.model ?: "unknown",
-                    systemPrompt = systemPrompt
-                )
-
-                // 重建完整历史：使用 CheckpointService
-                val service = checkpointService
-                val rebuiltHistory = service?.rebuildHistory(
-                    agentId = agentId,
-                    upToCheckpointId = cp.checkpointId,
-                    systemPrompt = systemPrompt
-                ) ?: emptyList()
-
-                for (msg in rebuiltHistory) {
-                    repo.addMessage(conversationId, msg)
-                }
-
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@CheckpointDetailActivity, "已恢复到新对话", Toast.LENGTH_SHORT).show()
-                    val intent = Intent(this@CheckpointDetailActivity, MainActivity::class.java)
-                    intent.putExtra(MainActivity.EXTRA_CONVERSATION_ID, conversationId)
-                    intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        setContent {
+            CheckpointDetailScreen(
+                agentId = agentId,
+                checkpointId = checkpointId,
+                service = checkpointService,
+                onBack = { finish() },
+                onRestored = {
                     setResult(RESULT_RESTORED)
-                    startActivity(intent)
+                    startActivity(it)
+                    finish()
+                },
+                onDeleted = {
+                    setResult(RESULT_DELETED)
                     finish()
                 }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@CheckpointDetailActivity, "恢复失败: ${e.message}", Toast.LENGTH_LONG).show()
+            )
+        }
+    }
+}
+
+@Composable
+fun CheckpointDetailScreen(
+    agentId: String,
+    checkpointId: String,
+    service: CheckpointService?,
+    onBack: () -> Unit,
+    onRestored: (Intent) -> Unit,
+    onDeleted: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var checkpoint by remember { mutableStateOf<AgentCheckpoint?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var showRestoreDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val cp = withContext(Dispatchers.IO) { service?.getCheckpoint(agentId, checkpointId) }
+        if (cp == null) {
+            Toast.makeText(context, "检查点不存在", Toast.LENGTH_SHORT).show()
+            onBack()
+        } else {
+            checkpoint = cp
+            isLoading = false
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        // 顶部栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .background(Color.White)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CustomTextButton(
+                onClick = onBack,
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
+            ) {
+                CustomText("← 返回", fontSize = 14.sp)
+            }
+            CustomText(
+                text = "检查点详情",
+                fontSize = 17.sp,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(56.dp))
+        }
+
+        CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CustomText("加载中...", fontSize = 15.sp, color = TextSecondary)
+            }
+        } else {
+            val cp = checkpoint ?: return
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp)
+            ) {
+                // 基本信息卡片
+                InfoCard(agentId = agentId, checkpoint = cp)
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 消息历史
+                MessageHistoryCard(checkpoint = cp)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 恢复按钮
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(
+                            width = 1.5.dp,
+                            color = Color(0xFF2196F3),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .background(Color(0xFF2196F3).copy(alpha = 0.06f))
+                        .clickable { showRestoreDialog = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    CustomText("↻  恢复到新对话", fontSize = 14.sp, color = Color(0xFF2196F3), fontWeight = FontWeight.Medium)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 删除按钮
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(
+                            width = 1.5.dp,
+                            color = Color(0xFFE53935),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .background(Color(0xFFE53935).copy(alpha = 0.06f))
+                        .clickable { showDeleteDialog = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    CustomText("🗑  删除此检查点", fontSize = 14.sp, color = Color(0xFFE53935), fontWeight = FontWeight.Medium)
                 }
             }
         }
     }
 
-    private fun confirmDelete(cp: AgentCheckpoint) {
-        AlertDialog.Builder(this)
-            .setMessage("删除此检查点？\n${cp.nodePath}\n此操作不可撤销。")
-            .setPositiveButton("删除") { _, _ ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    checkpointService?.deleteCheckpoint(agentId, cp.checkpointId)
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@CheckpointDetailActivity, "已删除", Toast.LENGTH_SHORT).show()
-                        setResult(RESULT_DELETED)
-                        finish()
-                    }
-                }
+    // 恢复确认对话框
+    if (showRestoreDialog) {
+        val cp = checkpoint ?: return
+        val timeFormat = remember { SimpleDateFormat("MM/dd HH:mm:ss", Locale.getDefault()) }
+        CustomAlertDialog(
+            onDismissRequest = { showRestoreDialog = false },
+            containerColor = Color.White,
+            title = { CustomText("恢复到新对话", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                CustomText(
+                    "节点: ${cp.nodePath}\n" +
+                    "时间: ${timeFormat.format(Date(cp.createdAt))}\n" +
+                    "消息: ${cp.messageHistory.size} 条\n\n" +
+                    "将创建新对话并加载此检查点的消息历史。",
+                    color = TextPrimary, fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                CustomTextButton(
+                    onClick = {
+                        showRestoreDialog = false
+                        scope.launch {
+                            try {
+                                val repo = ConversationRepository(context)
+                                val timeStr = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(Date(cp.createdAt))
+                                val config = ProviderManager.getActiveConfig()
+                                val title = "[恢复] ${cp.nodePath} $timeStr"
+                                val systemPrompt = ProviderManager.getDefaultSystemPrompt(context)
+                                val conversationId = withContext(Dispatchers.IO) {
+                                    val cid = repo.createConversation(
+                                        title = title,
+                                        providerId = config?.providerId ?: "unknown",
+                                        model = config?.model ?: "unknown",
+                                        systemPrompt = systemPrompt,
+                                        workspacePath = if (ProviderManager.isAgentMode(context))
+                                            ProviderManager.getWorkspacePath(context) else ""
+                                    )
+                                    val rebuiltHistory = service?.rebuildHistory(
+                                        agentId = agentId,
+                                        upToCheckpointId = cp.checkpointId,
+                                        systemPrompt = systemPrompt
+                                    ) ?: emptyList()
+                                    for (msg in rebuiltHistory) {
+                                        repo.addMessage(cid, msg)
+                                    }
+                                    cid
+                                }
+                                Toast.makeText(context, "已恢复到新对话", Toast.LENGTH_SHORT).show()
+                                val intent = Intent(context, MainActivity::class.java)
+                                intent.putExtra(MainActivity.EXTRA_CONVERSATION_ID, conversationId)
+                                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                onRestored(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "恢复失败: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF2196F3))
+                ) { CustomText("恢复", fontSize = 14.sp) }
+            },
+            dismissButton = {
+                CustomTextButton(
+                    onClick = { showRestoreDialog = false },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                ) { CustomText("取消", fontSize = 14.sp) }
             }
-            .setNegativeButton("取消", null)
-            .show()
+        )
     }
 
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
+    // 删除确认对话框
+    if (showDeleteDialog) {
+        val cp = checkpoint ?: return
+        CustomAlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            containerColor = Color.White,
+            title = { CustomText("删除检查点", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = { CustomText("删除此检查点？\n${cp.nodePath}\n此操作不可撤销。", color = TextPrimary, fontSize = 14.sp) },
+            confirmButton = {
+                CustomTextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        scope.launch {
+                            withContext(Dispatchers.IO) { service?.deleteCheckpoint(agentId, cp.checkpointId) }
+                            Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
+                            onDeleted()
+                        }
+                    },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFFE53935))
+                ) { CustomText("删除", fontSize = 14.sp) }
+            },
+            dismissButton = {
+                CustomTextButton(
+                    onClick = { showDeleteDialog = false },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                ) { CustomText("取消", fontSize = 14.sp) }
+            }
+        )
+    }
+}
+
+@Composable
+private fun InfoCard(agentId: String, checkpoint: AgentCheckpoint) {
+    val timeFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()) }
+    val info = buildString {
+        append("节点路径: ${checkpoint.nodePath}\n")
+        append("创建时间: ${timeFormat.format(Date(checkpoint.createdAt))}\n")
+        append("版本: ${checkpoint.version}\n")
+        append("消息数: ${checkpoint.messageHistory.size}\n")
+        append("检查点 ID: ${checkpoint.checkpointId}\n")
+        append("会话 ID: $agentId")
+        if (checkpoint.lastInput != null) {
+            append("\n最后输入: ${checkpoint.lastInput}")
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .padding(16.dp)
+    ) {
+        CustomText("基本信息", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        CustomText(text = info, fontSize = 13.sp, color = TextSecondary, lineHeight = 20.sp)
+    }
+}
+
+@Composable
+private fun MessageHistoryCard(checkpoint: AgentCheckpoint) {
+    val headerText = if (checkpoint.messageHistory.isEmpty()) {
+        "消息历史 (无)"
+    } else {
+        "消息历史 (${checkpoint.messageHistory.size} 条)"
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .padding(16.dp)
+    ) {
+        CustomText(headerText, fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+
+        if (checkpoint.messageHistory.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            checkpoint.messageHistory.forEachIndexed { index, msg ->
+                MessageCard(index = index, role = msg.role, content = msg.content)
+                if (index < checkpoint.messageHistory.lastIndex) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageCard(index: Int, role: String, content: String) {
+    val roleLabel = when (role) {
+        "system" -> "System"
+        "user" -> "User"
+        "assistant" -> "AI"
+        "tool" -> "Tool"
+        "agent_log" -> "Log"
+        else -> role
+    }
+    val roleColor = when (role) {
+        "user" -> Color(0xFF2196F3)
+        "assistant" -> Color(0xFF4CAF50)
+        "system" -> Color(0xFF9E9E9E)
+        "tool" -> Color(0xFFFF9800)
+        else -> Color(0xFF757575)
+    }
+    val bgColor = when (role) {
+        "user" -> Color(0xFFF3F8FE)
+        "assistant" -> Color(0xFFF3FBF3)
+        "system" -> Color(0xFFF5F5F5)
+        "tool" -> Color(0xFFFFF8E1)
+        else -> Color(0xFFFAFAFA)
+    }
+
+    var expanded by remember { mutableStateOf(false) }
+    val isLong = content.length > 200
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .then(if (isLong) Modifier.clickable { expanded = !expanded } else Modifier)
+    ) {
+        // 左侧角色色条
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(roleColor, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+        )
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 角色标签
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(roleColor.copy(alpha = 0.15f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    CustomText(
+                        text = roleLabel,
+                        fontSize = 11.sp,
+                        color = roleColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                CustomText(
+                    text = "#${index + 1}",
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            CustomText(
+                text = content,
+                fontSize = 13.sp,
+                color = TextPrimary,
+                lineHeight = 19.sp,
+                maxLines = if (isLong && !expanded) 4 else Int.MAX_VALUE
+            )
+            if (isLong) {
+                CustomText(
+                    text = if (expanded) "收起 ▲" else "展开全部 (${content.length} 字符) ▼",
+                    fontSize = 11.sp,
+                    color = Color(0xFF2196F3),
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
 }

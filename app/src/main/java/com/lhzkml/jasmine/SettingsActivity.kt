@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.components.*
@@ -368,7 +369,11 @@ fun SettingsItem(
                 text = value,
                 fontSize = 13.sp,
                 color = TextSecondary,
-                modifier = Modifier.padding(end = 8.dp)
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .widthIn(max = 150.dp)
+                    .padding(end = 8.dp)
             )
             
             CustomText(
