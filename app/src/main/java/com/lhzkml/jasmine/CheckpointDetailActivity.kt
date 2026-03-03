@@ -160,42 +160,36 @@ fun CheckpointDetailScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 恢复按钮
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .border(
-                            width = 1.5.dp,
-                            color = Color(0xFF2196F3),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .background(Color(0xFF2196F3).copy(alpha = 0.06f))
-                        .clickable { showRestoreDialog = true },
-                    contentAlignment = Alignment.Center
+                // 恢复、删除按钮（并行显示，紧凑，无图标）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CustomText("↻  恢复到新对话", fontSize = 14.sp, color = Color(0xFF2196F3), fontWeight = FontWeight.Medium)
-                }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFF2196F3), RoundedCornerShape(8.dp))
+                            .background(Color(0xFF2196F3).copy(alpha = 0.06f))
+                            .clickable { showRestoreDialog = true }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CustomText("恢复到新对话", fontSize = 13.sp, color = Color(0xFF2196F3))
+                    }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // 删除按钮
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .border(
-                            width = 1.5.dp,
-                            color = Color(0xFFE53935),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .background(Color(0xFFE53935).copy(alpha = 0.06f))
-                        .clickable { showDeleteDialog = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    CustomText("🗑  删除此检查点", fontSize = 14.sp, color = Color(0xFFE53935), fontWeight = FontWeight.Medium)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFFE53935), RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE53935).copy(alpha = 0.06f))
+                            .clickable { showDeleteDialog = true }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CustomText("删除此检查点", fontSize = 13.sp, color = Color(0xFFE53935))
+                    }
                 }
             }
         }

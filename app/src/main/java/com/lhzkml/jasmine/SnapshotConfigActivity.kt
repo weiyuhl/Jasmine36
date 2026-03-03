@@ -364,22 +364,28 @@ fun SnapshotConfigScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CustomButton(
-                        onClick = onViewCheckpoints,
-                        modifier = Modifier.weight(1f),
-                        backgroundColor = Color.White,
-                        contentColor = TextPrimary,
-                        shape = RoundedCornerShape(8.dp)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFF2196F3), RoundedCornerShape(8.dp))
+                            .background(Color(0xFF2196F3).copy(alpha = 0.06f))
+                            .clickable { onViewCheckpoints() }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        CustomText("查看检查点", fontSize = 13.sp, color = TextPrimary)
+                        CustomText("查看检查点", fontSize = 13.sp, color = Color(0xFF2196F3))
                     }
 
-                    CustomButton(
-                        onClick = onClearCheckpoints,
-                        modifier = Modifier.weight(1f),
-                        backgroundColor = Color.White,
-                        contentColor = Color(0xFFE53935),
-                        shape = RoundedCornerShape(8.dp)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFFE53935), RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE53935).copy(alpha = 0.06f))
+                            .clickable { onClearCheckpoints() }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         CustomText("清除全部", fontSize = 13.sp, color = Color(0xFFE53935))
                     }

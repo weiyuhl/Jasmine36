@@ -331,8 +331,7 @@ fun AddCustomProviderDialog(
                         
                         CustomDropdownMenu(
                             expanded = expanded,
-                            onDismissRequest = { expanded = false },
-                            modifier = Modifier.fillMaxWidth()
+                            onDismissRequest = { expanded = false }
                         ) {
                             apiTypes.forEach { (label, type) ->
                                 CustomDropdownMenuItem(
