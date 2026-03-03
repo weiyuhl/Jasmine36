@@ -11,16 +11,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 
 class PlannerConfigActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,29 +74,28 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                contentColor = TextPrimary
             ) {
-                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+                CustomText("<- 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
             Spacer(modifier = Modifier.weight(1f))
             
-            Text(
+            CustomText(
                 text = "规划配置",
                 fontSize = 17.sp,
                 color = TextPrimary,
-                modifier = Modifier.weight(1f),
-                style = androidx.compose.ui.text.font.FontWeight.Bold.let {
-                    TextStyle(fontWeight = it, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                }
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
             )
             
             Spacer(modifier = Modifier.weight(1f))
         }
 
-        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
 
         Column(
             modifier = Modifier
@@ -113,30 +114,28 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
+                    CustomText(
                         text = "启用任务规划",
                         fontSize = 15.sp,
                         color = TextPrimary
                     )
-                    Text(
+                    CustomText(
                         text = "Agent 模式下先规划再执行",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
                 }
                 
-                Switch(
+                CustomSwitch(
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
                         config.setPlannerEnabled(it)
                     },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Accent,
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color(0xFFE0E0E0)
-                    )
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Accent,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = Color(0xFFE0E0E0)
                 )
             }
 
@@ -151,12 +150,12 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                         .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
-                    Text(
+                    CustomText(
                         text = "最大迭代次数",
                         fontSize = 15.sp,
                         color = TextPrimary
                     )
-                    Text(
+                    CustomText(
                         text = "规划器每次迭代让 LLM 生成/更新计划，次数越多计划越精细但消耗更多 token（1~20）",
                         fontSize = 12.sp,
                         color = TextSecondary,
@@ -186,7 +185,7 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                             .padding(12.dp),
                         decorationBox = { innerTextField ->
                             if (maxIterations.isEmpty()) {
-                                Text(
+                                CustomText(
                                     text = "默认 1",
                                     fontSize = 14.sp,
                                     color = TextSecondary
@@ -209,12 +208,12 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
+                        CustomText(
                             text = "Critic 评估",
                             fontSize = 15.sp,
                             color = TextPrimary
                         )
-                        Text(
+                        CustomText(
                             text = "额外调用 LLM 评估计划质量，不合格时自动重新规划",
                             fontSize = 12.sp,
                             color = TextSecondary,
@@ -222,18 +221,16 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                         )
                     }
                     
-                    Switch(
+                    CustomSwitch(
                         checked = criticEnabled,
                         onCheckedChange = { 
                             criticEnabled = it
                             config.setPlannerCriticEnabled(it)
                         },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Accent,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = Color(0xFFE0E0E0)
-                        )
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Accent,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0)
                     )
                 }
 
@@ -246,15 +243,13 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                         .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
-                    Text(
+                    CustomText(
                         text = "当前配置",
                         fontSize = 15.sp,
                         color = TextPrimary,
-                        style = androidx.compose.ui.text.font.FontWeight.Bold.let {
-                            TextStyle(fontWeight = it)
-                        }
+                        fontWeight = FontWeight.Bold
                     )
-                    Text(
+                    CustomText(
                         text = getSummary(),
                         fontSize = 13.sp,
                         color = TextSecondary,

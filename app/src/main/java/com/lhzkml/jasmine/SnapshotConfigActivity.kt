@@ -12,13 +12,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -26,6 +28,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy
 import com.lhzkml.jasmine.core.config.SnapshotStorageType
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 
 class SnapshotConfigActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -147,29 +150,28 @@ fun SnapshotConfigScreen(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                contentColor = TextPrimary
             ) {
-                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+                CustomText("<- 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
             Spacer(modifier = Modifier.weight(1f))
             
-            Text(
+            CustomText(
                 text = "快照配置",
                 fontSize = 17.sp,
                 color = TextPrimary,
-                modifier = Modifier.weight(1f),
-                style = androidx.compose.ui.text.font.FontWeight.Bold.let {
-                    TextStyle(fontWeight = it, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                }
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
             )
             
             Spacer(modifier = Modifier.weight(1f))
         }
 
-        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
 
         Column(
             modifier = Modifier
@@ -188,30 +190,28 @@ fun SnapshotConfigScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
+                    CustomText(
                         text = "启用执行快照",
                         fontSize = 15.sp,
                         color = TextPrimary
                     )
-                    Text(
+                    CustomText(
                         text = "Agent 执行过程中自动创建检查点",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
                 }
                 
-                Switch(
+                CustomSwitch(
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
                         config.setSnapshotEnabled(it)
                     },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Accent,
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color(0xFFE0E0E0)
-                    )
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Accent,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = Color(0xFFE0E0E0)
                 )
             }
 
@@ -219,7 +219,7 @@ fun SnapshotConfigScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 存储方式标题
-                Text(
+                CustomText(
                     text = "存储方式",
                     fontSize = 13.sp,
                     color = TextSecondary,
@@ -253,7 +253,7 @@ fun SnapshotConfigScreen(
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 自动检查点
@@ -266,12 +266,12 @@ fun SnapshotConfigScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
+                        CustomText(
                             text = "自动检查点",
                             fontSize = 15.sp,
                             color = TextPrimary
                         )
-                        Text(
+                        CustomText(
                             text = "每个节点执行后自动创建检查点",
                             fontSize = 12.sp,
                             color = TextSecondary,
@@ -279,27 +279,25 @@ fun SnapshotConfigScreen(
                         )
                     }
                     
-                    Switch(
+                    CustomSwitch(
                         checked = autoCheckpoint,
                         onCheckedChange = { 
                             autoCheckpoint = it
                             config.setSnapshotAutoCheckpoint(it)
                         },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Accent,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = Color(0xFFE0E0E0)
-                        )
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Accent,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 回滚策略标题
-                Text(
+                CustomText(
                     text = "回滚策略",
                     fontSize = 13.sp,
                     color = TextSecondary,
@@ -344,18 +342,18 @@ fun SnapshotConfigScreen(
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 检查点管理标题
-                Text(
+                CustomText(
                     text = "检查点管理",
                     fontSize = 13.sp,
                     color = TextSecondary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                Text(
+                CustomText(
                     text = checkpointCount,
                     fontSize = 14.sp,
                     color = TextPrimary,
@@ -366,26 +364,24 @@ fun SnapshotConfigScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(
+                    CustomButton(
                         onClick = onViewCheckpoints,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = TextPrimary
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8E8E8))
+                        backgroundColor = Color.White,
+                        contentColor = TextPrimary,
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("查看检查点", fontSize = 13.sp)
+                        CustomText("查看检查点", fontSize = 13.sp, color = TextPrimary)
                     }
 
-                    OutlinedButton(
+                    CustomButton(
                         onClick = onClearCheckpoints,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFFE53935)
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE53935))
+                        backgroundColor = Color.White,
+                        contentColor = Color(0xFFE53935),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("清除全部", fontSize = 13.sp)
+                        CustomText("清除全部", fontSize = 13.sp, color = Color(0xFFE53935))
                     }
                 }
             }
@@ -403,9 +399,9 @@ fun StorageCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .background(
-                if (isSelected) Color(0xFFF5F5F5) else Color.White,
-                RoundedCornerShape(16.dp)
+                if (isSelected) Color(0xFFF5F5F5) else Color.White
             )
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
@@ -417,12 +413,12 @@ fun StorageCard(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            CustomText(
                 text = title,
                 fontSize = 15.sp,
                 color = TextPrimary
             )
-            Text(
+            CustomText(
                 text = description,
                 fontSize = 12.sp,
                 color = TextSecondary,
@@ -431,7 +427,7 @@ fun StorageCard(
         }
         
         if (isSelected) {
-            Text(
+            CustomText(
                 text = "✓",
                 fontSize = 16.sp,
                 color = Color(0xFF2196F3)
@@ -450,9 +446,9 @@ fun RollbackStrategyCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .background(
-                if (isSelected) Color(0xFFF5F5F5) else Color.White,
-                RoundedCornerShape(16.dp)
+                if (isSelected) Color(0xFFF5F5F5) else Color.White
             )
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
@@ -464,12 +460,12 @@ fun RollbackStrategyCard(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            CustomText(
                 text = title,
                 fontSize = 15.sp,
                 color = TextPrimary
             )
-            Text(
+            CustomText(
                 text = description,
                 fontSize = 12.sp,
                 color = TextSecondary,
@@ -478,7 +474,7 @@ fun RollbackStrategyCard(
         }
         
         if (isSelected) {
-            Text(
+            CustomText(
                 text = "✓",
                 fontSize = 16.sp,
                 color = Color(0xFF2196F3)

@@ -8,14 +8,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
@@ -29,6 +30,7 @@ import com.lhzkml.jasmine.ui.theme.BgInput
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
+import com.lhzkml.jasmine.ui.components.*
 
 /**
  * Agent 策略选择界面
@@ -88,14 +90,13 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
-                onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+            CustomTextButton(
+                onClick = onBack
             ) {
-                Text("← 返回", fontSize = 14.sp)
+                CustomText("← 返回", fontSize = 14.sp)
             }
             
-            Text(
+            CustomText(
                 text = "Agent 策略",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -107,7 +108,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
             Spacer(modifier = Modifier.width(56.dp))
         }
         
-        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
         
         // 滚动内容
         Column(
@@ -151,20 +152,20 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 }
             )
             
-            HorizontalDivider(
+            CustomHorizontalDivider(
                 color = Color(0xFFE0E0E0),
                 thickness = 1.dp,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
             
             // 策略说明区域
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shape = MaterialTheme.shapes.medium
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(8.dp))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
+                    CustomText(
                         text = "策略说明",
                         fontSize = 15.sp,
                         color = TextPrimary,
@@ -173,7 +174,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     
-                    Text(
+                    CustomText(
                         text = if (selectedStrategy == AgentStrategyType.SIMPLE_LOOP) {
                             "简单循环模式使用 ToolExecutor 的 while 循环执行工具调用。\n\n" +
                             "流程：发送消息 -> LLM 回复 -> 检查工具调用 -> 执行工具 -> 循环直到无工具调用。\n\n" +
@@ -195,9 +196,9 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 // 工具调用模式
-                Text("工具调用模式", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                CustomText("工具调用模式", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
+                CustomText(
                     "移植自 koog ToolCalls，控制多工具调用的执行方式",
                     fontSize = 12.sp,
                     color = TextSecondary
@@ -234,16 +235,16 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     }
                 )
                 
-                HorizontalDivider(
+                CustomHorizontalDivider(
                     color = Color(0xFFE0E0E0),
                     thickness = 1.dp,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
                 
                 // 工具选择策略
-                Text("工具选择策略", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                CustomText("工具选择策略", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
+                CustomText(
                     "移植自 koog ToolSelectionStrategy，决定子图可用的工具集合",
                     fontSize = 12.sp,
                     color = TextSecondary
@@ -283,17 +284,40 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 if (toolSelectionStrategy == ToolSelectionStrategyType.BY_NAME) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Column(modifier = Modifier.padding(horizontal = 8.dp)) {
-                        Text(
+                        CustomText(
                             "工具名称（逗号分隔）",
                             fontSize = 12.sp,
                             color = TextSecondary,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
-                        InputField(
-                            value = byNameTools,
-                            onValueChange = { byNameTools = it },
-                            placeholder = "read_file,write_file,shell"
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(BgInput, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 12.dp, vertical = 12.dp)
+                        ) {
+                            BasicTextField(
+                                value = byNameTools,
+                                onValueChange = { byNameTools = it },
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    fontSize = 13.sp,
+                                    color = TextPrimary
+                                ),
+                                cursorBrush = SolidColor(TextPrimary),
+                                modifier = Modifier.fillMaxWidth(),
+                                decorationBox = { innerTextField ->
+                                    if (byNameTools.isEmpty()) {
+                                        CustomText(
+                                            "read_file,write_file,shell",
+                                            fontSize = 13.sp,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                 }
@@ -311,31 +335,55 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 if (toolSelectionStrategy == ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Column(modifier = Modifier.padding(horizontal = 8.dp)) {
-                        Text(
+                        CustomText(
                             "子任务描述",
                             fontSize = 12.sp,
                             color = TextSecondary,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
-                        InputFieldMultiLine(
-                            value = autoTaskDesc,
-                            onValueChange = { autoTaskDesc = it },
-                            placeholder = "Read and analyze source code files"
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(BgInput, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 12.dp, vertical = 12.dp)
+                        ) {
+                            BasicTextField(
+                                value = autoTaskDesc,
+                                onValueChange = { autoTaskDesc = it },
+                                textStyle = TextStyle(
+                                    fontSize = 13.sp,
+                                    color = TextPrimary
+                                ),
+                                cursorBrush = SolidColor(TextPrimary),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 60.dp),
+                                decorationBox = { innerTextField ->
+                                    if (autoTaskDesc.isEmpty()) {
+                                        CustomText(
+                                            "Read and analyze source code files",
+                                            fontSize = 13.sp,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                 }
                 
-                HorizontalDivider(
+                CustomHorizontalDivider(
                     color = Color(0xFFE0E0E0),
                     thickness = 1.dp,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
                 
                 // ToolChoice
-                Text("ToolChoice", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                CustomText("ToolChoice", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
+                CustomText(
                     "移植自 koog ToolChoice，控制 LLM 是否/如何调用工具",
                     fontSize = 12.sp,
                     color = TextSecondary
@@ -395,17 +443,40 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 if (toolChoiceMode == ToolChoiceMode.NAMED) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Column(modifier = Modifier.padding(horizontal = 8.dp)) {
-                        Text(
+                        CustomText(
                             "工具名称",
                             fontSize = 12.sp,
                             color = TextSecondary,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
-                        InputField(
-                            value = namedTool,
-                            onValueChange = { namedTool = it },
-                            placeholder = "calculator"
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(BgInput, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 12.dp, vertical = 12.dp)
+                        ) {
+                            BasicTextField(
+                                value = namedTool,
+                                onValueChange = { namedTool = it },
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    fontSize = 13.sp,
+                                    color = TextPrimary
+                                ),
+                                cursorBrush = SolidColor(TextPrimary),
+                                modifier = Modifier.fillMaxWidth(),
+                                decorationBox = { innerTextField ->
+                                    if (namedTool.isEmpty()) {
+                                        CustomText(
+                                            "calculator",
+                                            fontSize = 13.sp,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -423,19 +494,21 @@ fun StrategyCardWithDiagram(
     showDiagram: Boolean = false,
     diagramContent: @Composable () -> Unit = {}
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = Color.White,
-        shape = MaterialTheme.shapes.medium,
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, TextPrimary) else null
+            .background(Color.White, RoundedCornerShape(8.dp))
+            .then(
+                if (isSelected) Modifier.border(2.dp, TextPrimary, RoundedCornerShape(8.dp))
+                else Modifier
+            )
+            .clickable(onClick = onClick)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
+                CustomText(
                     text = icon,
                     fontSize = 22.sp,
                     color = TextPrimary
@@ -446,13 +519,13 @@ fun StrategyCardWithDiagram(
                         .weight(1f)
                         .padding(start = 12.dp)
                 ) {
-                    Text(
+                    CustomText(
                         text = title,
                         fontSize = 16.sp,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
+                    CustomText(
                         text = subtitle,
                         fontSize = 12.sp,
                         color = TextSecondary,
@@ -461,7 +534,7 @@ fun StrategyCardWithDiagram(
                 }
                 
                 if (isSelected) {
-                    Text(
+                    CustomText(
                         text = "✓",
                         fontSize = 18.sp,
                         color = Color(0xFF2196F3),
@@ -497,7 +570,7 @@ fun SimpleLoopDiagram() {
             DiagramNode("[OK] 结果")
         }
         
-        Text(
+        CustomText(
             text = "<- 有工具调用时循环",
             fontSize = 10.sp,
             color = TextSecondary,
@@ -514,7 +587,7 @@ fun GraphStrategyDiagram() {
     ) {
         DiagramNode("[>] Start", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         
-        Text("↓", fontSize = 14.sp, color = TextSecondary)
+        CustomText("↓", fontSize = 14.sp, color = TextSecondary)
         
         DiagramNode("[LLM] nodeLLMRequest", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         
@@ -526,19 +599,19 @@ fun GraphStrategyDiagram() {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(end = 16.dp)
             ) {
-                Text("↙ tool_calls", fontSize = 10.sp, color = Color(0xFF2196F3))
+                CustomText("↙ tool_calls", fontSize = 10.sp, color = Color(0xFF2196F3))
                 DiagramNode("[Tool] nodeExecuteTool", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 11.sp)
-                Text("↓", fontSize = 12.sp, color = TextSecondary)
+                CustomText("↓", fontSize = 12.sp, color = TextSecondary)
                 DiagramNode("[Result] nodeSendToolResult", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 11.sp)
-                Text("↑ 循环", fontSize = 10.sp, color = Color(0xFFFF9800))
+                CustomText("↑ 循环", fontSize = 10.sp, color = Color(0xFFFF9800))
             }
             
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(start = 16.dp)
             ) {
-                Text("↘ assistant", fontSize = 10.sp, color = Color(0xFF4CAF50))
-                Text("↓", fontSize = 12.sp, color = TextSecondary)
+                CustomText("↘ assistant", fontSize = 10.sp, color = Color(0xFF4CAF50))
+                CustomText("↓", fontSize = 12.sp, color = TextSecondary)
             }
         }
         
@@ -552,18 +625,18 @@ fun DiagramNode(
     modifier: Modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
     fontSize: TextUnit = 11.sp
 ) {
-    Text(
+    CustomText(
         text = text,
         fontSize = fontSize,
         color = TextPrimary,
         modifier = modifier
-            .background(Color(0xFFF5F5F5), MaterialTheme.shapes.small)
+            .background(Color(0xFFF5F5F5), RoundedCornerShape(4.dp))
     )
 }
 
 @Composable
 fun DiagramArrow() {
-    Text(
+    CustomText(
         text = " → ",
         fontSize = 11.sp,
         color = TextSecondary
@@ -577,26 +650,28 @@ fun OptionCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = Color.White,
-        shape = MaterialTheme.shapes.small,
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, TextPrimary) else null
+            .background(Color.White, RoundedCornerShape(4.dp))
+            .then(
+                if (isSelected) Modifier.border(2.dp, TextPrimary, RoundedCornerShape(4.dp))
+                else Modifier
+            )
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                CustomText(
                     text = title,
                     fontSize = 14.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
+                CustomText(
                     text = subtitle,
                     fontSize = 12.sp,
                     color = TextSecondary
@@ -604,7 +679,7 @@ fun OptionCard(
             }
             
             if (isSelected) {
-                Text(
+                CustomText(
                     text = "✓",
                     fontSize = 18.sp,
                     color = TextPrimary,
@@ -615,75 +690,3 @@ fun OptionCard(
     }
 }
 
-@Composable
-fun InputField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(BgInput, MaterialTheme.shapes.small)
-            .padding(horizontal = 12.dp, vertical = 12.dp)
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = LocalTextStyle.current.copy(
-                fontSize = 13.sp,
-                color = TextPrimary
-            ),
-            cursorBrush = SolidColor(TextPrimary),
-            modifier = Modifier.fillMaxWidth(),
-            decorationBox = { innerTextField ->
-                if (value.isEmpty()) {
-                    Text(
-                        placeholder,
-                        fontSize = 13.sp,
-                        color = TextSecondary
-                    )
-                }
-                innerTextField()
-            }
-        )
-    }
-}
-
-@Composable
-fun InputFieldMultiLine(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(BgInput, MaterialTheme.shapes.small)
-            .padding(horizontal = 12.dp, vertical = 12.dp)
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            textStyle = LocalTextStyle.current.copy(
-                fontSize = 13.sp,
-                color = TextPrimary
-            ),
-            cursorBrush = SolidColor(TextPrimary),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 60.dp),
-            decorationBox = { innerTextField ->
-                if (value.isEmpty()) {
-                    Text(
-                        placeholder,
-                        fontSize = 13.sp,
-                        color = TextSecondary
-                    )
-                }
-                innerTextField()
-            }
-        )
-    }
-}

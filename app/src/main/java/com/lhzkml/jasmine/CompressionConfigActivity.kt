@@ -12,17 +12,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 
 class CompressionConfigActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,29 +104,28 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                contentColor = TextPrimary
             ) {
-                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+                CustomText("<- 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
             Spacer(modifier = Modifier.weight(1f))
             
-            Text(
+            CustomText(
                 text = "压缩配置",
                 fontSize = 17.sp,
                 color = TextPrimary,
-                modifier = Modifier.weight(1f),
-                style = androidx.compose.ui.text.font.FontWeight.Bold.let {
-                    TextStyle(fontWeight = it, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                }
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
             )
             
             Spacer(modifier = Modifier.weight(1f))
         }
 
-        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
 
         Column(
             modifier = Modifier
@@ -142,30 +144,28 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
+                    CustomText(
                         text = "启用智能上下文压缩",
                         fontSize = 15.sp,
                         color = TextPrimary
                     )
-                    Text(
+                    CustomText(
                         text = "对话过长时自动压缩历史",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
                 }
                 
-                Switch(
+                CustomSwitch(
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
                         config.setCompressionEnabled(it)
                     },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Accent,
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color(0xFFE0E0E0)
-                    )
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Accent,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = Color(0xFFE0E0E0)
                 )
             }
 
@@ -173,7 +173,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 策略选择标题
-                Text(
+                CustomText(
                     text = "压缩策略",
                     fontSize = 13.sp,
                     color = TextSecondary,
@@ -234,7 +234,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                 when (selectedStrategy) {
                     CompressionStrategyType.TOKEN_BUDGET -> {
                         Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         ParamsSection(title = "Token 预算参数") {
@@ -257,7 +257,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     }
                     CompressionStrategyType.LAST_N -> {
                         Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         ParamsSection(title = "保留最后 N 条参数") {
@@ -271,7 +271,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     }
                     CompressionStrategyType.CHUNKED -> {
                         Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         ParamsSection(title = "分块压缩参数") {
@@ -302,9 +302,9 @@ fun StrategyCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .background(
-                if (isSelected) Color(0xFFF5F5F5) else Color.White,
-                RoundedCornerShape(16.dp)
+                if (isSelected) Color(0xFFF5F5F5) else Color.White
             )
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
@@ -316,12 +316,12 @@ fun StrategyCard(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            CustomText(
                 text = title,
                 fontSize = 15.sp,
                 color = TextPrimary
             )
-            Text(
+            CustomText(
                 text = description,
                 fontSize = 12.sp,
                 color = TextSecondary,
@@ -330,7 +330,7 @@ fun StrategyCard(
         }
         
         if (isSelected) {
-            Text(
+            CustomText(
                 text = "✓",
                 fontSize = 16.sp,
                 color = Color(0xFF2196F3)
@@ -351,13 +351,11 @@ fun ParamsSection(
             .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
             .padding(16.dp)
     ) {
-        Text(
+        CustomText(
             text = title,
             fontSize = 15.sp,
             color = TextPrimary,
-            style = androidx.compose.ui.text.font.FontWeight.Bold.let {
-                TextStyle(fontWeight = it)
-            },
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         
@@ -373,7 +371,7 @@ fun ParamInputField(
     placeholder: String
 ) {
     Column {
-        Text(
+        CustomText(
             text = label,
             fontSize = 13.sp,
             color = TextSecondary
@@ -394,7 +392,7 @@ fun ParamInputField(
                 .padding(12.dp),
             decorationBox = { innerTextField ->
                 if (value.isEmpty()) {
-                    Text(
+                    CustomText(
                         text = placeholder,
                         fontSize = 14.sp,
                         color = TextSecondary

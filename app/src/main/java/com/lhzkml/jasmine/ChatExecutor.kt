@@ -130,7 +130,6 @@ class ChatExecutor(
 
             var result = ""
             var usage: Usage? = null
-            var contentBlocks: List<ContentBlock> = emptyList()
 
             withContext(Dispatchers.Main) {
                 chatStateManager.startStreaming()
@@ -145,14 +144,12 @@ class ChatExecutor(
                 )
                 result = agentResult.first
                 usage = agentResult.second
-                contentBlocks = agentResult.third
             } else {
                 val chatResult = executeChatMode(
                     client, config, trimmedMessages, maxTokens, samplingParams
                 )
                 result = chatResult.first
                 usage = chatResult.second
-                contentBlocks = chatResult.third
             }
 
             val assistantMsg = ChatMessage.assistant(result)
@@ -165,9 +162,9 @@ class ChatExecutor(
                 messageHistory = listOf(userMsg, assistantMsg)
             )
 
-            if (contentBlocks.isNotEmpty()) {
-                val blocksJson = serializeContentBlocks(contentBlocks)
-                conversationRepo.addMessage(currentConversationId()!!, ChatMessage("content_blocks", blocksJson))
+            val logContent = chatStateManager.getLogContent()
+            if (logContent.isNotBlank()) {
+                conversationRepo.addMessage(currentConversationId()!!, ChatMessage("agent_log", logContent))
             }
 
             conversationRepo.addMessage(currentConversationId()!!, assistantMsg)
@@ -234,10 +231,9 @@ class ChatExecutor(
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
         samplingParams: com.lhzkml.jasmine.core.prompt.model.SamplingParams
-    ): Triple<String, Usage?, List<ContentBlock>> {
+    ): Pair<String, Usage?> {
         var result = ""
         var usage: Usage? = null
-        var contentBlocks: List<ContentBlock> = emptyList()
 
         val listener = object : AgentEventListener {
             override suspend fun onToolCallStart(toolName: String, arguments: String) {
@@ -339,9 +335,6 @@ class ChatExecutor(
                 }
                 result = streamResult.content
                 usage = streamResult.usage
-                contentBlocks = withContext(Dispatchers.Main) {
-                    chatStateManager.getCurrentBlocks()
-                }
                 withContext(Dispatchers.Main) {
                     chatStateManager.finalizeStream(
                         formatUsageShort(usage),
@@ -356,9 +349,6 @@ class ChatExecutor(
                     maxTokens, samplingParams, agentRunId
                 )
                 result = graphResult ?: ""
-                contentBlocks = withContext(Dispatchers.Main) {
-                    chatStateManager.getCurrentBlocks()
-                }
 
                 withContext(Dispatchers.Main) {
                     chatStateManager.finalizeStream(
@@ -376,7 +366,7 @@ class ChatExecutor(
             totalIterations = 0
         ))
 
-        return Triple(result, usage, contentBlocks)
+        return result to usage
     }
 
     private suspend fun executeGraphStrategy(
@@ -512,7 +502,7 @@ class ChatExecutor(
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
         samplingParams: com.lhzkml.jasmine.core.prompt.model.SamplingParams
-    ): Triple<String, Usage?, List<ContentBlock>> {
+    ): Pair<String, Usage?> {
         val resumeEnabled = ProviderManager.isStreamResumeEnabled(context)
 
         val streamResult = if (resumeEnabled) {
@@ -559,9 +549,6 @@ class ChatExecutor(
 
         val result = streamResult.content
         val usage = streamResult.usage
-        val contentBlocks = withContext(Dispatchers.Main) {
-            chatStateManager.getCurrentBlocks()
-        }
 
         withContext(Dispatchers.Main) {
             chatStateManager.finalizeStream(
@@ -570,43 +557,7 @@ class ChatExecutor(
             )
         }
 
-        return Triple(result, usage, contentBlocks)
-    }
-
-    private fun serializeContentBlocks(blocks: List<ContentBlock>): String {
-        val jsonArray = StringBuilder("[")
-        blocks.forEachIndexed { index, block ->
-            if (index > 0) jsonArray.append(",")
-            jsonArray.append(serializeBlock(block))
-        }
-        jsonArray.append("]")
-        return jsonArray.toString()
-    }
-
-    private fun serializeBlock(block: ContentBlock): String {
-        return when (block) {
-            is ContentBlock.Text -> """{"type":"text","content":${escapeJson(block.content)}}"""
-            is ContentBlock.Thinking -> """{"type":"thinking","content":${escapeJson(block.content)}}"""
-            is ContentBlock.ToolCall -> """{"type":"tool_call","toolName":${escapeJson(block.toolName)},"arguments":${escapeJson(block.arguments)}}"""
-            is ContentBlock.ToolResult -> """{"type":"tool_result","toolName":${escapeJson(block.toolName)},"result":${escapeJson(block.result)}}"""
-            is ContentBlock.Plan -> {
-                val stepsJson = block.steps.joinToString(",") { escapeJson(it) }
-                """{"type":"plan","goal":${escapeJson(block.goal)},"steps":[$stepsJson]}"""
-            }
-            is ContentBlock.GraphLog -> """{"type":"graph_log","content":${escapeJson(block.content)}}"""
-            is ContentBlock.Error -> """{"type":"error","message":${escapeJson(block.message)}}"""
-            is ContentBlock.SystemLog -> """{"type":"system_log","content":${escapeJson(block.content)}}"""
-        }
-    }
-
-    private fun escapeJson(str: String): String {
-        val escaped = str
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        return "\"$escaped\""
+        return result to usage
     }
 
     companion object {

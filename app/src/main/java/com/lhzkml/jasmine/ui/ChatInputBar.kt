@@ -12,10 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +24,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.ui.components.CustomDropdownMenu
+import com.lhzkml.jasmine.ui.components.CustomDropdownMenuItem
+import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.theme.*
 
 @Composable
@@ -71,7 +70,7 @@ fun ChatInputBar(
                     decorationBox = { innerTextField ->
                         Box {
                             if (inputText.isEmpty()) {
-                                Text("输入消息...", color = TextSecondary, fontSize = 15.sp)
+                                CustomText("输入消息...", color = TextSecondary, fontSize = 15.sp)
                             }
                             innerTextField()
                         }
@@ -100,7 +99,7 @@ fun ChatInputBar(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
+                        CustomText(
                             text = if (isGenerating) "■" else "↑",
                             color = BgPrimary,
                             fontSize = 16.sp
@@ -114,7 +113,7 @@ fun ChatInputBar(
                     .align(Alignment.BottomEnd)
                     .padding(end = 2.dp, bottom = 2.dp)
             ) {
-                Text(
+                CustomText(
                     text = currentModelDisplay,
                     color = TextSecondary,
                     fontSize = 12.sp,
@@ -122,25 +121,23 @@ fun ChatInputBar(
                         if (modelList.size > 1) modelMenuExpanded = true
                     }
                 )
-                DropdownMenu(
+                CustomDropdownMenu(
                     expanded = modelMenuExpanded,
                     onDismissRequest = { modelMenuExpanded = false }
                 ) {
                     modelList.forEach { model ->
-                        DropdownMenuItem(
+                        CustomDropdownMenuItem(
                             text = {
-                                Text(
+                                CustomText(
                                     text = shortenModelName(model),
+                                    color = if (model == currentModel) Accent else TextPrimary,
                                     fontSize = 14.sp
                                 )
                             },
                             onClick = {
                                 onModelSelected(model)
                                 modelMenuExpanded = false
-                            },
-                            colors = MenuDefaults.itemColors(
-                                textColor = if (model == currentModel) Accent else TextPrimary
-                            )
+                            }
                         )
                     }
                 }

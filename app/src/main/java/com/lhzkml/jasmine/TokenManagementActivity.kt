@@ -11,10 +11,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
@@ -22,8 +22,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -79,15 +81,15 @@ fun TokenManagementScreen(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary),
+                contentColor = TextPrimary,
                 contentPadding = PaddingValues(6.dp)
             ) {
-                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+                CustomText("<- 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
-            Text(
+            CustomText(
                 text = "Token 管理",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -99,7 +101,7 @@ fun TokenManagementScreen(
             Spacer(modifier = Modifier.width(56.dp))
         }
 
-        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
 
         Column(
             modifier = Modifier
@@ -116,28 +118,28 @@ fun TokenManagementScreen(
                     .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
-                Text(
+                CustomText(
                     text = "最大回复 Token 数",
                     fontSize = 15.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 
-                Text(
+                CustomText(
                     text = "设置每条 AI 回复的最大 token 数量，0 或留空表示不限制",
                     fontSize = 12.sp,
                     color = TextSecondary,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                 )
                 
-                Text(
+                CustomText(
                     text = "常用值：512、1024、2048、4096",
                     fontSize = 12.sp,
                     color = TextSecondary,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
                 
-                Text(
+                CustomText(
                     text = "最大 Token 数",
                     fontSize = 13.sp,
                     color = TextSecondary
@@ -166,8 +168,8 @@ fun MaxTokensInputField(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .background(Color.White, MaterialTheme.shapes.medium)
-            .border(1.dp, Color(0xFFE8E8E8), MaterialTheme.shapes.medium)
+            .background(Color.White, RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(8.dp))
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -176,7 +178,7 @@ fun MaxTokensInputField(
             onValueChange = onValueChange,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            textStyle = LocalTextStyle.current.copy(
+            textStyle = TextStyle(
                 fontSize = 14.sp,
                 color = TextPrimary
             ),
@@ -184,7 +186,7 @@ fun MaxTokensInputField(
             modifier = Modifier.fillMaxWidth(),
             decorationBox = { innerTextField ->
                 if (value.isEmpty()) {
-                    Text(
+                    CustomText(
                         placeholder,
                         fontSize = 14.sp,
                         color = TextSecondary
@@ -212,15 +214,16 @@ fun TokenUsageCard(conversationRepo: ConversationRepository) {
         totalTokens = stats.totalTokens
     }
     
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = MaterialTheme.shapes.medium
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
-            Text(
+            CustomText(
                 text = "Token 用量统计",
                 fontSize = 15.sp,
                 color = TextPrimary,
@@ -236,13 +239,13 @@ fun TokenUsageCard(conversationRepo: ConversationRepository) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(
+                    CustomText(
                         text = formatNumber(promptTokens),
                         fontSize = 18.sp,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
+                    CustomText(
                         text = "提示",
                         fontSize = 12.sp,
                         color = TextSecondary
@@ -253,13 +256,13 @@ fun TokenUsageCard(conversationRepo: ConversationRepository) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(
+                    CustomText(
                         text = formatNumber(completionTokens),
                         fontSize = 18.sp,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
+                    CustomText(
                         text = "回复",
                         fontSize = 12.sp,
                         color = TextSecondary
@@ -270,13 +273,13 @@ fun TokenUsageCard(conversationRepo: ConversationRepository) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(
+                    CustomText(
                         text = formatNumber(totalTokens),
                         fontSize = 18.sp,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
+                    CustomText(
                         text = "总计",
                         fontSize = 12.sp,
                         color = TextSecondary

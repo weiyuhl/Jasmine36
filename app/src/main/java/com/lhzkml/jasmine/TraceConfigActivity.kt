@@ -9,16 +9,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.observe.trace.TraceEventCategory
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 
 /**
  * 追踪配置界面
@@ -123,29 +126,28 @@ fun TraceConfigScreen(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                contentColor = TextPrimary
             ) {
-                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+                CustomText("<- 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
             Spacer(modifier = Modifier.weight(1f))
             
-            Text(
+            CustomText(
                 text = "追踪配置",
                 fontSize = 17.sp,
                 color = TextPrimary,
-                modifier = Modifier.weight(1f),
-                style = androidx.compose.ui.text.font.FontWeight.Bold.let {
-                    TextStyle(fontWeight = it, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                }
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
             )
             
             Spacer(modifier = Modifier.weight(1f))
         }
 
-        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
 
         Column(
             modifier = Modifier
@@ -164,30 +166,28 @@ fun TraceConfigScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
+                    CustomText(
                         text = "启用执行追踪",
                         fontSize = 15.sp,
                         color = TextPrimary
                     )
-                    Text(
+                    CustomText(
                         text = "记录 Agent 工具调用和 LLM 请求",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
                 }
                 
-                Switch(
+                CustomSwitch(
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
                         config.setTraceEnabled(it)
                     },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Accent,
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color(0xFFE0E0E0)
-                    )
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Accent,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = Color(0xFFE0E0E0)
                 )
             }
 
@@ -195,7 +195,7 @@ fun TraceConfigScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 输出方式标题
-                Text(
+                CustomText(
                     text = "输出方式",
                     fontSize = 13.sp,
                     color = TextSecondary,
@@ -210,15 +210,13 @@ fun TraceConfigScreen(
                         .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                         .padding(horizontal = 20.dp, vertical = 14.dp)
                 ) {
-                    Text(
+                    CustomText(
                         text = "追踪 vs 事件处理器",
                         fontSize = 15.sp,
                         color = TextPrimary,
-                        style = androidx.compose.ui.text.font.FontWeight.Bold.let {
-                            TextStyle(fontWeight = it)
-                        }
+                        fontWeight = FontWeight.Bold
                     )
-                    Text(
+                    CustomText(
                         text = "追踪(Trace): 纯数据记录，输出到 Android Log 和文件，用于调试和分析。\n事件处理器(EventHandler): UI 通知系统，在聊天界面实时显示 Agent 执行过程。",
                         fontSize = 12.sp,
                         color = TextSecondary,
@@ -239,12 +237,12 @@ fun TraceConfigScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
+                        CustomText(
                             text = "文件输出",
                             fontSize = 15.sp,
                             color = TextPrimary
                         )
-                        Text(
+                        CustomText(
                             text = if (fileOutputEnabled) "保存到: ${getTraceDir()}" else "保存追踪日志到本地文件",
                             fontSize = 12.sp,
                             color = TextSecondary,
@@ -252,33 +250,31 @@ fun TraceConfigScreen(
                         )
                     }
                     
-                    Switch(
+                    CustomSwitch(
                         checked = fileOutputEnabled,
                         onCheckedChange = { 
                             fileOutputEnabled = it
                             config.setTraceFileEnabled(it)
                         },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Accent,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = Color(0xFFE0E0E0)
-                        )
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Accent,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 事件过滤标题
-                Text(
+                CustomText(
                     text = "事件过滤",
                     fontSize = 13.sp,
                     color = TextSecondary,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
-                Text(
+                CustomText(
                     text = "选择需要追踪的事件类型，不选则追踪全部",
                     fontSize = 12.sp,
                     color = TextSecondary,
@@ -297,37 +293,37 @@ fun TraceConfigScreen(
                         filterAgent = it
                         saveEventFilter()
                     }
-                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                     
                     EventFilterItem("LLM 调用", filterLLM) { 
                         filterLLM = it
                         saveEventFilter()
                     }
-                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                     
                     EventFilterItem("工具调用", filterTool) { 
                         filterTool = it
                         saveEventFilter()
                     }
-                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                     
                     EventFilterItem("策略执行", filterStrategy) { 
                         filterStrategy = it
                         saveEventFilter()
                     }
-                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                     
                     EventFilterItem("节点执行", filterNode) { 
                         filterNode = it
                         saveEventFilter()
                     }
-                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                     
                     EventFilterItem("子图执行", filterSubgraph) { 
                         filterSubgraph = it
                         saveEventFilter()
                     }
-                    HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                    CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                     
                     EventFilterItem("压缩事件", filterCompression) { 
                         filterCompression = it
@@ -344,15 +340,13 @@ fun TraceConfigScreen(
                         .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
-                    Text(
+                    CustomText(
                         text = "当前配置",
                         fontSize = 15.sp,
                         color = TextPrimary,
-                        style = androidx.compose.ui.text.font.FontWeight.Bold.let {
-                            TextStyle(fontWeight = it)
-                        }
+                        fontWeight = FontWeight.Bold
                     )
-                    Text(
+                    CustomText(
                         text = getConfigSummary(),
                         fontSize = 13.sp,
                         color = TextSecondary,
@@ -377,21 +371,19 @@ fun EventFilterItem(
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
+        CustomText(
             text = label,
             fontSize = 14.sp,
             color = TextPrimary,
             modifier = Modifier.weight(1f)
         )
-        Switch(
+        CustomSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = Accent,
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = Color(0xFFE0E0E0)
-            )
+            checkedThumbColor = Color.White,
+            checkedTrackColor = Accent,
+            uncheckedThumbColor = Color.White,
+            uncheckedTrackColor = Color(0xFFE0E0E0)
         )
     }
 }

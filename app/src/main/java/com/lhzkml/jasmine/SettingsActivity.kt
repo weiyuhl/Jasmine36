@@ -8,18 +8,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import com.lhzkml.jasmine.ui.components.*
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.prompt.llm.SystemPromptManager
@@ -119,14 +120,14 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                contentColor = TextPrimary
             ) {
-                Text("← 返回", fontSize = 14.sp)
+                CustomText("← 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
-            Text(
+            CustomText(
                 text = "设置",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -138,7 +139,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.width(56.dp))
         }
         
-        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
         
         // 滚动内容
         Column(
@@ -336,12 +337,12 @@ fun SettingsItem(
     value: String,
     onClick: () -> Unit
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = Color.White,
-        shape = MaterialTheme.shapes.medium
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
@@ -349,13 +350,13 @@ fun SettingsItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                CustomText(
                     text = title,
                     fontSize = 15.sp,
                     color = TextPrimary
                 )
                 if (subtitle != null) {
-                    Text(
+                    CustomText(
                         text = subtitle,
                         fontSize = 12.sp,
                         color = TextSecondary
@@ -363,14 +364,14 @@ fun SettingsItem(
                 }
             }
             
-            Text(
+            CustomText(
                 text = value,
                 fontSize = 13.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(end = 8.dp)
             )
             
-            Text(
+            CustomText(
                 text = "›",
                 fontSize = 18.sp,
                 color = TextSecondary
@@ -386,10 +387,11 @@ fun SettingsSwitchItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = MaterialTheme.shapes.medium
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
     ) {
         Row(
             modifier = Modifier
@@ -397,28 +399,25 @@ fun SettingsSwitchItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                CustomText(
                     text = title,
                     fontSize = 15.sp,
                     color = TextPrimary
                 )
-                Text(
+                CustomText(
                     text = subtitle,
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
             }
             
-            Switch(
+            CustomSwitch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = TextPrimary,
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f),
-                    uncheckedBorderColor = TextSecondary.copy(alpha = 0.5f)
-                )
+                checkedThumbColor = Color.White,
+                checkedTrackColor = TextPrimary,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f)
             )
         }
     }

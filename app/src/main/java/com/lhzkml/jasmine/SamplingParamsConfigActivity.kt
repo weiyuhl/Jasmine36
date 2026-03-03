@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,11 +18,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 
 class SamplingParamsConfigActivity : ComponentActivity() {
 
@@ -84,15 +85,15 @@ fun SamplingParamsConfigScreen(onBack: () -> Unit) {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary),
+                contentColor = TextPrimary,
                 contentPadding = PaddingValues(6.dp)
             ) {
-                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+                CustomText("<- 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
-            Text(
+            CustomText(
                 text = "采样参数",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -104,7 +105,7 @@ fun SamplingParamsConfigScreen(onBack: () -> Unit) {
             Spacer(modifier = Modifier.width(56.dp))
         }
 
-        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
 
         Column(
             modifier = Modifier
@@ -119,14 +120,14 @@ fun SamplingParamsConfigScreen(onBack: () -> Unit) {
                     .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
-                Text(
+                CustomText(
                     text = "采样参数",
                     fontSize = 15.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 
-                Text(
+                CustomText(
                     text = "控制 AI 回复的随机性和多样性，留空表示使用默认值",
                     fontSize = 12.sp,
                     color = TextSecondary,
@@ -134,13 +135,13 @@ fun SamplingParamsConfigScreen(onBack: () -> Unit) {
                 )
                 
                 // Temperature
-                Text(
+                CustomText(
                     text = "Temperature",
                     fontSize = 14.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
+                CustomText(
                     text = "值越高回复越多样，越低越确定 (0~2.0)",
                     fontSize = 11.sp,
                     color = TextSecondary,
@@ -155,13 +156,13 @@ fun SamplingParamsConfigScreen(onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Top P
-                Text(
+                CustomText(
                     text = "Top P",
                     fontSize = 14.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
+                CustomText(
                     text = "核采样阈值，所有供应商均支持 (0~1.0)",
                     fontSize = 11.sp,
                     color = TextSecondary,
@@ -177,13 +178,13 @@ fun SamplingParamsConfigScreen(onBack: () -> Unit) {
                 if (supportsTopK) {
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    Text(
+                    CustomText(
                         text = "Top K",
                         fontSize = 14.sp,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
+                    CustomText(
                         text = "仅 Claude 和 Gemini 支持 (0~100)",
                         fontSize = 11.sp,
                         color = TextSecondary,
@@ -196,7 +197,7 @@ fun SamplingParamsConfigScreen(onBack: () -> Unit) {
                     )
                 } else {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
+                    CustomText(
                         text = "注意：Top K 参数仅 Claude 和 Gemini 供应商支持",
                         fontSize = 11.sp,
                         color = TextSecondary
@@ -217,8 +218,8 @@ fun SamplingParamInputField(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .background(Color.White, MaterialTheme.shapes.medium)
-            .border(1.dp, Color(0xFFE8E8E8), MaterialTheme.shapes.medium)
+            .background(Color.White, RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(8.dp))
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -227,7 +228,7 @@ fun SamplingParamInputField(
             onValueChange = onValueChange,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            textStyle = LocalTextStyle.current.copy(
+            textStyle = TextStyle(
                 fontSize = 14.sp,
                 color = TextPrimary
             ),
@@ -235,7 +236,7 @@ fun SamplingParamInputField(
             modifier = Modifier.fillMaxWidth(),
             decorationBox = { innerTextField ->
                 if (value.isEmpty()) {
-                    Text(
+                    CustomText(
                         placeholder,
                         fontSize = 14.sp,
                         color = TextSecondary

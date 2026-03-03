@@ -1,52 +1,37 @@
 package com.lhzkml.jasmine.ui.theme
 
 import android.app.Activity
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val JasmineLightColorScheme = lightColorScheme(
-    primary = BgPrimary,
-    onPrimary = TextPrimary,
-    primaryContainer = BgPrimary,
-    onPrimaryContainer = TextPrimary,
-    secondary = BgPrimary,
-    onSecondary = TextPrimary,
-    secondaryContainer = BgPrimary,
-    onSecondaryContainer = TextPrimary,
-    tertiary = BgPrimary,
-    onTertiary = TextPrimary,
-    tertiaryContainer = BgPrimary,
-    onTertiaryContainer = TextPrimary,
-    error = BgPrimary,
-    onError = TextPrimary,
-    errorContainer = BgPrimary,
-    onErrorContainer = TextPrimary,
-    background = BgPrimary,
-    onBackground = TextPrimary,
-    surface = BgPrimary,
-    onSurface = TextPrimary,
-    surfaceVariant = BgPrimary,
-    onSurfaceVariant = TextPrimary,
-    surfaceTint = BgPrimary,
-    inverseSurface = TextPrimary,
-    inverseOnSurface = BgPrimary,
-    inversePrimary = BgPrimary,
-    outline = Divider,
-    outlineVariant = Divider,
-    scrim = TextPrimary,
-    surfaceBright = BgPrimary,
-    surfaceDim = BgPrimary,
-    surfaceContainer = BgPrimary,
-    surfaceContainerHigh = BgPrimary,
-    surfaceContainerHighest = BgPrimary,
-    surfaceContainerLow = BgPrimary,
-    surfaceContainerLowest = BgPrimary
+data class JasmineColors(
+    val accent: Color = Accent,
+    val accentLight: Color = AccentLight,
+    val bgPrimary: Color = BgPrimary,
+    val bgInput: Color = BgInput,
+    val textPrimary: Color = TextPrimary,
+    val textSecondary: Color = TextSecondary,
+    val divider: Color = Divider,
+    val userBubble: Color = UserBubble,
+    val userBubbleText: Color = UserBubbleText,
+    val aiBubble: Color = AiBubble,
+    val aiBubbleText: Color = AiBubbleText,
+    val error: Color = ErrorColor,
+    val generatingGreen: Color = GeneratingGreen
 )
+
+val LocalJasmineColors = staticCompositionLocalOf { JasmineColors() }
+
+object JasmineTheme {
+    val colors: JasmineColors
+        @Composable get() = LocalJasmineColors.current
+}
 
 @Composable
 fun JasmineTheme(content: @Composable () -> Unit) {
@@ -62,8 +47,7 @@ fun JasmineTheme(content: @Composable () -> Unit) {
             }
         }
     }
-    MaterialTheme(
-        colorScheme = JasmineLightColorScheme,
-        content = content
-    )
+    CompositionLocalProvider(LocalJasmineColors provides JasmineColors()) {
+        content()
+    }
 }

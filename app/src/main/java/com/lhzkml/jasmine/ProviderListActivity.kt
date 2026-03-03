@@ -9,8 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,9 +25,7 @@ import com.lhzkml.jasmine.core.config.ProviderConfig
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.ArrowDropDown
+import com.lhzkml.jasmine.ui.components.*
 
 class ProviderListActivity : ComponentActivity() {
 
@@ -82,14 +80,14 @@ fun ProviderListScreen(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
             ) {
-                Text("← 返回", fontSize = 14.sp)
+                CustomText("← 返回", fontSize = 14.sp)
             }
             
-            Text(
+            CustomText(
                 text = "模型供应商",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -101,7 +99,7 @@ fun ProviderListScreen(
             Spacer(modifier = Modifier.width(56.dp))
         }
         
-        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
         
         // 供应商列表
         Column(
@@ -142,23 +140,24 @@ fun ProviderListScreen(
         }
         
         // 底部添加按钮
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color.White
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White)
         ) {
-            Button(
+            CustomButton(
                 onClick = { showAddDialog = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
                     .height(48.dp),
-                colors = ButtonDefaults.buttonColors(
+                colors = CustomButtonDefaults.buttonColors(
                     containerColor = TextPrimary,
                     contentColor = Color.White
                 ),
-                shape = MaterialTheme.shapes.medium
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text("+ 添加自定义供应商", fontSize = 15.sp)
+                CustomText("+ 添加自定义供应商", fontSize = 15.sp)
             }
         }
     }
@@ -212,10 +211,10 @@ fun ProviderItem(
     onClick: () -> Unit,
     onDelete: (() -> Unit)?
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = MaterialTheme.shapes.medium
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(8.dp))
     ) {
         Row(
             modifier = Modifier
@@ -224,13 +223,13 @@ fun ProviderItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                CustomText(
                     text = provider.name,
                     fontSize = 15.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
+                CustomText(
                     text = if (hasKey) "已配置 · $model" else "未配置",
                     fontSize = 12.sp,
                     color = TextSecondary,
@@ -239,22 +238,22 @@ fun ProviderItem(
             }
             
             if (onDelete != null) {
-                IconButton(
+                CustomIconButton(
                     onClick = onDelete,
                     modifier = Modifier.size(32.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "删除供应商",
-                        tint = TextSecondary
+                    CustomText(
+                        text = "🗑",
+                        fontSize = 16.sp,
+                        color = TextSecondary
                     )
                 }
             }
             
-            Switch(
+            CustomSwitch(
                 checked = isActive,
                 onCheckedChange = onSwitchChange,
-                colors = SwitchDefaults.colors(
+                colors = CustomSwitchDefaults.colors(
                     checkedThumbColor = Color.White,
                     checkedTrackColor = TextPrimary,
                     uncheckedThumbColor = Color.White,
@@ -279,19 +278,18 @@ fun AddCustomProviderDialog(
     
     val context = LocalContext.current
     
-    AlertDialog(
+    CustomAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
         titleContentColor = TextPrimary,
-        title = { Text("添加自定义供应商", color = TextPrimary) },
+        title = { CustomText("添加自定义供应商", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // API 渠道类型
                 Column {
-                    Text("API 渠道类型", fontSize = 14.sp, color = TextSecondary)
+                    CustomText("API 渠道类型", fontSize = 14.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(4.dp))
                     
                     var expanded by remember { mutableStateOf(false) }
@@ -302,31 +300,43 @@ fun AddCustomProviderDialog(
                     )
                     
                     Box {
-                        OutlinedButton(
-                            onClick = { expanded = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = TextPrimary
-                            )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { expanded = true }
+                                .background(Color.Transparent, RoundedCornerShape(4.dp))
+                                .then(
+                                    Modifier.padding(1.dp)
+                                )
                         ) {
-                            Text(
-                                text = apiTypes.find { it.second == selectedApiType }?.first ?: "OpenAI 兼容",
-                                modifier = Modifier.weight(1f)
-                            )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CustomText(
+                                    text = apiTypes.find { it.second == selectedApiType }?.first ?: "OpenAI 兼容",
+                                    color = TextPrimary,
+                                    fontSize = 14.sp
+                                )
+                                CustomText(
+                                    text = "▼",
+                                    fontSize = 12.sp,
+                                    color = TextPrimary
+                                )
+                            }
                         }
                         
-                        DropdownMenu(
+                        CustomDropdownMenu(
                             expanded = expanded,
                             onDismissRequest = { expanded = false },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             apiTypes.forEach { (label, type) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
+                                CustomDropdownMenuItem(
+                                    text = { CustomText(label, fontSize = 14.sp, color = TextPrimary) },
                                     onClick = {
                                         selectedApiType = type
                                         if (baseUrl.isEmpty()) {
@@ -346,87 +356,67 @@ fun AddCustomProviderDialog(
                 
                 // 供应商 ID
                 Column {
-                    Text("供应商 ID", fontSize = 14.sp, color = TextSecondary)
+                    CustomText("供应商 ID", fontSize = 14.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
+                    CustomOutlinedTextField(
                         value = providerId,
                         onValueChange = { providerId = it },
-                        placeholder = { Text("例如: openai", color = TextSecondary) },
+                        placeholder = { CustomText("例如: openai", color = TextSecondary, fontSize = 14.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = TextPrimary,
-                            unfocusedBorderColor = TextSecondary,
-                            cursorColor = TextPrimary
-                        )
+                        focusedBorderColor = TextPrimary,
+                        unfocusedBorderColor = TextSecondary
                     )
                 }
                 
                 // 供应商名称
                 Column {
-                    Text("供应商名称", fontSize = 14.sp, color = TextSecondary)
+                    CustomText("供应商名称", fontSize = 14.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
+                    CustomOutlinedTextField(
                         value = providerName,
                         onValueChange = { providerName = it },
-                        placeholder = { Text("例如: OpenAI", color = TextSecondary) },
+                        placeholder = { CustomText("例如: OpenAI", color = TextSecondary, fontSize = 14.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = TextPrimary,
-                            unfocusedBorderColor = TextSecondary,
-                            cursorColor = TextPrimary
-                        )
+                        focusedBorderColor = TextPrimary,
+                        unfocusedBorderColor = TextSecondary
                     )
                 }
                 
                 // API 地址
                 Column {
-                    Text("API 地址", fontSize = 14.sp, color = TextSecondary)
+                    CustomText("API 地址", fontSize = 14.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
+                    CustomOutlinedTextField(
                         value = baseUrl,
                         onValueChange = { baseUrl = it },
-                        placeholder = { Text("例如: https://api.openai.com", color = TextSecondary) },
+                        placeholder = { CustomText("例如: https://api.openai.com", color = TextSecondary, fontSize = 14.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = TextPrimary,
-                            unfocusedBorderColor = TextSecondary,
-                            cursorColor = TextPrimary
-                        )
+                        focusedBorderColor = TextPrimary,
+                        unfocusedBorderColor = TextSecondary
                     )
                 }
                 
                 // 默认模型
                 Column {
-                    Text("默认模型", fontSize = 14.sp, color = TextSecondary)
+                    CustomText("默认模型", fontSize = 14.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
+                    CustomOutlinedTextField(
                         value = model,
                         onValueChange = { model = it },
-                        placeholder = { Text("例如: gpt-4", color = TextSecondary) },
+                        placeholder = { CustomText("例如: gpt-4", color = TextSecondary, fontSize = 14.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = TextPrimary,
-                            unfocusedBorderColor = TextSecondary,
-                            cursorColor = TextPrimary
-                        )
+                        focusedBorderColor = TextPrimary,
+                        unfocusedBorderColor = TextSecondary
                     )
                 }
             }
         },
         confirmButton = {
-            TextButton(
+            CustomTextButton(
                 onClick = {
                     when {
                         providerId.isEmpty() -> {
@@ -454,17 +444,17 @@ fun AddCustomProviderDialog(
                         }
                     }
                 },
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
             ) {
-                Text("添加")
+                CustomText("添加", fontSize = 14.sp)
             }
         },
         dismissButton = {
-            TextButton(
+            CustomTextButton(
                 onClick = onDismiss,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
             ) {
-                Text("取消")
+                CustomText("取消", fontSize = 14.sp)
             }
         }
     )
@@ -476,32 +466,33 @@ fun DeleteProviderDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    AlertDialog(
+    CustomAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
         titleContentColor = TextPrimary,
         textContentColor = TextPrimary,
-        title = { Text("删除供应商", color = TextPrimary) },
+        title = { CustomText("删除供应商", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
         text = {
-            Text(
+            CustomText(
                 "确定要删除「${provider.name}」吗？\n删除后配置信息将保留，但供应商将从列表中移除。",
-                color = TextPrimary
+                color = TextPrimary,
+                fontSize = 14.sp
             )
         },
         confirmButton = {
-            TextButton(
+            CustomTextButton(
                 onClick = onConfirm,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
             ) {
-                Text("删除")
+                CustomText("删除", fontSize = 14.sp)
             }
         },
         dismissButton = {
-            TextButton(
+            CustomTextButton(
                 onClick = onDismiss,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
             ) {
-                Text("取消")
+                CustomText("取消", fontSize = 14.sp)
             }
         }
     )

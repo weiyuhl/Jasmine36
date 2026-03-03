@@ -355,19 +355,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 messageHistory.addAll(messages.filter { it.role != "agent_log" })
                 chatStateManager.clearAll()
                 var usageIndex = 0
-                var pendingBlocks: MutableList<ContentBlock>? = null
+                var pendingLogBlocks: MutableList<ContentBlock>? = null
                 for (msg in timedMessages) {
                     val time = ChatExecutor.formatTime(msg.createdAt)
                     when (msg.role) {
                         "user" -> {
-                            if (pendingBlocks != null) {
-                                chatStateManager.addHistoryLogBlocks(pendingBlocks!!)
-                                pendingBlocks = null
+                            if (pendingLogBlocks != null) {
+                                chatStateManager.addHistoryLogBlocks(pendingLogBlocks!!)
+                                pendingLogBlocks = null
                             }
                             chatStateManager.addUserMessage(msg.content, time)
                         }
-                        "content_blocks" -> {
-                            pendingBlocks = deserializeContentBlocks(msg.content)
+                        "agent_log" -> {
+                            pendingLogBlocks = parseLogBlocks(msg.content)
                         }
                         "assistant" -> {
                             val usage = usageList.getOrNull(usageIndex)
@@ -375,25 +375,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 "[提示: ${usage.promptTokens} | 回复: ${usage.completionTokens} | 总计: ${usage.totalTokens}]"
                             } else ""
                             val blocks = mutableListOf<ContentBlock>()
-                            if (pendingBlocks != null) {
-                                blocks.addAll(pendingBlocks!!)
-                                pendingBlocks = null
-                            } else if (msg.content.isNotEmpty()) {
+                            if (pendingLogBlocks != null) {
+                                blocks.addAll(pendingLogBlocks!!)
+                                pendingLogBlocks = null
+                            }
+                            if (msg.content.isNotEmpty()) {
                                 blocks.add(ContentBlock.Text(msg.content))
                             }
-                            if (blocks.isNotEmpty()) {
-                                chatStateManager.addHistoryAiMessage(
-                                    blocks = blocks,
-                                    usageLine = usageLine,
-                                    time = time
-                                )
-                            }
+                            chatStateManager.addHistoryAiMessage(
+                                blocks = blocks,
+                                usageLine = usageLine,
+                                time = time
+                            )
                             usageIndex++
                         }
                     }
                 }
-                if (pendingBlocks != null) {
-                    chatStateManager.addHistoryLogBlocks(pendingBlocks!!)
+                if (pendingLogBlocks != null) {
+                    chatStateManager.addHistoryLogBlocks(pendingLogBlocks!!)
                 }
                 requestScrollToBottom()
             }
@@ -404,140 +403,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 tryOfferStartupRecovery(conversationId)
             }
         }
-    }
-
-    private fun deserializeContentBlocks(json: String): MutableList<ContentBlock> {
-        val blocks = mutableListOf<ContentBlock>()
-        try {
-            var i = 0
-            while (i < json.length) {
-                val objStart = json.indexOf("{", i)
-                if (objStart == -1) break
-                val objEnd = findJsonObjectEnd(json, objStart)
-                if (objEnd == -1) break
-                val objJson = json.substring(objStart, objEnd + 1)
-                val block = deserializeBlock(objJson)
-                if (block != null) blocks.add(block)
-                i = objEnd + 1
-            }
-        } catch (e: Exception) {
-            // Fallback: return empty list
-        }
-        return blocks
-    }
-
-    private fun findJsonObjectEnd(json: String, start: Int): Int {
-        var depth = 0
-        var inString = false
-        var escape = false
-        for (i in start until json.length) {
-            val c = json[i]
-            if (escape) {
-                escape = false
-                continue
-            }
-            when (c) {
-                '\\' -> escape = true
-                '"' -> inString = !inString
-                '{' -> if (!inString) depth++
-                '}' -> if (!inString) {
-                    depth--
-                    if (depth == 0) return i
-                }
-            }
-        }
-        return -1
-    }
-
-    private fun deserializeBlock(json: String): ContentBlock? {
-        val type = extractJsonString(json, "type") ?: return null
-        return when (type) {
-            "text" -> {
-                val content = extractJsonString(json, "content") ?: ""
-                ContentBlock.Text(content)
-            }
-            "thinking" -> {
-                val content = extractJsonString(json, "content") ?: ""
-                ContentBlock.Thinking(content)
-            }
-            "tool_call" -> {
-                val toolName = extractJsonString(json, "toolName") ?: ""
-                val arguments = extractJsonString(json, "arguments") ?: ""
-                ContentBlock.ToolCall(toolName, arguments)
-            }
-            "tool_result" -> {
-                val toolName = extractJsonString(json, "toolName") ?: ""
-                val result = extractJsonString(json, "result") ?: ""
-                ContentBlock.ToolResult(toolName, result)
-            }
-            "plan" -> {
-                val goal = extractJsonString(json, "goal") ?: ""
-                val steps = extractJsonArray(json, "steps")
-                ContentBlock.Plan(goal, steps)
-            }
-            "graph_log" -> {
-                val content = extractJsonString(json, "content") ?: ""
-                ContentBlock.GraphLog(content)
-            }
-            "error" -> {
-                val message = extractJsonString(json, "message") ?: ""
-                ContentBlock.Error(message)
-            }
-            "system_log" -> {
-                val content = extractJsonString(json, "content") ?: ""
-                ContentBlock.SystemLog(content)
-            }
-            else -> null
-        }
-    }
-
-    private fun extractJsonString(json: String, key: String): String? {
-        val pattern = """"$key"\s*:\s*"([^"]*)"""".toRegex()
-        val match = pattern.find(json) ?: return null
-        return unescapeJson(match.groupValues[1])
-    }
-
-    private fun extractJsonArray(json: String, key: String): List<String> {
-        val pattern = """"$key"\s*:\s*\[([^\]]*)\]""".toRegex()
-        val match = pattern.find(json) ?: return emptyList()
-        val arrayContent = match.groupValues[1]
-        if (arrayContent.isBlank()) return emptyList()
-        val items = mutableListOf<String>()
-        var i = 0
-        while (i < arrayContent.length) {
-            val start = arrayContent.indexOf('"', i)
-            if (start == -1) break
-            var end = start + 1
-            var escape = false
-            while (end < arrayContent.length) {
-                if (escape) {
-                    escape = false
-                    end++
-                    continue
-                }
-                if (arrayContent[end] == '\\') {
-                    escape = true
-                    end++
-                    continue
-                }
-                if (arrayContent[end] == '"') break
-                end++
-            }
-            if (end < arrayContent.length) {
-                items.add(unescapeJson(arrayContent.substring(start + 1, end)))
-            }
-            i = end + 1
-        }
-        return items
-    }
-
-    private fun unescapeJson(str: String): String {
-        return str
-            .replace("\\n", "\n")
-            .replace("\\r", "\r")
-            .replace("\\t", "\t")
-            .replace("\\\"", "\"")
-            .replace("\\\\", "\\")
     }
 
     private fun parseLogBlocks(logContent: String): MutableList<ContentBlock> {

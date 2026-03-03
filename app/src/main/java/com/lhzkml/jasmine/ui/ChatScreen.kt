@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.MainActivity
+import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.theme.*
 
 @Composable
@@ -92,7 +92,7 @@ fun TopBar(
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
+        CustomText(
             text = "Jasmine",
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold,
@@ -101,7 +101,7 @@ fun TopBar(
         )
 
         if (isAgentMode) {
-            Text(
+            CustomText(
                 text = "📁",
                 fontSize = 16.sp,
                 modifier = Modifier
@@ -118,7 +118,7 @@ fun TopBar(
                 )
                 .padding(horizontal = 10.dp, vertical = 4.dp)
         ) {
-            Text(
+            CustomText(
                 text = modeLabelText,
                 color = if (isAgentMode) BgPrimary else TextSecondary,
                 fontSize = 12.sp
@@ -127,7 +127,7 @@ fun TopBar(
 
         Spacer(modifier = Modifier.width(10.dp))
 
-        Text(
+        CustomText(
             text = "☰",
             fontSize = 20.sp,
             color = TextPrimary,
@@ -150,14 +150,14 @@ fun WorkspaceBar(
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
+        CustomText(
             text = label,
             color = TextSecondary,
             fontSize = 12.sp,
             maxLines = 1,
             modifier = Modifier.weight(1f)
         )
-        Text(
+        CustomText(
             text = if (isAgent) "关闭" else "退出",
             color = TextSecondary,
             fontSize = 12.sp,

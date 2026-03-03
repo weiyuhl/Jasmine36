@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 
 class LauncherActivity : ComponentActivity() {
 
@@ -138,7 +136,7 @@ fun LauncherScreen(
             verticalArrangement = Arrangement.Center
         ) {
             // Logo / 标题
-            Text(
+            CustomText(
                 text = "Jasmine",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
@@ -147,7 +145,7 @@ fun LauncherScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
+            CustomText(
                 text = "AI Agent Framework",
                 fontSize = 14.sp,
                 color = TextSecondary
@@ -156,18 +154,18 @@ fun LauncherScreen(
             Spacer(modifier = Modifier.height(64.dp))
 
             // 普通聊天按钮
-            Button(
+            CustomButton(
                 onClick = onChatClick,
                 modifier = Modifier
                     .width(220.dp)
                     .height(48.dp),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
+                colors = CustomButtonDefaults.buttonColors(
                     containerColor = BgInput,
                     contentColor = TextPrimary
                 )
             ) {
-                Text(
+                CustomText(
                     text = "普通聊天",
                     fontSize = 16.sp
                 )
@@ -176,18 +174,18 @@ fun LauncherScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 选择工作区按钮
-            Button(
+            CustomButton(
                 onClick = onWorkspaceClick,
                 modifier = Modifier
                     .width(220.dp)
                     .height(48.dp),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
+                colors = CustomButtonDefaults.buttonColors(
                     containerColor = Accent,
                     contentColor = BgPrimary
                 )
             ) {
-                Text(
+                CustomText(
                     text = "选择工作区",
                     fontSize = 16.sp
                 )
@@ -195,7 +193,7 @@ fun LauncherScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
+            CustomText(
                 text = "选择文件夹后自动进入 Agent 模式",
                 fontSize = 12.sp,
                 color = TextSecondary

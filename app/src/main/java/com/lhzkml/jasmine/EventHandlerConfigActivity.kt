@@ -9,17 +9,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.observe.event.EventCategory
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 
 class EventHandlerConfigActivity : ComponentActivity() {
 
@@ -97,27 +98,27 @@ fun EventHandlerConfigScreen(onBack: () -> Unit) {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary),
+                contentColor = TextPrimary,
                 contentPadding = PaddingValues(6.dp)
             ) {
-                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+                CustomText("<- 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
-            Text(
+            CustomText(
                 text = "事件处理器配置",
                 fontSize = 17.sp,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)
             )
             
             Spacer(modifier = Modifier.width(56.dp))
         }
 
-        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
 
         Column(
             modifier = Modifier
@@ -136,37 +137,35 @@ fun EventHandlerConfigScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
+                    CustomText(
                         text = "启用事件处理器",
                         fontSize = 15.sp,
                         color = TextPrimary
                     )
-                    Text(
+                    CustomText(
                         text = "Agent 生命周期事件回调",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
                 }
                 
-                Switch(
+                CustomSwitch(
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
                         config.setEventHandlerEnabled(it)
                     },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Accent,
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color(0xFFE0E0E0)
-                    )
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Accent,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = Color(0xFFE0E0E0)
                 )
             }
 
             if (enabled) {
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                Text(
+                CustomText(
                     text = "事件处理器负责在聊天界面实时显示 Agent 执行过程（[EVENT] 标签）。\n选择需要在 UI 中显示的事件类型，不选则显示全部。",
                     fontSize = 12.sp,
                     color = TextSecondary,
@@ -182,7 +181,7 @@ fun EventHandlerConfigScreen(onBack: () -> Unit) {
                 ) {
                     eventCategories.forEachIndexed { index, (category, label) ->
                         if (index > 0) {
-                            HorizontalDivider(
+                            CustomHorizontalDivider(
                                 color = Color(0xFFE8E8E8),
                                 thickness = 1.dp
                             )
@@ -194,25 +193,23 @@ fun EventHandlerConfigScreen(onBack: () -> Unit) {
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
+                            CustomText(
                                 text = label,
                                 fontSize = 14.sp,
                                 color = TextPrimary,
                                 modifier = Modifier.weight(1f)
                             )
                             
-                            Switch(
+                            CustomSwitch(
                                 checked = checkedStates[category] ?: false,
                                 onCheckedChange = { checked ->
                                     checkedStates[category] = checked
                                     saveFilterAndRefresh()
                                 },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = Accent,
-                                    uncheckedThumbColor = Color.White,
-                                    uncheckedTrackColor = Color(0xFFE0E0E0)
-                                )
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Accent,
+                                uncheckedThumbColor = Color.White,
+                                uncheckedTrackColor = Color(0xFFE0E0E0)
                             )
                         }
                     }
@@ -228,14 +225,14 @@ fun EventHandlerConfigScreen(onBack: () -> Unit) {
                         .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
-                    Text(
+                    CustomText(
                         text = "当前配置",
                         fontSize = 15.sp,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
                     
-                    Text(
+                    CustomText(
                         text = summaryText,
                         fontSize = 13.sp,
                         color = TextSecondary,

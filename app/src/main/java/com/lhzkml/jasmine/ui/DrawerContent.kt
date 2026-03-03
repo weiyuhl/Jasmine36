@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.ProviderManager
+import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -41,7 +41,7 @@ fun RightDrawerContent(
             .fillMaxHeight()
             .background(BgPrimary)
     ) {
-        Text(
+        CustomText(
             text = "＋ 新对话",
             color = Accent,
             fontSize = 16.sp,
@@ -59,20 +59,16 @@ fun RightDrawerContent(
                 .background(Divider)
         )
 
-        Text(
+        CustomText(
             text = "历史对话",
             color = TextSecondary,
             fontSize = 12.sp,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp)
         )
 
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
+        Box(modifier = Modifier.weight(1f)) {
             if (isEmpty) {
-                Text(
+                CustomText(
                     text = "暂无历史对话",
                     color = TextSecondary,
                     fontSize = 14.sp,
@@ -95,7 +91,7 @@ fun RightDrawerContent(
             }
         }
 
-        Text(
+        CustomText(
             text = "⚙  设置",
             color = TextPrimary,
             fontSize = 22.sp,
@@ -127,20 +123,20 @@ fun ConversationItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            CustomText(
                 text = info.title,
                 color = TextPrimary,
                 fontSize = 14.sp,
                 maxLines = 1
             )
-            Text(
+            CustomText(
                 text = "$providerName · $dateStr",
                 color = TextSecondary,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 2.dp)
             )
         }
-        Text(
+        CustomText(
             text = "✕",
             color = TextSecondary,
             fontSize = 14.sp,

@@ -6,16 +6,17 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -29,6 +30,7 @@ import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.JasmineTheme
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
+import com.lhzkml.jasmine.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -120,14 +122,14 @@ fun McpServerEditScreen(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onCancel,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
             ) {
-                Text("取消", fontSize = 14.sp)
+                CustomText("取消", fontSize = 14.sp)
             }
             
-            Text(
+            CustomText(
                 text = if (editIndex >= 0) "编辑 MCP 服务器" else "添加 MCP 服务器",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -136,13 +138,13 @@ fun McpServerEditScreen(
                 modifier = Modifier.weight(1f)
             )
             
-            TextButton(
+            CustomTextButton(
                 onClick = {
                     val finalName = name.trim().ifEmpty { "MCP Server" }
                     val finalUrl = url.trim()
                     
                     if (finalUrl.isEmpty()) {
-                        return@TextButton
+                        return@CustomTextButton
                     }
                     
                     val configChanged = hasConfigChanged()
@@ -166,13 +168,13 @@ fun McpServerEditScreen(
                     
                     onSave(configChanged)
                 },
-                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
+                colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
             ) {
-                Text("保存", fontSize = 14.sp)
+                CustomText("保存", fontSize = 14.sp)
             }
         }
         
-        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
         
         // 表单内容
         Column(
@@ -184,7 +186,7 @@ fun McpServerEditScreen(
         ) {
             // 名称
             Column {
-                Text(
+                CustomText(
                     "名称",
                     fontSize = 14.sp,
                     color = TextPrimary,
@@ -202,7 +204,7 @@ fun McpServerEditScreen(
             
             // URL
             Column {
-                Text(
+                CustomText(
                     "服务器 URL",
                     fontSize = 14.sp,
                     color = TextPrimary,
@@ -220,7 +222,7 @@ fun McpServerEditScreen(
             
             // 传输类型
             Column {
-                Text(
+                CustomText(
                     "传输类型",
                     fontSize = 14.sp,
                     color = TextPrimary,
@@ -229,9 +231,10 @@ fun McpServerEditScreen(
                 
                 Spacer(modifier = Modifier.height(6.dp))
                 
-                Surface(
-                    color = Color.White,
-                    shape = MaterialTheme.shapes.medium
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(8.dp))
                 ) {
                     Row(
                         modifier = Modifier
@@ -247,15 +250,11 @@ fun McpServerEditScreen(
                                 ),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
+                            CustomRadioButton(
                                 selected = transportType == McpTransportType.STREAMABLE_HTTP,
-                                onClick = { transportType = McpTransportType.STREAMABLE_HTTP },
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = TextPrimary,
-                                    unselectedColor = TextSecondary
-                                )
+                                onClick = { transportType = McpTransportType.STREAMABLE_HTTP }
                             )
-                            Text(
+                            CustomText(
                                 "Streamable HTTP",
                                 fontSize = 13.sp,
                                 color = TextPrimary
@@ -271,15 +270,11 @@ fun McpServerEditScreen(
                                 ),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
+                            CustomRadioButton(
                                 selected = transportType == McpTransportType.SSE,
-                                onClick = { transportType = McpTransportType.SSE },
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = TextPrimary,
-                                    unselectedColor = TextSecondary
-                                )
+                                onClick = { transportType = McpTransportType.SSE }
                             )
-                            Text(
+                            CustomText(
                                 "SSE",
                                 fontSize = 13.sp,
                                 color = TextPrimary
@@ -291,7 +286,7 @@ fun McpServerEditScreen(
             
             // 请求头名称
             Column {
-                Text(
+                CustomText(
                     "请求头名称",
                     fontSize = 14.sp,
                     color = TextPrimary,
@@ -309,7 +304,7 @@ fun McpServerEditScreen(
             
             // 请求头值
             Column {
-                Text(
+                CustomText(
                     "请求头值",
                     fontSize = 14.sp,
                     color = TextPrimary,
@@ -326,10 +321,10 @@ fun McpServerEditScreen(
             }
             
             // 测试连接按钮
-            Button(
+            CustomButton(
                 onClick = {
                     if (url.trim().isEmpty()) {
-                        return@Button
+                        return@CustomButton
                     }
                     
                     isTesting = true
@@ -388,13 +383,13 @@ fun McpServerEditScreen(
                     .fillMaxWidth()
                     .height(48.dp),
                 enabled = !isTesting,
-                colors = ButtonDefaults.buttonColors(
+                colors = CustomButtonDefaults.buttonColors(
                     containerColor = Color(0xFF2D2D2D),
                     contentColor = Color.White
                 ),
-                shape = MaterialTheme.shapes.medium
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text(
+                CustomText(
                     if (isTesting) "连接中..." else "测试连接",
                     fontSize = 15.sp
                 )
@@ -402,7 +397,7 @@ fun McpServerEditScreen(
             
             // 测试结果
             testResult?.let { result ->
-                Text(
+                CustomText(
                     result,
                     fontSize = 13.sp,
                     color = testResultColor
@@ -422,8 +417,8 @@ fun McpInputField(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .background(Color.White, MaterialTheme.shapes.medium)
-            .border(1.dp, Color(0xFFE8E8E8), MaterialTheme.shapes.medium)
+            .background(Color.White, RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(8.dp))
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -431,7 +426,7 @@ fun McpInputField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            textStyle = LocalTextStyle.current.copy(
+            textStyle = TextStyle(
                 fontSize = 14.sp,
                 color = TextPrimary
             ),
@@ -439,7 +434,7 @@ fun McpInputField(
             modifier = Modifier.fillMaxWidth(),
             decorationBox = { innerTextField ->
                 if (value.isEmpty()) {
-                    Text(
+                    CustomText(
                         placeholder,
                         fontSize = 14.sp,
                         color = TextSecondary

@@ -116,8 +116,6 @@ class ChatStateManager(
 
     fun getLogContent(): String = streamProcessor?.getLogContent() ?: ""
 
-    fun getCurrentBlocks(): List<ContentBlock> = streamProcessor?.currentBlocks() ?: emptyList()
-
     fun addHistoryAiMessage(blocks: List<ContentBlock>, usageLine: String, time: String) {
         items.add(ChatItem.AiMessage(blocks = blocks, usageLine = usageLine, time = time))
     }

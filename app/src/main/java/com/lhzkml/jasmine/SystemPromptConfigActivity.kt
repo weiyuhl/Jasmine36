@@ -11,18 +11,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.lhzkml.jasmine.core.prompt.llm.SystemPromptManager
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.ui.components.*
 
 class SystemPromptConfigActivity : ComponentActivity() {
 
@@ -69,15 +71,15 @@ fun SystemPromptConfigScreen(onBack: () -> Unit) {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary),
+                contentColor = TextPrimary,
                 contentPadding = PaddingValues(6.dp)
             ) {
-                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+                CustomText("<- 返回", fontSize = 14.sp, color = TextPrimary)
             }
             
-            Text(
+            CustomText(
                 text = "系统提示词",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -89,7 +91,7 @@ fun SystemPromptConfigScreen(onBack: () -> Unit) {
             Spacer(modifier = Modifier.width(56.dp))
         }
 
-        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
 
         Column(
             modifier = Modifier
@@ -106,14 +108,14 @@ fun SystemPromptConfigScreen(onBack: () -> Unit) {
                     .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
-                Text(
+                CustomText(
                     text = "系统提示词",
                     fontSize = 15.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 
-                Text(
+                CustomText(
                     text = "设置 AI 的角色和行为规则",
                     fontSize = 12.sp,
                     color = TextSecondary,
@@ -128,11 +130,11 @@ fun SystemPromptConfigScreen(onBack: () -> Unit) {
                 
                 // 预设模板按钮
                 Spacer(modifier = Modifier.height(12.dp))
-                TextButton(
+                CustomTextButton(
                     onClick = { showPresets = true },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Accent)
+                    contentColor = Accent
                 ) {
-                    Text("选择预设模板", fontSize = 14.sp)
+                    CustomText("选择预设模板", fontSize = 14.sp, color = Accent)
                 }
             }
         }
@@ -140,26 +142,25 @@ fun SystemPromptConfigScreen(onBack: () -> Unit) {
     
     // 预设模板对话框
     if (showPresets) {
-        AlertDialog(
+        CustomAlertDialog(
             onDismissRequest = { showPresets = false },
             containerColor = Color.White,
             titleContentColor = TextPrimary,
-            title = { Text("选择预设模板", color = TextPrimary) },
+            title = { CustomText("选择预设模板", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold) },
             text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                ) {
+                Column {
                     SystemPromptManager.presets.forEach { preset ->
-                        Surface(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White)
                                 .clickable {
                                     systemPrompt = preset.prompt
                                     showPresets = false
-                                },
-                            color = Color.White
+                                }
                         ) {
-                            Text(
+                            CustomText(
                                 text = preset.name,
                                 fontSize = 14.sp,
                                 color = TextPrimary,
@@ -167,17 +168,17 @@ fun SystemPromptConfigScreen(onBack: () -> Unit) {
                             )
                         }
                         if (preset != SystemPromptManager.presets.last()) {
-                            HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                            CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(
+                CustomTextButton(
                     onClick = { showPresets = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                    contentColor = TextPrimary
                 ) {
-                    Text("关闭")
+                    CustomText("关闭", color = TextPrimary)
                 }
             }
         )
@@ -194,15 +195,15 @@ fun SystemPromptInputField(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 200.dp)
-            .background(Color.White, MaterialTheme.shapes.medium)
-            .border(1.dp, Color(0xFFE8E8E8), MaterialTheme.shapes.medium)
+            .background(Color.White, RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(8.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp),
         contentAlignment = Alignment.TopStart
     ) {
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            textStyle = LocalTextStyle.current.copy(
+            textStyle = TextStyle(
                 fontSize = 14.sp,
                 color = TextPrimary,
                 lineHeight = 20.sp
@@ -211,7 +212,7 @@ fun SystemPromptInputField(
             modifier = Modifier.fillMaxWidth(),
             decorationBox = { innerTextField ->
                 if (value.isEmpty()) {
-                    Text(
+                    CustomText(
                         placeholder,
                         fontSize = 14.sp,
                         color = TextSecondary

@@ -8,8 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,11 +22,13 @@ import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.config.ToolCatalog
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import com.lhzkml.jasmine.ui.theme.BgInput
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
+import com.lhzkml.jasmine.ui.components.*
 
 /**
  * 工具管理界面
@@ -106,14 +108,14 @@ fun ToolConfigScreen(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
             ) {
-                Text("← 返回", fontSize = 14.sp)
+                CustomText("← 返回", fontSize = 14.sp)
             }
             
-            Text(
+            CustomText(
                 text = if (isAgentPreset) "Agent 工具预设" else "工具管理",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -122,7 +124,7 @@ fun ToolConfigScreen(
                 modifier = Modifier.weight(1f)
             )
             
-            TextButton(
+            CustomTextButton(
                 onClick = {
                     val selected = mutableSetOf<String>()
                     toolStates.forEach { (id, checked) ->
@@ -140,13 +142,13 @@ fun ToolConfigScreen(
                     Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
                     onSave()
                 },
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
             ) {
-                Text("保存", fontSize = 14.sp)
+                CustomText("保存", fontSize = 14.sp)
             }
         }
         
-        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
         
         // 滚动内容
         Column(
@@ -157,18 +159,17 @@ fun ToolConfigScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 全选/全不选
-            Surface(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
+                    .background(Color.White, RoundedCornerShape(8.dp))
                     .clickable {
                         val newState = !allChecked
                         toolStates.keys.forEach { id ->
                             toolStates[id] = newState
                         }
-                    },
-                color = Color.White,
-                shape = MaterialTheme.shapes.medium
+                    }
             ) {
                 Row(
                     modifier = Modifier
@@ -176,32 +177,27 @@ fun ToolConfigScreen(
                         .padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
+                    CustomText(
                         text = "全部启用",
                         fontSize = 15.sp,
                         color = TextPrimary,
                         modifier = Modifier.weight(1f)
                     )
                     
-                    Checkbox(
+                    CustomCheckbox(
                         checked = allChecked,
-                        onCheckedChange = null,
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = TextPrimary,
-                            uncheckedColor = TextSecondary,
-                            checkmarkColor = Color.White
-                        )
+                        onCheckedChange = { }
                     )
                 }
             }
             
-            HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+            CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
             
             // 工具列表
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shape = MaterialTheme.shapes.medium
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(8.dp))
             ) {
                 Column {
                     allTools.forEachIndexed { index, (id, description) ->
@@ -216,31 +212,26 @@ fun ToolConfigScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
+                                CustomText(
                                     text = id,
                                     fontSize = 14.sp,
                                     color = TextPrimary
                                 )
-                                Text(
+                                CustomText(
                                     text = description,
                                     fontSize = 12.sp,
                                     color = TextSecondary
                                 )
                             }
                             
-                            Checkbox(
+                            CustomCheckbox(
                                 checked = toolStates[id] ?: false,
-                                onCheckedChange = null,
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = TextPrimary,
-                                    uncheckedColor = TextSecondary,
-                                    checkmarkColor = Color.White
-                                )
+                                onCheckedChange = { }
                             )
                         }
                         
                         if (index < allTools.size - 1) {
-                            HorizontalDivider(
+                            CustomHorizontalDivider(
                                 color = Color(0xFFE0E0E0),
                                 thickness = 1.dp,
                                 modifier = Modifier.padding(horizontal = 20.dp)
@@ -250,23 +241,23 @@ fun ToolConfigScreen(
                 }
             }
             
-            HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
+            CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
             
             // BrightData Key
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shape = MaterialTheme.shapes.medium
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(8.dp))
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    Text(
+                    CustomText(
                         text = "BrightData API Key",
                         fontSize = 15.sp,
                         color = TextPrimary
                     )
-                    Text(
+                    CustomText(
                         text = "网络搜索和网页抓取工具需要此 Key",
                         fontSize = 12.sp,
                         color = TextSecondary,
@@ -276,14 +267,14 @@ fun ToolConfigScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(BgInput, MaterialTheme.shapes.small)
+                            .background(BgInput, RoundedCornerShape(4.dp))
                             .padding(horizontal = 12.dp, vertical = 12.dp)
                     ) {
                         BasicTextField(
                             value = brightDataKey,
                             onValueChange = { brightDataKey = it },
                             singleLine = true,
-                            textStyle = LocalTextStyle.current.copy(
+                            textStyle = TextStyle(
                                 fontSize = 14.sp,
                                 color = TextPrimary
                             ),
@@ -291,7 +282,7 @@ fun ToolConfigScreen(
                             modifier = Modifier.fillMaxWidth(),
                             decorationBox = { innerTextField ->
                                 if (brightDataKey.isEmpty()) {
-                                    Text(
+                                    CustomText(
                                         "输入 BrightData SERP API Key",
                                         fontSize = 14.sp,
                                         color = TextSecondary

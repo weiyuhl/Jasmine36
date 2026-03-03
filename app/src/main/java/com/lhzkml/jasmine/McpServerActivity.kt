@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +27,7 @@ import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.JasmineTheme
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
+import com.lhzkml.jasmine.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -200,14 +201,14 @@ fun McpServerScreen(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
+            CustomTextButton(
                 onClick = onBack,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
             ) {
-                Text("← 返回", fontSize = 14.sp)
+                CustomText("← 返回", fontSize = 14.sp)
             }
             
-            Text(
+            CustomText(
                 text = "MCP 服务器管理",
                 fontSize = 17.sp,
                 color = TextPrimary,
@@ -216,22 +217,21 @@ fun McpServerScreen(
                 modifier = Modifier.weight(1f)
             )
             
-            TextButton(
+            CustomTextButton(
                 onClick = onAddServer,
-                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
+                colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
             ) {
-                Text("+ 添加", fontSize = 14.sp)
+                CustomText("+ 添加", fontSize = 14.sp)
             }
         }
         
-        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
         
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            color = Color.White,
-            shape = MaterialTheme.shapes.medium
+                .padding(horizontal = 16.dp, vertical = 16.dp)
+                .background(Color.White, RoundedCornerShape(8.dp))
         ) {
             Row(
                 modifier = Modifier
@@ -240,25 +240,25 @@ fun McpServerScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
+                    CustomText(
                         "启用 MCP 工具",
                         fontSize = 15.sp,
                         color = TextPrimary
                     )
-                    Text(
+                    CustomText(
                         "从 MCP 服务器加载远程工具",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
                 }
                 
-                Switch(
+                CustomSwitch(
                     checked = mcpEnabled,
                     onCheckedChange = { enabled ->
                         mcpEnabled = enabled
                         config.setMcpEnabled(enabled)
                     },
-                    colors = SwitchDefaults.colors(
+                    colors = CustomSwitchDefaults.colors(
                         checkedThumbColor = Color.White,
                         checkedTrackColor = Color(0xFF4CAF50),
                         uncheckedThumbColor = Color.White,
@@ -276,7 +276,7 @@ fun McpServerScreen(
                         .padding(48.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
+                    CustomText(
                         "暂无 MCP 服务器\n点击右上角添加",
                         fontSize = 14.sp,
                         color = TextSecondary,
@@ -328,10 +328,10 @@ fun McpServerScreen(
     }
     
     showActionsDialog?.let { (index, server) ->
-        AlertDialog(
+        CustomAlertDialog(
             onDismissRequest = { showActionsDialog = null },
             title = { 
-                Text(
+                CustomText(
                     server.name,
                     color = TextPrimary,
                     fontSize = 18.sp,
@@ -340,15 +340,15 @@ fun McpServerScreen(
             },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
+                    CustomTextButton(
                         onClick = {
                             showActionsDialog = null
                             onEditServer(index)
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                        colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
                     ) {
-                        Text(
+                        CustomText(
                             "编辑",
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Start,
@@ -356,7 +356,7 @@ fun McpServerScreen(
                         )
                     }
                     
-                    TextButton(
+                    CustomTextButton(
                         onClick = {
                             showActionsDialog = null
                             config.updateMcpServer(index, server.copy(enabled = !server.enabled))
@@ -384,9 +384,9 @@ fun McpServerScreen(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                        colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
                     ) {
-                        Text(
+                        CustomText(
                             if (server.enabled) "禁用" else "启用",
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Start,
@@ -394,15 +394,15 @@ fun McpServerScreen(
                         )
                     }
                     
-                    TextButton(
+                    CustomTextButton(
                         onClick = {
                             showActionsDialog = null
                             showDeleteDialog = index to server
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF44336))
+                        colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFFF44336))
                     ) {
-                        Text(
+                        CustomText(
                             "删除",
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Start,
@@ -412,24 +412,21 @@ fun McpServerScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                CustomTextButton(
                     onClick = { showActionsDialog = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
                 ) {
-                    Text("取消")
+                    CustomText("取消")
                 }
-            },
-            containerColor = Color.White,
-            titleContentColor = TextPrimary,
-            textContentColor = TextPrimary
+            }
         )
     }
     
     showDeleteDialog?.let { (index, server) ->
-        AlertDialog(
+        CustomAlertDialog(
             onDismissRequest = { showDeleteDialog = null },
             title = { 
-                Text(
+                CustomText(
                     "确认删除",
                     color = TextPrimary,
                     fontSize = 18.sp,
@@ -437,14 +434,14 @@ fun McpServerScreen(
                 )
             },
             text = { 
-                Text(
+                CustomText(
                     "确定删除 ${server.name}？",
                     color = TextPrimary,
                     fontSize = 16.sp
                 )
             },
             confirmButton = {
-                TextButton(
+                CustomTextButton(
                     onClick = {
                         showDeleteDialog = null
                         AppConfig.mcpConnectionManager().clearServerCache(server.name)
@@ -453,22 +450,19 @@ fun McpServerScreen(
                         connectionResults = emptyMap()
                         connectingServers = emptySet()
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF44336))
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFFF44336))
                 ) {
-                    Text("删除")
+                    CustomText("删除")
                 }
             },
             dismissButton = {
-                TextButton(
+                CustomTextButton(
                     onClick = { showDeleteDialog = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
                 ) {
-                    Text("取消")
+                    CustomText("取消")
                 }
-            },
-            containerColor = Color.White,
-            titleContentColor = TextPrimary,
-            textContentColor = TextPrimary
+            }
         )
     }
 }
@@ -482,12 +476,11 @@ fun McpServerItem(
     onMoreClick: () -> Unit,
     onItemClick: () -> Unit
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onItemClick),
-        color = Color.White,
-        shape = MaterialTheme.shapes.medium
+            .background(Color.White, RoundedCornerShape(8.dp))
+            .clickable(onClick = onItemClick)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -513,7 +506,7 @@ fun McpServerItem(
                 Spacer(modifier = Modifier.width(12.dp))
                 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
+                    CustomText(
                         server.name,
                         fontSize = 15.sp,
                         color = TextPrimary,
@@ -522,7 +515,7 @@ fun McpServerItem(
                         overflow = TextOverflow.Ellipsis
                     )
                     
-                    Text(
+                    CustomText(
                         server.url,
                         fontSize = 12.sp,
                         color = TextSecondary,
@@ -537,7 +530,7 @@ fun McpServerItem(
                     }
                     val enabledLabel = if (server.enabled) "" else " · 已禁用"
                     
-                    Text(
+                    CustomText(
                         "$transportLabel$enabledLabel",
                         fontSize = 11.sp,
                         color = TextSecondary,
@@ -545,23 +538,23 @@ fun McpServerItem(
                     )
                 }
                 
-                TextButton(
+                CustomTextButton(
                     onClick = onTestClick,
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
                 ) {
-                    Text("重连", fontSize = 13.sp)
+                    CustomText("重连", fontSize = 13.sp)
                 }
                 
-                TextButton(
+                CustomTextButton(
                     onClick = onMoreClick,
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
                 ) {
-                    Text("⋮", fontSize = 20.sp)
+                    CustomText("⋮", fontSize = 20.sp)
                 }
             }
             
             if (server.enabled && isConnecting) {
-                Text(
+                CustomText(
                     "连接中...",
                     fontSize = 12.sp,
                     color = Color(0xFFFFC107),
@@ -574,7 +567,7 @@ fun McpServerItem(
             }
             
             if (server.enabled && !isConnecting && result != null && result.success == true && result.tools.isNotEmpty()) {
-                HorizontalDivider(
+                CustomHorizontalDivider(
                     color = Color(0xFFE0E0E0),
                     thickness = 1.dp,
                     modifier = Modifier.padding(start = 38.dp, end = 16.dp)
@@ -588,14 +581,14 @@ fun McpServerItem(
                         bottom = 12.dp
                     )
                 ) {
-                    Text(
+                    CustomText(
                         "可用工具 (${result.tools.size})",
                         fontSize = 12.sp,
                         color = Color(0xFF4CAF50),
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                     
-                    Text(
+                    CustomText(
                         result.tools.joinToString("\n") { tool ->
                             val desc = tool.description?.let { d ->
                                 if (d.length > 60) d.take(60) + "..." else d
@@ -610,7 +603,7 @@ fun McpServerItem(
             }
             
             if (server.enabled && !isConnecting && result != null && result.success == false) {
-                Text(
+                CustomText(
                     "连接失败: ${result.error}",
                     fontSize = 12.sp,
                     color = Color(0xFFF44336),

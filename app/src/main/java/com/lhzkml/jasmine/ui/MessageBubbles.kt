@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -40,6 +39,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.lhzkml.jasmine.ChatItem
 import com.lhzkml.jasmine.ContentBlock
 import com.lhzkml.jasmine.MarkdownRenderer
+import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.theme.*
 
 @Composable
@@ -56,7 +56,7 @@ fun UserBubble(item: ChatItem.UserMessage) {
                 .background(UserBubble, RoundedCornerShape(16.dp))
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Text(
+            CustomText(
                 text = item.content,
                 color = UserBubbleText,
                 fontSize = 15.sp,
@@ -64,7 +64,7 @@ fun UserBubble(item: ChatItem.UserMessage) {
             )
         }
         if (item.time.isNotEmpty()) {
-            Text(
+            CustomText(
                 text = item.time,
                 color = TextSecondary,
                 fontSize = 11.sp,
@@ -102,7 +102,7 @@ fun AiBubble(item: ChatItem.AiMessage) {
                     append(item.time)
                 }
             }
-            Text(
+            CustomText(
                 text = meta,
                 color = TextSecondary,
                 fontSize = 11.sp,
