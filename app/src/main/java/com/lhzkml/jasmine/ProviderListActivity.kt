@@ -2,255 +2,507 @@ package com.lhzkml.jasmine
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.LinearLayout
-import android.widget.Spinner
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
-import com.google.android.material.button.MaterialButton
 import com.lhzkml.jasmine.core.config.ProviderConfig
+import com.lhzkml.jasmine.ui.theme.BgPrimary
+import com.lhzkml.jasmine.ui.theme.TextPrimary
+import com.lhzkml.jasmine.ui.theme.TextSecondary
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ArrowDropDown
 
-class ProviderListActivity : AppCompatActivity() {
-
-    private lateinit var container: LinearLayout
-    private val switches = mutableMapOf<String, SwitchCompat>()
+class ProviderListActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_provider_list)
-
-        container = findViewById(R.id.providerContainer)
-        findViewById<MaterialButton>(R.id.btnBack).setOnClickListener { finish() }
-        findViewById<MaterialButton>(R.id.btnAddCustomProvider).setOnClickListener {
-            showAddCustomProviderDialog()
-        }
-
-        buildList()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        refreshStatus()
-    }
-
-    private fun buildList() {
-        val config = AppConfig.configRepo()
-        val registry = AppConfig.providerRegistry()
-        container.removeAllViews()
-        switches.clear()
-        val inflater = LayoutInflater.from(this)
-
-        for (provider in registry.providers) {
-            val view = inflater.inflate(R.layout.item_provider, container, false)
-
-            view.findViewById<TextView>(R.id.tvProviderName).text = provider.name
-
-            val switch = view.findViewById<SwitchCompat>(R.id.switchProvider)
-            switches[provider.id] = switch
-
-            switch.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    // 检查是否已配置 Key
-                    val key = config.getApiKey(provider.id)
-                    if (key == null) {
-                        switch.isChecked = false
-                        // 跳转到配置页
-                        startActivity(Intent(this, ProviderConfigActivity::class.java).apply {
-                            putExtra("provider_id", provider.id)
-                        })
-                        return@setOnCheckedChangeListener
-                    }
-                    // 关闭其他开关
-                    config.setActiveProviderId(provider.id)
-                    switches.forEach { (id, sw) ->
-                        if (id != provider.id && sw.isChecked) {
-                            sw.setOnCheckedChangeListener(null)
-                            sw.isChecked = false
-                            bindSwitchListener(sw, registry.getProvider(id)!!)
-                        }
-                    }
-                } else {
-                    // 如果关闭的是当前激活的，清除激活状态
-                    if (config.getActiveProviderId() == provider.id) {
-                        config.setActiveProviderId("")
-                    }
-                }
-            }
-
-            // 点击卡片进入配置
-            view.findViewById<LinearLayout>(R.id.providerInfo).setOnClickListener {
-                startActivity(Intent(this, ProviderConfigActivity::class.java).apply {
-                    putExtra("provider_id", provider.id)
-                })
-            }
-
-            // 自定义供应商显示删除按钮
-            val btnDelete = view.findViewById<ImageButton>(R.id.btnDeleteProvider)
-            if (provider.isCustom) {
-                btnDelete.visibility = View.VISIBLE
-                btnDelete.setOnClickListener {
-                    showDeleteProviderDialog(provider)
-                }
-            } else {
-                btnDelete.visibility = View.GONE
-            }
-
-            container.addView(view)
-        }
-    }
-
-    private fun bindSwitchListener(switch: SwitchCompat, provider: ProviderConfig) {
-        val config = AppConfig.configRepo()
-        val registry = AppConfig.providerRegistry()
-        switch.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                val key = config.getApiKey(provider.id)
-                if (key == null) {
-                    switch.isChecked = false
+        setContent {
+            ProviderListScreen(
+                onBack = { finish() },
+                onProviderClick = { providerId ->
                     startActivity(Intent(this, ProviderConfigActivity::class.java).apply {
-                        putExtra("provider_id", provider.id)
-                    })
-                    return@setOnCheckedChangeListener
-                }
-                config.setActiveProviderId(provider.id)
-                switches.forEach { (id, sw) ->
-                    if (id != provider.id && sw.isChecked) {
-                        sw.setOnCheckedChangeListener(null)
-                        sw.isChecked = false
-                        bindSwitchListener(sw, registry.getProvider(id)!!)
-                    }
-                }
-            } else {
-                if (config.getActiveProviderId() == provider.id) {
-                    config.setActiveProviderId("")
-                }
-            }
-        }
-    }
-
-    private fun refreshStatus() {
-        val config = AppConfig.configRepo()
-        val registry = AppConfig.providerRegistry()
-        val activeId = config.getActiveProviderId()
-        for (provider in registry.providers) {
-            val switch = switches[provider.id] ?: continue
-            val statusView = (switch.parent as View).findViewById<TextView>(R.id.tvStatus)
-
-            val hasKey = config.getApiKey(provider.id) != null
-            statusView.text = if (hasKey) "已配置 · ${registry.getModel(provider.id)}" else "未配置"
-
-            switch.setOnCheckedChangeListener(null)
-            switch.isChecked = provider.id == activeId
-            bindSwitchListener(switch, provider)
-        }
-    }
-
-    private fun showAddCustomProviderDialog() {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_add_custom_provider, null)
-        val spinnerApiType = dialogView.findViewById<Spinner>(R.id.spinnerApiType)
-        val etId = dialogView.findViewById<EditText>(R.id.etProviderId)
-        val etName = dialogView.findViewById<EditText>(R.id.etProviderName)
-        val etBaseUrl = dialogView.findViewById<EditText>(R.id.etProviderBaseUrl)
-        val etModel = dialogView.findViewById<EditText>(R.id.etProviderModel)
-
-        // 渠道类型选项
-        val apiTypeLabels = arrayOf("OpenAI 兼容", "Claude", "Gemini")
-        val apiTypeValues = arrayOf(ApiType.OPENAI, ApiType.CLAUDE, ApiType.GEMINI)
-        spinnerApiType.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, apiTypeLabels)
-
-        // 选择渠道类型时自动填充默认 base URL
-        spinnerApiType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (etBaseUrl.text.isNullOrBlank()) {
-                    etBaseUrl.setText(when (apiTypeValues[position]) {
-                        ApiType.OPENAI -> ""
-                        ApiType.CLAUDE -> "https://api.anthropic.com"
-                        ApiType.GEMINI -> "https://generativelanguage.googleapis.com"
+                        putExtra("provider_id", providerId)
                     })
                 }
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            )
         }
+    }
+}
 
-        AlertDialog.Builder(this)
-            .setTitle("添加自定义供应商")
-            .setView(dialogView)
-            .setPositiveButton("添加") { _, _ ->
-                val selectedApiType = apiTypeValues[spinnerApiType.selectedItemPosition]
-                val id = etId.text.toString().trim()
-                val name = etName.text.toString().trim()
-                val baseUrl = etBaseUrl.text.toString().trim()
-                val model = etModel.text.toString().trim()
 
-                when {
-                    id.isEmpty() -> {
-                        Toast.makeText(this, "请输入供应商 ID", Toast.LENGTH_SHORT).show()
-                    }
-                    name.isEmpty() -> {
-                        Toast.makeText(this, "请输入供应商名称", Toast.LENGTH_SHORT).show()
-                    }
-                    baseUrl.isEmpty() -> {
-                        Toast.makeText(this, "请输入 API 地址", Toast.LENGTH_SHORT).show()
-                    }
-                    model.isEmpty() -> {
-                        Toast.makeText(this, "请输入默认模型", Toast.LENGTH_SHORT).show()
-                    }
-                    else -> {
-                        val provider = ProviderConfig(
-                            id = id,
-                            name = name,
-                            defaultBaseUrl = baseUrl,
-                            defaultModel = model,
-                            apiType = selectedApiType,
-                            isCustom = true
-                        )
-                        val registry = AppConfig.providerRegistry()
-                        val success = registry.registerProviderPersistent(provider)
-                        if (success) {
-                            Toast.makeText(this, "添加成功", Toast.LENGTH_SHORT).show()
-                            buildList()
-                            refreshStatus()
+@Composable
+fun ProviderListScreen(
+    onBack: () -> Unit,
+    onProviderClick: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val config = AppConfig.configRepo()
+    val registry = AppConfig.providerRegistry()
+    
+    var refreshTrigger by remember { mutableStateOf(0) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var providerToDelete by remember { mutableStateOf<ProviderConfig?>(null) }
+    
+    val providers by remember(refreshTrigger) {
+        mutableStateOf(registry.providers)
+    }
+    
+    val activeId by remember(refreshTrigger) {
+        mutableStateOf(config.getActiveProviderId())
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        // 顶部栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .background(Color.White)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = onBack,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+            ) {
+                Text("← 返回", fontSize = 14.sp)
+            }
+            
+            Text(
+                text = "模型供应商",
+                fontSize = 17.sp,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+            
+            Spacer(modifier = Modifier.width(56.dp))
+        }
+        
+        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        
+        // 供应商列表
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            providers.forEach { provider ->
+                ProviderItem(
+                    provider = provider,
+                    isActive = provider.id == activeId,
+                    hasKey = config.getApiKey(provider.id) != null,
+                    model = registry.getModel(provider.id),
+                    onSwitchChange = { checked ->
+                        if (checked) {
+                            val key = config.getApiKey(provider.id)
+                            if (key == null) {
+                                onProviderClick(provider.id)
+                            } else {
+                                config.setActiveProviderId(provider.id)
+                                refreshTrigger++
+                            }
                         } else {
-                            Toast.makeText(this, "供应商 ID 已存在", Toast.LENGTH_SHORT).show()
+                            if (config.getActiveProviderId() == provider.id) {
+                                config.setActiveProviderId("")
+                                refreshTrigger++
+                            }
                         }
-                    }
+                    },
+                    onClick = { onProviderClick(provider.id) },
+                    onDelete = if (provider.isCustom) {
+                        { providerToDelete = provider }
+                    } else null
+                )
+            }
+        }
+        
+        // 底部添加按钮
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White
+        ) {
+            Button(
+                onClick = { showAddDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = TextPrimary,
+                    contentColor = Color.White
+                ),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text("+ 添加自定义供应商", fontSize = 15.sp)
+            }
+        }
+    }
+    
+    // 添加自定义供应商对话框
+    if (showAddDialog) {
+        AddCustomProviderDialog(
+            onDismiss = { showAddDialog = false },
+            onAdd = { provider ->
+                val success = registry.registerProviderPersistent(provider)
+                if (success) {
+                    Toast.makeText(context, "添加成功", Toast.LENGTH_SHORT).show()
+                    refreshTrigger++
+                    showAddDialog = false
+                } else {
+                    Toast.makeText(context, "供应商 ID 已存在", Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("取消", null)
-            .show()
+        )
     }
-
-    private fun showDeleteProviderDialog(provider: ProviderConfig) {
-        val config = AppConfig.configRepo()
-        val registry = AppConfig.providerRegistry()
-        AlertDialog.Builder(this)
-            .setTitle("删除供应商")
-            .setMessage("确定要删除「${provider.name}」吗？\n删除后配置信息将保留，但供应商将从列表中移除。")
-            .setPositiveButton("删除") { _, _ ->
-                // 如果是当前激活的供应商，先取消激活
+    
+    // 删除供应商确认对话框
+    providerToDelete?.let { provider ->
+        DeleteProviderDialog(
+            provider = provider,
+            onDismiss = { providerToDelete = null },
+            onConfirm = {
                 if (config.getActiveProviderId() == provider.id) {
                     config.setActiveProviderId("")
                 }
-                
                 val success = registry.unregisterProviderPersistent(provider.id)
                 if (success) {
-                    Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
-                    buildList()
-                    refreshStatus()
+                    Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
+                    refreshTrigger++
                 } else {
-                    Toast.makeText(this, "删除失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "删除失败", Toast.LENGTH_SHORT).show()
+                }
+                providerToDelete = null
+            }
+        )
+    }
+}
+
+@Composable
+fun ProviderItem(
+    provider: ProviderConfig,
+    isActive: Boolean,
+    hasKey: Boolean,
+    model: String,
+    onSwitchChange: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    onDelete: (() -> Unit)?
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.White,
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = provider.name,
+                    fontSize = 15.sp,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (hasKey) "已配置 · $model" else "未配置",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            
+            if (onDelete != null) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "删除供应商",
+                        tint = TextSecondary
+                    )
                 }
             }
-            .setNegativeButton("取消", null)
-            .show()
+            
+            Switch(
+                checked = isActive,
+                onCheckedChange = onSwitchChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = TextPrimary,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f),
+                    uncheckedBorderColor = TextSecondary.copy(alpha = 0.5f)
+                )
+            )
+        }
     }
+}
+
+@Composable
+fun AddCustomProviderDialog(
+    onDismiss: () -> Unit,
+    onAdd: (ProviderConfig) -> Unit
+) {
+    var selectedApiType by remember { mutableStateOf(ApiType.OPENAI) }
+    var providerId by remember { mutableStateOf("") }
+    var providerName by remember { mutableStateOf("") }
+    var baseUrl by remember { mutableStateOf("") }
+    var model by remember { mutableStateOf("") }
+    
+    val context = LocalContext.current
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        titleContentColor = TextPrimary,
+        title = { Text("添加自定义供应商", color = TextPrimary) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // API 渠道类型
+                Column {
+                    Text("API 渠道类型", fontSize = 14.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    var expanded by remember { mutableStateOf(false) }
+                    val apiTypes = listOf(
+                        "OpenAI 兼容" to ApiType.OPENAI,
+                        "Claude" to ApiType.CLAUDE,
+                        "Gemini" to ApiType.GEMINI
+                    )
+                    
+                    Box {
+                        OutlinedButton(
+                            onClick = { expanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = TextPrimary
+                            )
+                        ) {
+                            Text(
+                                text = apiTypes.find { it.second == selectedApiType }?.first ?: "OpenAI 兼容",
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null
+                            )
+                        }
+                        
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            apiTypes.forEach { (label, type) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        selectedApiType = type
+                                        if (baseUrl.isEmpty()) {
+                                            baseUrl = when (type) {
+                                                ApiType.OPENAI -> ""
+                                                ApiType.CLAUDE -> "https://api.anthropic.com"
+                                                ApiType.GEMINI -> "https://generativelanguage.googleapis.com"
+                                            }
+                                        }
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // 供应商 ID
+                Column {
+                    Text("供应商 ID", fontSize = 14.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = providerId,
+                        onValueChange = { providerId = it },
+                        placeholder = { Text("例如: openai", color = TextSecondary) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = TextPrimary,
+                            unfocusedBorderColor = TextSecondary,
+                            cursorColor = TextPrimary
+                        )
+                    )
+                }
+                
+                // 供应商名称
+                Column {
+                    Text("供应商名称", fontSize = 14.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = providerName,
+                        onValueChange = { providerName = it },
+                        placeholder = { Text("例如: OpenAI", color = TextSecondary) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = TextPrimary,
+                            unfocusedBorderColor = TextSecondary,
+                            cursorColor = TextPrimary
+                        )
+                    )
+                }
+                
+                // API 地址
+                Column {
+                    Text("API 地址", fontSize = 14.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = baseUrl,
+                        onValueChange = { baseUrl = it },
+                        placeholder = { Text("例如: https://api.openai.com", color = TextSecondary) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = TextPrimary,
+                            unfocusedBorderColor = TextSecondary,
+                            cursorColor = TextPrimary
+                        )
+                    )
+                }
+                
+                // 默认模型
+                Column {
+                    Text("默认模型", fontSize = 14.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = model,
+                        onValueChange = { model = it },
+                        placeholder = { Text("例如: gpt-4", color = TextSecondary) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = TextPrimary,
+                            unfocusedBorderColor = TextSecondary,
+                            cursorColor = TextPrimary
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    when {
+                        providerId.isEmpty() -> {
+                            Toast.makeText(context, "请输入供应商 ID", Toast.LENGTH_SHORT).show()
+                        }
+                        providerName.isEmpty() -> {
+                            Toast.makeText(context, "请输入供应商名称", Toast.LENGTH_SHORT).show()
+                        }
+                        baseUrl.isEmpty() -> {
+                            Toast.makeText(context, "请输入 API 地址", Toast.LENGTH_SHORT).show()
+                        }
+                        model.isEmpty() -> {
+                            Toast.makeText(context, "请输入默认模型", Toast.LENGTH_SHORT).show()
+                        }
+                        else -> {
+                            val provider = ProviderConfig(
+                                id = providerId.trim(),
+                                name = providerName.trim(),
+                                defaultBaseUrl = baseUrl.trim(),
+                                defaultModel = model.trim(),
+                                apiType = selectedApiType,
+                                isCustom = true
+                            )
+                            onAdd(provider)
+                        }
+                    }
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+            ) {
+                Text("添加")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+            ) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+fun DeleteProviderDialog(
+    provider: ProviderConfig,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        titleContentColor = TextPrimary,
+        textContentColor = TextPrimary,
+        title = { Text("删除供应商", color = TextPrimary) },
+        text = {
+            Text(
+                "确定要删除「${provider.name}」吗？\n删除后配置信息将保留，但供应商将从列表中移除。",
+                color = TextPrimary
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+            ) {
+                Text("删除")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+            ) {
+                Text("取消")
+            }
+        }
+    )
 }
