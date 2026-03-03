@@ -1,188 +1,452 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import android.view.View
-import android.widget.EditText
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.TextView
-import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.button.MaterialButton
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.mcp.HttpMcpClient
 import com.lhzkml.jasmine.core.agent.mcp.SseMcpClient
-import com.lhzkml.jasmine.core.config.McpTransportType
 import com.lhzkml.jasmine.core.config.McpServerConfig
-import kotlinx.coroutines.CoroutineScope
+import com.lhzkml.jasmine.core.config.McpTransportType
+import com.lhzkml.jasmine.ui.theme.BgInput
+import com.lhzkml.jasmine.ui.theme.BgPrimary
+import com.lhzkml.jasmine.ui.theme.JasmineTheme
+import com.lhzkml.jasmine.ui.theme.TextPrimary
+import com.lhzkml.jasmine.ui.theme.TextSecondary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * MCP 服务器编辑界面
+ * MCP 服务器编辑界面 (Compose 版本)
  * 添加或编辑单个 MCP 服务器配置。
  */
-class McpServerEditActivity : AppCompatActivity() {
-
-    private var editIndex = -1
-
-    private lateinit var tvTitle: TextView
-    private lateinit var etName: EditText
-    private lateinit var etUrl: EditText
-    private lateinit var rgTransport: RadioGroup
-    private lateinit var rbStreamableHttp: RadioButton
-    private lateinit var rbSse: RadioButton
-    private lateinit var etHeaderName: EditText
-    private lateinit var etHeaderValue: EditText
-    private lateinit var btnTestConnection: MaterialButton
-    private lateinit var tvTestResult: TextView
+class McpServerEditActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_mcp_server_edit)
-
-        val config = AppConfig.configRepo()
-
-        editIndex = intent.getIntExtra(McpServerActivity.EXTRA_EDIT_INDEX, -1)
-
-        tvTitle = findViewById(R.id.tvTitle)
-        etName = findViewById(R.id.etName)
-        etUrl = findViewById(R.id.etUrl)
-        rgTransport = findViewById(R.id.rgTransport)
-        rbStreamableHttp = findViewById(R.id.rbStreamableHttp)
-        rbSse = findViewById(R.id.rbSse)
-        etHeaderName = findViewById(R.id.etHeaderName)
-        etHeaderValue = findViewById(R.id.etHeaderValue)
-        btnTestConnection = findViewById(R.id.btnTestConnection)
-        tvTestResult = findViewById(R.id.tvTestResult)
-
-        tvTitle.text = if (editIndex >= 0) "编辑 MCP 服务器" else "添加 MCP 服务器"
-
-        // 加载已有配置
-        if (editIndex >= 0) {
-            val servers = config.getMcpServers()
-            if (editIndex in servers.indices) {
-                val server = servers[editIndex]
-                etName.setText(server.name)
-                etUrl.setText(server.url)
-                when (server.transportType) {
-                    McpTransportType.STREAMABLE_HTTP -> rbStreamableHttp.isChecked = true
-                    McpTransportType.SSE -> rbSse.isChecked = true
-                }
-                etHeaderName.setText(server.headerName)
-                etHeaderValue.setText(server.headerValue)
+        
+        val editIndex = intent.getIntExtra(McpServerActivity.EXTRA_EDIT_INDEX, -1)
+        
+        setContent {
+            JasmineTheme {
+                McpServerEditScreen(
+                    editIndex = editIndex,
+                    onCancel = { finish() },
+                    onSave = { configChanged ->
+                        val resultIntent = android.content.Intent()
+                        resultIntent.putExtra("config_changed", configChanged)
+                        setResult(RESULT_OK, resultIntent)
+                        finish()
+                    }
+                )
             }
         }
-
-        findViewById<View>(R.id.btnCancel).setOnClickListener { finish() }
-        findViewById<View>(R.id.btnSave).setOnClickListener { save() }
-        btnTestConnection.setOnClickListener { testConnection() }
     }
+}
 
-    private fun save() {
-        val config = AppConfig.configRepo()
-        val name = etName.text.toString().trim().ifEmpty { "MCP Server" }
-        val url = etUrl.text.toString().trim()
-        if (url.isEmpty()) {
-            Toast.makeText(this, "URL 不能为空", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val transportType = if (rbSse.isChecked) {
-            McpTransportType.SSE
-        } else {
-            McpTransportType.STREAMABLE_HTTP
-        }
-
-        val headerName = etHeaderName.text.toString().trim()
-        val headerValue = etHeaderValue.text.toString().trim()
-
-        val serverConfig = McpServerConfig(
-            name = name,
-            url = url,
-            transportType = transportType,
-            headerName = headerName,
-            headerValue = headerValue,
-            enabled = true
-        )
-
+@Composable
+fun McpServerEditScreen(
+    editIndex: Int,
+    onCancel: () -> Unit,
+    onSave: (Boolean) -> Unit  // 参数表示配置是否有变化
+) {
+    val config = AppConfig.configRepo()
+    val scope = rememberCoroutineScope()
+    
+    // 加载已有配置
+    val existingServer = remember {
         if (editIndex >= 0) {
-            // 保留原来的 enabled 状态
             val servers = config.getMcpServers()
-            val oldEnabled = servers.getOrNull(editIndex)?.enabled ?: true
-            config.updateMcpServer(editIndex, serverConfig.copy(enabled = oldEnabled))
-        } else {
-            config.addMcpServer(serverConfig)
-        }
-
-        setResult(RESULT_OK)
-        finish()
+            servers.getOrNull(editIndex)
+        } else null
     }
-
-    private fun testConnection() {
-        val url = etUrl.text.toString().trim()
-        if (url.isEmpty()) {
-            Toast.makeText(this, "请先填写 URL", Toast.LENGTH_SHORT).show()
-            return
+    
+    var name by remember { mutableStateOf(existingServer?.name ?: "") }
+    var url by remember { mutableStateOf(existingServer?.url ?: "") }
+    var transportType by remember { 
+        mutableStateOf(existingServer?.transportType ?: McpTransportType.STREAMABLE_HTTP) 
+    }
+    var headerName by remember { mutableStateOf(existingServer?.headerName ?: "") }
+    var headerValue by remember { mutableStateOf(existingServer?.headerValue ?: "") }
+    
+    var testResult by remember { mutableStateOf<String?>(null) }
+    var testResultColor by remember { mutableStateOf(TextSecondary) }
+    var isTesting by remember { mutableStateOf(false) }
+    
+    // 检查配置是否有变化
+    fun hasConfigChanged(): Boolean {
+        if (editIndex < 0) {
+            // 新添加的服务器，肯定有变化
+            return true
         }
-
-        btnTestConnection.isEnabled = false
-        btnTestConnection.text = "连接中..."
-        tvTestResult.visibility = View.VISIBLE
-        tvTestResult.text = "正在连接..."
-        tvTestResult.setTextColor(getColor(R.color.text_secondary))
-
-        val transportType = if (rbSse.isChecked) {
-            McpTransportType.SSE
-        } else {
-            McpTransportType.STREAMABLE_HTTP
+        
+        val existing = existingServer ?: return true
+        
+        return name.trim() != existing.name ||
+               url.trim() != existing.url ||
+               transportType != existing.transportType ||
+               headerName.trim() != existing.headerName ||
+               headerValue.trim() != existing.headerValue
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        // 顶部栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .background(Color.White)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = onCancel,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+            ) {
+                Text("取消", fontSize = 14.sp)
+            }
+            
+            Text(
+                text = if (editIndex >= 0) "编辑 MCP 服务器" else "添加 MCP 服务器",
+                fontSize = 17.sp,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+            
+            TextButton(
+                onClick = {
+                    val finalName = name.trim().ifEmpty { "MCP Server" }
+                    val finalUrl = url.trim()
+                    
+                    if (finalUrl.isEmpty()) {
+                        return@TextButton
+                    }
+                    
+                    val configChanged = hasConfigChanged()
+                    
+                    val serverConfig = McpServerConfig(
+                        name = finalName,
+                        url = finalUrl,
+                        transportType = transportType,
+                        headerName = headerName.trim(),
+                        headerValue = headerValue.trim(),
+                        enabled = true
+                    )
+                    
+                    if (editIndex >= 0) {
+                        val servers = config.getMcpServers()
+                        val oldEnabled = servers.getOrNull(editIndex)?.enabled ?: true
+                        config.updateMcpServer(editIndex, serverConfig.copy(enabled = oldEnabled))
+                    } else {
+                        config.addMcpServer(serverConfig)
+                    }
+                    
+                    onSave(configChanged)
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
+            ) {
+                Text("保存", fontSize = 14.sp)
+            }
         }
-
-        val headers = mutableMapOf<String, String>()
-        val hName = etHeaderName.text.toString().trim()
-        val hValue = etHeaderValue.text.toString().trim()
-        if (hName.isNotBlank() && hValue.isNotBlank()) {
-            headers[hName] = hValue
-        }
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val client = when (transportType) {
-                    McpTransportType.SSE ->
-                        SseMcpClient(url, customHeaders = headers)
-                    McpTransportType.STREAMABLE_HTTP ->
-                        HttpMcpClient(url, headers)
-                }
-                client.connect()
-                val tools = client.listTools()
-                client.close()
-
-                withContext(Dispatchers.Main) {
-                    val sb = StringBuilder()
-                    sb.appendLine("连接成功，发现 ${tools.size} 个工具：")
-                    tools.forEach { tool ->
-                        val desc = tool.description?.let { d ->
-                            if (d.length > 50) d.take(50) + "..." else d
-                        } ?: ""
-                        if (desc.isNotEmpty()) {
-                            sb.appendLine("  ${tool.name} — $desc")
-                        } else {
-                            sb.appendLine("  ${tool.name}")
+        
+        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        
+        // 表单内容
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // 名称
+            Column {
+                Text(
+                    "名称",
+                    fontSize = 14.sp,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                McpInputField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = "如：DeepWiki"
+                )
+            }
+            
+            // URL
+            Column {
+                Text(
+                    "服务器 URL",
+                    fontSize = 14.sp,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                McpInputField(
+                    value = url,
+                    onValueChange = { url = it },
+                    placeholder = "https://example.com/mcp"
+                )
+            }
+            
+            // 传输类型
+            Column {
+                Text(
+                    "传输类型",
+                    fontSize = 14.sp,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                Surface(
+                    color = Color.White,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .selectable(
+                                    selected = transportType == McpTransportType.STREAMABLE_HTTP,
+                                    onClick = { transportType = McpTransportType.STREAMABLE_HTTP }
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = transportType == McpTransportType.STREAMABLE_HTTP,
+                                onClick = { transportType = McpTransportType.STREAMABLE_HTTP },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = TextPrimary,
+                                    unselectedColor = TextSecondary
+                                )
+                            )
+                            Text(
+                                "Streamable HTTP",
+                                fontSize = 13.sp,
+                                color = TextPrimary
+                            )
+                        }
+                        
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .selectable(
+                                    selected = transportType == McpTransportType.SSE,
+                                    onClick = { transportType = McpTransportType.SSE }
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = transportType == McpTransportType.SSE,
+                                onClick = { transportType = McpTransportType.SSE },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = TextPrimary,
+                                    unselectedColor = TextSecondary
+                                )
+                            )
+                            Text(
+                                "SSE",
+                                fontSize = 13.sp,
+                                color = TextPrimary
+                            )
                         }
                     }
-                    tvTestResult.text = sb.toString().trimEnd()
-                    tvTestResult.setTextColor(getColor(R.color.status_connected))
-                    btnTestConnection.isEnabled = true
-                    btnTestConnection.text = "测试连接"
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    tvTestResult.text = "连接失败: ${e.message}"
-                    tvTestResult.setTextColor(getColor(R.color.status_failed))
-                    btnTestConnection.isEnabled = true
-                    btnTestConnection.text = "测试连接"
                 }
             }
+            
+            // 请求头名称
+            Column {
+                Text(
+                    "请求头名称",
+                    fontSize = 14.sp,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                McpInputField(
+                    value = headerName,
+                    onValueChange = { headerName = it },
+                    placeholder = "如 Authorization"
+                )
+            }
+            
+            // 请求头值
+            Column {
+                Text(
+                    "请求头值",
+                    fontSize = 14.sp,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                McpInputField(
+                    value = headerValue,
+                    onValueChange = { headerValue = it },
+                    placeholder = "如 Bearer xxxxxx"
+                )
+            }
+            
+            // 测试连接按钮
+            Button(
+                onClick = {
+                    if (url.trim().isEmpty()) {
+                        return@Button
+                    }
+                    
+                    isTesting = true
+                    testResult = "正在连接..."
+                    testResultColor = TextSecondary
+                    
+                    scope.launch {
+                        try {
+                            val headers = mutableMapOf<String, String>()
+                            val hName = headerName.trim()
+                            val hValue = headerValue.trim()
+                            if (hName.isNotBlank() && hValue.isNotBlank()) {
+                                headers[hName] = hValue
+                            }
+                            
+                            val client = when (transportType) {
+                                McpTransportType.SSE ->
+                                    SseMcpClient(url.trim(), customHeaders = headers)
+                                McpTransportType.STREAMABLE_HTTP ->
+                                    HttpMcpClient(url.trim(), headers)
+                            }
+                            
+                            withContext(Dispatchers.IO) {
+                                client.connect()
+                                val tools = client.listTools()
+                                client.close()
+                                
+                                withContext(Dispatchers.Main) {
+                                    val sb = StringBuilder()
+                                    sb.appendLine("连接成功，发现 ${tools.size} 个工具：")
+                                    tools.forEach { tool ->
+                                        val desc = tool.description?.let { d ->
+                                            if (d.length > 50) d.take(50) + "..." else d
+                                        } ?: ""
+                                        if (desc.isNotEmpty()) {
+                                            sb.appendLine("  ${tool.name} — $desc")
+                                        } else {
+                                            sb.appendLine("  ${tool.name}")
+                                        }
+                                    }
+                                    testResult = sb.toString().trimEnd()
+                                    testResultColor = Color(0xFF4CAF50)
+                                    isTesting = false
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                testResult = "连接失败: ${e.message}"
+                                testResultColor = Color(0xFFF44336)
+                                isTesting = false
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                enabled = !isTesting,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2D2D2D),
+                    contentColor = Color.White
+                ),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text(
+                    if (isTesting) "连接中..." else "测试连接",
+                    fontSize = 15.sp
+                )
+            }
+            
+            // 测试结果
+            testResult?.let { result ->
+                Text(
+                    result,
+                    fontSize = 13.sp,
+                    color = testResultColor
+                )
+            }
         }
+    }
+}
+
+@Composable
+fun McpInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .background(Color.White, MaterialTheme.shapes.medium)
+            .border(1.dp, Color(0xFFE8E8E8), MaterialTheme.shapes.medium)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(
+                fontSize = 14.sp,
+                color = TextPrimary
+            ),
+            cursorBrush = SolidColor(TextPrimary),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { innerTextField ->
+                if (value.isEmpty()) {
+                    Text(
+                        placeholder,
+                        fontSize = 14.sp,
+                        color = TextSecondary
+                    )
+                }
+                innerTextField()
+            }
+        )
     }
 }

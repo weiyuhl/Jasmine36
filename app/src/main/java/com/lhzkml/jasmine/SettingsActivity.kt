@@ -35,6 +35,7 @@ import kotlinx.coroutines.withContext
 class SettingsActivity : ComponentActivity() {
 
     private lateinit var conversationRepo: ConversationRepository
+    private var refreshCallback: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,9 +44,18 @@ class SettingsActivity : ComponentActivity() {
         setContent {
             SettingsScreen(
                 onBack = { finish() },
-                conversationRepo = conversationRepo
+                conversationRepo = conversationRepo,
+                onRefreshCallbackSet = { callback ->
+                    refreshCallback = callback
+                }
             )
         }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // 从其他页面返回时刷新状态
+        refreshCallback?.invoke()
     }
 
     private fun formatNumber(n: Int): String {
@@ -60,18 +70,41 @@ class SettingsActivity : ComponentActivity() {
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    conversationRepo: ConversationRepository
+    conversationRepo: ConversationRepository,
+    onRefreshCallbackSet: ((()->Unit) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    
     var toolsEnabled by remember { mutableStateOf(ProviderManager.isToolsEnabled(context)) }
     var showMaxTokensDialog by remember { mutableStateOf(false) }
     var showSystemPromptDialog by remember { mutableStateOf(false) }
     
-    // 状态刷新
+    // 状态刷新触发器
     var refreshTrigger by remember { mutableStateOf(0) }
     
+    // 刷新函数
+    val refresh: () -> Unit = {
+        toolsEnabled = ProviderManager.isToolsEnabled(context)
+        refreshTrigger++
+    }
+    
+    // 设置刷新回调
     LaunchedEffect(Unit) {
-        // 初始加载
+        onRefreshCallbackSet?.invoke(refresh)
+    }
+    
+    // 监听生命周期，在 onResume 时自动刷新
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                refresh()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
     
     Column(
@@ -117,14 +150,17 @@ fun SettingsScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 模型供应商
-            SettingsItem(
-                title = "模型供应商",
-                value = getProviderStatus(context),
-                onClick = {
-                    context.startActivity(Intent(context, ProviderListActivity::class.java))
-                }
-            )
+            // 使用 key 让所有设置项在 refreshTrigger 变化时重新读取状态
+            key(refreshTrigger) {
+                // 模型供应商
+                SettingsItem(
+                    title = "模型供应商",
+                    value = getProviderStatus(context),
+                    onClick = {
+                        context.startActivity(Intent(context, ProviderListActivity::class.java))
+                    }
+                )
+            }
             
             // 工具调用开关
             SettingsSwitchItem(
@@ -140,117 +176,141 @@ fun SettingsScreen(
             
             // Agent 工具预设（仅工具开启时显示）
             if (toolsEnabled) {
-                SettingsItem(
-                    title = "Agent 工具预设",
-                    value = getAgentToolPresetInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, ToolConfigActivity::class.java).apply {
-                            putExtra(ToolConfigActivity.EXTRA_AGENT_PRESET, true)
-                        })
-                    }
-                )
+                key(refreshTrigger) {
+                    SettingsItem(
+                        title = "Agent 工具预设",
+                        value = getAgentToolPresetInfo(context),
+                        onClick = {
+                            context.startActivity(Intent(context, ToolConfigActivity::class.java).apply {
+                                putExtra(ToolConfigActivity.EXTRA_AGENT_PRESET, true)
+                            })
+                        }
+                    )
+                }
             }
             
             // Agent 策略（仅工具开启时显示）
             if (toolsEnabled) {
+                key(refreshTrigger) {
+                    SettingsItem(
+                        title = "Agent 策略",
+                        value = getAgentStrategyInfo(context),
+                        onClick = {
+                            context.startActivity(Intent(context, AgentStrategyActivity::class.java))
+                        }
+                    )
+                }
+            }
+            
+            // MCP 工具
+            key(refreshTrigger) {
                 SettingsItem(
-                    title = "Agent 策略",
-                    value = getAgentStrategyInfo(context),
+                    title = "MCP 工具",
+                    value = getMcpInfo(context),
                     onClick = {
-                        context.startActivity(Intent(context, AgentStrategyActivity::class.java))
+                        context.startActivity(Intent(context, McpServerActivity::class.java))
                     }
                 )
             }
             
-            // MCP 工具
-            SettingsItem(
-                title = "MCP 工具",
-                value = getMcpInfo(context),
-                onClick = {
-                    context.startActivity(Intent(context, McpServerActivity::class.java))
-                }
-            )
-            
             // Shell 命令策略
-            SettingsItem(
-                title = "Shell 命令策略",
-                value = getShellPolicyInfo(context),
-                onClick = {
-                    context.startActivity(Intent(context, ShellPolicyActivity::class.java))
-                }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "Shell 命令策略",
+                    value = getShellPolicyInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, ShellPolicyActivity::class.java))
+                    }
+                )
+            }
             
             // 智能上下文压缩
-            SettingsItem(
-                title = "智能上下文压缩",
-                value = getCompressionInfo(context),
-                onClick = {
-                    context.startActivity(Intent(context, CompressionConfigActivity::class.java))
-                }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "智能上下文压缩",
+                    value = getCompressionInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, CompressionConfigActivity::class.java))
+                    }
+                )
+            }
             
             // 执行追踪
-            SettingsItem(
-                title = "执行追踪",
-                value = getTraceInfo(context),
-                onClick = {
-                    context.startActivity(Intent(context, TraceConfigActivity::class.java))
-                }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "执行追踪",
+                    value = getTraceInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, TraceConfigActivity::class.java))
+                    }
+                )
+            }
             
             // 任务规划
-            SettingsItem(
-                title = "任务规划",
-                value = getPlannerInfo(context),
-                onClick = {
-                    context.startActivity(Intent(context, PlannerConfigActivity::class.java))
-                }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "任务规划",
+                    value = getPlannerInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, PlannerConfigActivity::class.java))
+                    }
+                )
+            }
             
             // 执行快照
-            SettingsItem(
-                title = "执行快照",
-                value = getSnapshotInfo(context),
-                onClick = {
-                    context.startActivity(Intent(context, SnapshotConfigActivity::class.java))
-                }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "执行快照",
+                    value = getSnapshotInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, SnapshotConfigActivity::class.java))
+                    }
+                )
+            }
             
             // 事件处理器
-            SettingsItem(
-                title = "事件处理器",
-                value = getEventHandlerInfo(context),
-                onClick = {
-                    context.startActivity(Intent(context, EventHandlerConfigActivity::class.java))
-                }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "事件处理器",
+                    value = getEventHandlerInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, EventHandlerConfigActivity::class.java))
+                    }
+                )
+            }
             
             // 超时与续传
-            SettingsItem(
-                title = "超时与续传",
-                value = getTimeoutInfo(context),
-                onClick = {
-                    context.startActivity(Intent(context, TimeoutConfigActivity::class.java))
-                }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "超时与续传",
+                    value = getTimeoutInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, TimeoutConfigActivity::class.java))
+                    }
+                )
+            }
             
             // 最大回复 Token
-            SettingsItem(
-                title = "最大回复 Token",
-                subtitle = "限制每条回复的长度",
-                value = getMaxTokensInfo(context),
-                onClick = { showMaxTokensDialog = true }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "最大回复 Token",
+                    subtitle = "限制每条回复的长度",
+                    value = getMaxTokensInfo(context),
+                    onClick = { showMaxTokensDialog = true }
+                )
+            }
             
             // 采样参数
             SamplingParamsCard(refreshTrigger)
             
             // 系统提示词
-            SettingsItem(
-                title = "系统提示词",
-                value = getSystemPromptPreview(context),
-                onClick = { showSystemPromptDialog = true }
-            )
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "系统提示词",
+                    value = getSystemPromptPreview(context),
+                    onClick = { showSystemPromptDialog = true }
+                )
+            }
             
             // Token 用量统计
             TokenUsageCard(conversationRepo)

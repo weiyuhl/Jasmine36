@@ -29,7 +29,7 @@ class McpConnectionManager(private val configRepo: ConfigRepository) {
      * MCP 服务器连接状态
      */
     data class McpServerStatus(
-        val success: Boolean,
+        val success: Boolean?, // null=连接中, true=成功, false=失败
         val tools: List<McpToolDefinition> = emptyList(),
         val error: String? = null
     )
@@ -59,6 +59,9 @@ class McpConnectionManager(private val configRepo: ConfigRepository) {
 
     /** 获取指定服务器的连接状态 */
     fun getServerStatus(serverName: String): McpServerStatus? = connectionCache[serverName]
+
+    /** 检查是否正在连接中 */
+    fun isConnecting(): Boolean = connecting
 
     /** 是否已完成预加载 */
     val isPreloaded: Boolean get() = preloaded
@@ -117,6 +120,7 @@ class McpConnectionManager(private val configRepo: ConfigRepository) {
             }
 
             val toolDefs = client.listTools()
+            // 连接成功，更新状态
             connectionCache[server.name] = McpServerStatus(
                 success = true,
                 tools = toolDefs
@@ -124,6 +128,7 @@ class McpConnectionManager(private val configRepo: ConfigRepository) {
 
             listener?.onConnected(server.name, server.transportType, mcpRegistry.size)
         } catch (e: Exception) {
+            // 连接失败，更新状态
             connectionCache[server.name] = McpServerStatus(
                 success = false,
                 error = e.message ?: "未知错误"
@@ -182,10 +187,45 @@ class McpConnectionManager(private val configRepo: ConfigRepository) {
     /**
      * 强制重新连接所有 MCP 服务器
      * 仅在用户修改了 MCP 配置后调用。
+     * 
+     * @param onStatusChanged 状态变化回调，在每个服务器状态改变时调用
      */
-    suspend fun reconnect() = withContext(Dispatchers.IO) {
-        close()
-        preconnect()
+    suspend fun reconnect(onStatusChanged: (() -> Unit)? = null) = withContext(Dispatchers.IO) {
+        // 关闭旧连接
+        clients.forEach { try { it.close() } catch (_: Exception) {} }
+        clients.clear()
+        preloadedTools.clear()
+        connectionCache.clear()
+        
+        // 获取所有启用的服务器
+        val servers = configRepo.getMcpServers().filter { it.enabled && it.url.isNotBlank() }
+        
+        // 重置标志
+        preloaded = false
+        connecting = true
+        
+        // 通知 UI 开始连接（此时 connecting = true，UI 应该显示"连接中"）
+        withContext(Dispatchers.Main) {
+            onStatusChanged?.invoke()
+        }
+        
+        try {
+            // 逐个连接服务器
+            for (server in servers) {
+                connectSingleServer(server)
+                // 每个服务器连接完成后通知 UI
+                withContext(Dispatchers.Main) {
+                    onStatusChanged?.invoke()
+                }
+            }
+            preloaded = true
+        } finally {
+            connecting = false
+            // 连接全部完成，最后通知一次
+            withContext(Dispatchers.Main) {
+                onStatusChanged?.invoke()
+            }
+        }
     }
 
     /**
@@ -198,6 +238,14 @@ class McpConnectionManager(private val configRepo: ConfigRepository) {
         // 清除旧缓存
         connectionCache.remove(serverName)
         connectSingleServer(server)
+    }
+
+    /**
+     * 清除指定服务器的连接状态缓存
+     * 用于删除服务器时清理缓存
+     */
+    fun clearServerCache(serverName: String) {
+        connectionCache.remove(serverName)
     }
 
     /**

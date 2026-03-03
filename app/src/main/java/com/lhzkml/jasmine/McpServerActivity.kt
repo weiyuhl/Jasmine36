@@ -1,360 +1,632 @@
 package com.lhzkml.jasmine
 
 import android.content.Intent
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.mcp.McpToolDefinition
-import com.lhzkml.jasmine.core.agent.runtime.McpConnectionManager
 import com.lhzkml.jasmine.core.config.McpServerConfig
 import com.lhzkml.jasmine.core.config.McpTransportType
-import kotlinx.coroutines.CoroutineScope
+import com.lhzkml.jasmine.ui.theme.BgPrimary
+import com.lhzkml.jasmine.ui.theme.JasmineTheme
+import com.lhzkml.jasmine.ui.theme.TextPrimary
+import com.lhzkml.jasmine.ui.theme.TextSecondary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * MCP 服务器管理界面
- * 进入时自动连接所有启用的服务器，显示连接状态和工具列表。
- */
-class McpServerActivity : AppCompatActivity() {
+class McpServerActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_EDIT_INDEX = "edit_index"
         const val REQUEST_EDIT = 1001
     }
-
-    private lateinit var rvServers: RecyclerView
-    private lateinit var tvEmpty: TextView
-    private lateinit var switchEnabled: androidx.appcompat.widget.SwitchCompat
-    private lateinit var layoutConfigContent: LinearLayout
-    private val adapter = McpServerAdapter()
-
-    /**
-     * 连接结果：
-     * - 不在 map 中 = 未测试
-     * - ConnectionResult(true, tools) = 连接成功
-     * - ConnectionResult(false, error=...) = 连接失败
-     * - ConnectionResult(null) = 连接中
-     */
-    data class ConnectionResult(
-        val success: Boolean? = null, // null=连接中, true=成功, false=失败
-        val tools: List<McpToolDefinition> = emptyList(),
-        val error: String? = null
-    )
-
-    private val connectionResults = mutableMapOf<Int, ConnectionResult>()
+    
+    private var refreshCallback: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_mcp_server)
-
-        rvServers = findViewById(R.id.rvServers)
-        tvEmpty = findViewById(R.id.tvEmpty)
-        switchEnabled = findViewById(R.id.switchEnabled)
-        layoutConfigContent = findViewById(R.id.layoutConfigContent)
-
-        val config = AppConfig.configRepo()
-
-        switchEnabled.isChecked = config.isMcpEnabled()
-        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
-        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            config.setMcpEnabled(isChecked)
-            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
+        setContent {
+            JasmineTheme {
+                McpServerScreen(
+                    onBack = { finish() },
+                    onAddServer = {
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(
+                            Intent(this, McpServerEditActivity::class.java),
+                            REQUEST_EDIT
+                        )
+                    },
+                    onEditServer = { index ->
+                        val intent = Intent(this, McpServerEditActivity::class.java)
+                        intent.putExtra(EXTRA_EDIT_INDEX, index)
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(intent, REQUEST_EDIT)
+                    },
+                    onRefreshCallbackSet = { callback ->
+                        refreshCallback = callback
+                    }
+                )
+            }
         }
-
-        findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
-        findViewById<View>(R.id.btnAdd).setOnClickListener {
-            @Suppress("DEPRECATION")
-            startActivityForResult(
-                Intent(this, McpServerEditActivity::class.java),
-                REQUEST_EDIT
-            )
-        }
-
-        rvServers.layoutManager = LinearLayoutManager(this)
-        rvServers.adapter = adapter
-
-        adapter.onTestClick = { index, _ -> connectServer(index) }
-        adapter.onMoreClick = { index, server -> showServerActions(index, server) }
-        adapter.onItemClick = { index, _ ->
-            val intent = Intent(this, McpServerEditActivity::class.java)
-            intent.putExtra(EXTRA_EDIT_INDEX, index)
-            @Suppress("DEPRECATION")
-            startActivityForResult(intent, REQUEST_EDIT)
-        }
-
-        refreshList()
-        // 自动连接所有启用的服务器
-        autoConnectAll()
     }
 
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_EDIT && resultCode == RESULT_OK) {
-            connectionResults.clear()
-            refreshList()
-            // 配置变更，通过全局 McpConnectionManager 重新连接
-            CoroutineScope(Dispatchers.IO).launch {
-                AppConfig.mcpConnectionManager().reconnect()
-                withContext(Dispatchers.Main) {
-                    syncFromGlobalCache()
+            val configChanged = data?.getBooleanExtra("config_changed", true) ?: true
+            
+            if (configChanged) {
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    refreshCallback?.invoke()
+                    
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        AppConfig.mcpConnectionManager().reconnect { 
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                refreshCallback?.invoke()
+                            }
+                        }
+                    }
                 }
+            } else {
+                refreshCallback?.invoke()
             }
         }
     }
+}
 
-    private fun refreshList() {
-        val config = AppConfig.configRepo()
-        val servers = config.getMcpServers()
-        adapter.submitList(servers, connectionResults)
-        tvEmpty.visibility = if (servers.isEmpty()) View.VISIBLE else View.GONE
-        rvServers.visibility = if (servers.isEmpty()) View.GONE else View.VISIBLE
+@Composable
+fun McpServerScreen(
+    onBack: () -> Unit,
+    onAddServer: () -> Unit,
+    onEditServer: (Int) -> Unit,
+    onRefreshCallbackSet: ((()->Unit) -> Unit)? = null
+) {
+    val config = AppConfig.configRepo()
+    val scope = rememberCoroutineScope()
+    
+    var mcpEnabled by remember { mutableStateOf(config.isMcpEnabled()) }
+    var servers by remember { mutableStateOf(config.getMcpServers()) }
+    var connectionResults by remember { mutableStateOf<Map<Int, ConnectionResult>>(emptyMap()) }
+    var connectingServers by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var showDeleteDialog by remember { mutableStateOf<Pair<Int, McpServerConfig>?>(null) }
+    var showActionsDialog by remember { mutableStateOf<Pair<Int, McpServerConfig>?>(null) }
+    
+    val refresh: () -> Unit = {
+        servers = config.getMcpServers()
+        
+        scope.launch {
+            val manager = AppConfig.mcpConnectionManager()
+            val cache = manager.getConnectionCache()
+            
+            val results = mutableMapOf<Int, ConnectionResult>()
+            servers.forEachIndexed { index, server ->
+                if (!server.enabled) return@forEachIndexed
+                
+                val cached = cache[server.name]
+                if (cached != null) {
+                    results[index] = ConnectionResult(
+                        success = cached.success,
+                        tools = cached.tools,
+                        error = cached.error
+                    )
+                }
+            }
+            
+            connectionResults = results
+        }
     }
-
-    /** 自动连接所有启用的服务器（复用全局 McpConnectionManager） */
-    private fun autoConnectAll() {
-        val config = AppConfig.configRepo()
-        val servers = config.getMcpServers()
+    
+    LaunchedEffect(Unit) {
+        onRefreshCallbackSet?.invoke(refresh)
+    }
+    
+    LaunchedEffect(Unit) {
         val manager = AppConfig.mcpConnectionManager()
         val cache = manager.getConnectionCache()
-
-        // 先从全局缓存填充已有结果
+        
+        val results = mutableMapOf<Int, ConnectionResult>()
+        val connecting = mutableSetOf<Int>()
         var needsConnect = false
+        
         servers.forEachIndexed { index, server ->
             if (server.enabled && server.url.isNotBlank()) {
                 val cached = cache[server.name]
                 if (cached != null) {
-                    connectionResults[index] = ConnectionResult(
+                    results[index] = ConnectionResult(
                         success = cached.success,
                         tools = cached.tools,
                         error = cached.error
                     )
                 } else {
-                    connectionResults[index] = ConnectionResult(success = null)
+                    connecting.add(index)
                     needsConnect = true
                 }
             }
         }
-        refreshList()
-
-        // 有未连接的服务器，触发全局 preconnect 并等待结果
+        
+        connectionResults = results
+        connectingServers = connecting
+        
         if (needsConnect) {
-            CoroutineScope(Dispatchers.IO).launch {
+            withContext(Dispatchers.IO) {
                 manager.preconnect()
-                // preconnect 完成后，从全局缓存同步结果到 UI
-                withContext(Dispatchers.Main) {
-                    syncFromGlobalCache()
+            }
+            
+            val updatedCache = manager.getConnectionCache()
+            servers.forEachIndexed { index, server ->
+                val cached = updatedCache[server.name]
+                if (cached != null) {
+                    results[index] = ConnectionResult(
+                        success = cached.success,
+                        tools = cached.tools,
+                        error = cached.error
+                    )
                 }
             }
+            
+            connectionResults = results
+            connectingServers = emptySet()
         }
     }
-
-    /**
-     * 测试单个服务器连接（手动点击"测试"按钮）
-     * 通过全局 McpConnectionManager 连接，结果写入全局缓存。
-     */
-    private fun connectServer(index: Int) {
-        val config = AppConfig.configRepo()
-        val servers = config.getMcpServers()
-        if (index !in servers.indices) return
-        val server = servers[index]
-
-        // 标记为连接中
-        connectionResults[index] = ConnectionResult(success = null)
-        refreshList()
-
-        val manager = AppConfig.mcpConnectionManager()
-        CoroutineScope(Dispatchers.IO).launch {
-            manager.connectSingleServerByName(server.name)
-            withContext(Dispatchers.Main) {
-                syncServerFromGlobalCache(index, server.name)
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .background(Color.White)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = onBack,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+            ) {
+                Text("← 返回", fontSize = 14.sp)
+            }
+            
+            Text(
+                text = "MCP 服务器管理",
+                fontSize = 17.sp,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+            
+            TextButton(
+                onClick = onAddServer,
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
+            ) {
+                Text("+ 添加", fontSize = 14.sp)
             }
         }
-    }
-
-    /** 从全局缓存同步所有服务器状态到 UI */
-    private fun syncFromGlobalCache() {
-        val config = AppConfig.configRepo()
-        val servers = config.getMcpServers()
-        val cache = AppConfig.mcpConnectionManager().getConnectionCache()
-        servers.forEachIndexed { index, server ->
-            val cached = cache[server.name]
-            if (cached != null) {
-                connectionResults[index] = ConnectionResult(
-                    success = cached.success,
-                    tools = cached.tools,
-                    error = cached.error
+        
+        HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+        
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            color = Color.White,
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "启用 MCP 工具",
+                        fontSize = 15.sp,
+                        color = TextPrimary
+                    )
+                    Text(
+                        "从 MCP 服务器加载远程工具",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                }
+                
+                Switch(
+                    checked = mcpEnabled,
+                    onCheckedChange = { enabled ->
+                        mcpEnabled = enabled
+                        config.setMcpEnabled(enabled)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50),
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0)
+                    )
                 )
             }
         }
-        refreshList()
-    }
-
-    /** 从全局缓存同步单个服务器状态到 UI */
-    private fun syncServerFromGlobalCache(index: Int, serverName: String) {
-        val cached = AppConfig.mcpConnectionManager().getServerStatus(serverName)
-        if (cached != null) {
-            connectionResults[index] = ConnectionResult(
-                success = cached.success,
-                tools = cached.tools,
-                error = cached.error
-            )
-        }
-        refreshList()
-    }
-
-    private fun showServerActions(index: Int, server: McpServerConfig) {
-        val config = AppConfig.configRepo()
-        val actions = arrayOf(
-            "编辑",
-            if (server.enabled) "禁用" else "启用",
-            "删除"
-        )
-        AlertDialog.Builder(this)
-            .setTitle(server.name)
-            .setItems(actions) { _, which ->
-                when (which) {
-                    0 -> {
-                        val intent = Intent(this, McpServerEditActivity::class.java)
-                        intent.putExtra(EXTRA_EDIT_INDEX, index)
-                        @Suppress("DEPRECATION")
-                        startActivityForResult(intent, REQUEST_EDIT)
-                    }
-                    1 -> {
-                        config.updateMcpServer(index, server.copy(enabled = !server.enabled))
-                        connectionResults.remove(index)
-                        refreshList()
-                        // 如果刚启用，自动连接
-                        if (!server.enabled) connectServer(index)
-                    }
-                    2 -> {
-                        AlertDialog.Builder(this)
-                            .setMessage("确定删除 ${server.name}？")
-                            .setPositiveButton("删除") { _, _ ->
-                                config.removeMcpServer(index)
-                                connectionResults.clear()
-                                refreshList()
-                            }
-                            .setNegativeButton("取消", null)
-                            .show()
-                    }
+        
+        if (mcpEnabled) {
+            if (servers.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "暂无 MCP 服务器\n点击右上角添加",
+                        fontSize = 14.sp,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
                 }
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    // ========== RecyclerView Adapter ==========
-
-    private class McpServerAdapter : RecyclerView.Adapter<McpServerAdapter.VH>() {
-        private var items = listOf<McpServerConfig>()
-        private var resultMap = mapOf<Int, ConnectionResult>()
-
-        var onTestClick: ((Int, McpServerConfig) -> Unit)? = null
-        var onMoreClick: ((Int, McpServerConfig) -> Unit)? = null
-        var onItemClick: ((Int, McpServerConfig) -> Unit)? = null
-
-        fun submitList(list: List<McpServerConfig>, results: Map<Int, ConnectionResult>) {
-            items = list
-            resultMap = results.toMap()
-            notifyDataSetChanged()
-        }
-
-        override fun getItemCount() = items.size
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_mcp_server, parent, false)
-            return VH(view)
-        }
-
-        override fun onBindViewHolder(holder: VH, position: Int) {
-            val server = items[position]
-            val result = resultMap[position]
-            val ctx = holder.itemView.context
-
-            holder.tvName.text = server.name
-            holder.tvUrl.text = server.url
-
-            val transportLabel = when (server.transportType) {
-                McpTransportType.STREAMABLE_HTTP -> "Streamable HTTP"
-                McpTransportType.SSE -> "SSE"
-            }
-            val enabledLabel = if (server.enabled) "" else " · 已禁用"
-            holder.tvTransport.text = "$transportLabel$enabledLabel"
-
-            // 状态指示灯
-            val statusColor = when {
-                !server.enabled -> ctx.getColor(R.color.status_unknown)
-                result == null -> ctx.getColor(R.color.status_unknown)
-                result.success == null -> ctx.getColor(R.color.status_testing)
-                result.success -> ctx.getColor(R.color.status_connected)
-                else -> ctx.getColor(R.color.status_failed)
-            }
-            holder.viewStatus.background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(statusColor)
-            }
-
-            holder.itemView.alpha = if (server.enabled) 1f else 0.5f
-
-            // 工具列表（连接成功时显示）
-            if (result != null && result.success == true && result.tools.isNotEmpty()) {
-                holder.layoutTools.visibility = View.VISIBLE
-                holder.tvError.visibility = View.GONE
-                holder.tvToolsHeader.text = "可用工具 (${result.tools.size})"
-                holder.tvToolsList.text = result.tools.joinToString("\n") { tool ->
-                    val desc = tool.description?.let { d ->
-                        if (d.length > 60) d.take(60) + "..." else d
-                    } ?: ""
-                    if (desc.isNotEmpty()) "${tool.name} — $desc" else tool.name
-                }
-            } else if (result != null && result.success == false) {
-                holder.layoutTools.visibility = View.GONE
-                holder.tvError.visibility = View.VISIBLE
-                holder.tvError.text = "连接失败: ${result.error}"
-            } else if (result != null && result.success == null) {
-                holder.layoutTools.visibility = View.GONE
-                holder.tvError.visibility = View.VISIBLE
-                holder.tvError.setTextColor(ctx.getColor(R.color.status_testing))
-                holder.tvError.text = "连接中..."
             } else {
-                holder.layoutTools.visibility = View.GONE
-                holder.tvError.visibility = View.GONE
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    itemsIndexed(servers) { index, server ->
+                        McpServerItem(
+                            server = server,
+                            result = connectionResults[index],
+                            isConnecting = connectingServers.contains(index),
+                            onTestClick = {
+                                scope.launch {
+                                    connectingServers = connectingServers + index
+                                    
+                                    withContext(Dispatchers.IO) {
+                                        AppConfig.mcpConnectionManager().connectSingleServerByName(server.name)
+                                    }
+                                    
+                                    val cached = AppConfig.mcpConnectionManager().getServerStatus(server.name)
+                                    if (cached != null) {
+                                        connectionResults = connectionResults + (index to ConnectionResult(
+                                            success = cached.success,
+                                            tools = cached.tools,
+                                            error = cached.error
+                                        ))
+                                    }
+                                    
+                                    connectingServers = connectingServers - index
+                                }
+                            },
+                            onMoreClick = {
+                                showActionsDialog = index to server
+                            },
+                            onItemClick = {
+                                onEditServer(index)
+                            }
+                        )
+                    }
+                }
             }
-
-            // 失败状态恢复颜色
-            if (result?.success == false) {
-                holder.tvError.setTextColor(ctx.getColor(R.color.status_failed))
-            }
-
-            holder.btnTest.setOnClickListener { onTestClick?.invoke(position, server) }
-            holder.btnMore.setOnClickListener { onMoreClick?.invoke(position, server) }
-            holder.itemView.setOnClickListener { onItemClick?.invoke(position, server) }
         }
+    }
+    
+    showActionsDialog?.let { (index, server) ->
+        AlertDialog(
+            onDismissRequest = { showActionsDialog = null },
+            title = { 
+                Text(
+                    server.name,
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = {
+                            showActionsDialog = null
+                            onEditServer(index)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                    ) {
+                        Text(
+                            "编辑",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start,
+                            fontSize = 16.sp
+                        )
+                    }
+                    
+                    TextButton(
+                        onClick = {
+                            showActionsDialog = null
+                            config.updateMcpServer(index, server.copy(enabled = !server.enabled))
+                            servers = config.getMcpServers()
+                            connectionResults = connectionResults - index
+                            if (!server.enabled) {
+                                scope.launch {
+                                    connectingServers = connectingServers + index
+                                    
+                                    withContext(Dispatchers.IO) {
+                                        AppConfig.mcpConnectionManager().connectSingleServerByName(server.copy(enabled = true).name)
+                                    }
+                                    
+                                    val cached = AppConfig.mcpConnectionManager().getServerStatus(server.name)
+                                    if (cached != null) {
+                                        connectionResults = connectionResults + (index to ConnectionResult(
+                                            success = cached.success,
+                                            tools = cached.tools,
+                                            error = cached.error
+                                        ))
+                                    }
+                                    
+                                    connectingServers = connectingServers - index
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                    ) {
+                        Text(
+                            if (server.enabled) "禁用" else "启用",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start,
+                            fontSize = 16.sp
+                        )
+                    }
+                    
+                    TextButton(
+                        onClick = {
+                            showActionsDialog = null
+                            showDeleteDialog = index to server
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF44336))
+                    ) {
+                        Text(
+                            "删除",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showActionsDialog = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                ) {
+                    Text("取消")
+                }
+            },
+            containerColor = Color.White,
+            titleContentColor = TextPrimary,
+            textContentColor = TextPrimary
+        )
+    }
+    
+    showDeleteDialog?.let { (index, server) ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { 
+                Text(
+                    "确认删除",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = { 
+                Text(
+                    "确定删除 ${server.name}？",
+                    color = TextPrimary,
+                    fontSize = 16.sp
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = null
+                        AppConfig.mcpConnectionManager().clearServerCache(server.name)
+                        config.removeMcpServer(index)
+                        servers = config.getMcpServers()
+                        connectionResults = emptyMap()
+                        connectingServers = emptySet()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF44336))
+                ) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteDialog = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                ) {
+                    Text("取消")
+                }
+            },
+            containerColor = Color.White,
+            titleContentColor = TextPrimary,
+            textContentColor = TextPrimary
+        )
+    }
+}
 
-        class VH(view: View) : RecyclerView.ViewHolder(view) {
-            val viewStatus: View = view.findViewById(R.id.viewStatus)
-            val tvName: TextView = view.findViewById(R.id.tvName)
-            val tvUrl: TextView = view.findViewById(R.id.tvUrl)
-            val tvTransport: TextView = view.findViewById(R.id.tvTransport)
-            val btnTest: TextView = view.findViewById(R.id.btnTest)
-            val btnMore: TextView = view.findViewById(R.id.btnMore)
-            val layoutTools: LinearLayout = view.findViewById(R.id.layoutTools)
-            val tvToolsHeader: TextView = view.findViewById(R.id.tvToolsHeader)
-            val tvToolsList: TextView = view.findViewById(R.id.tvToolsList)
-            val tvError: TextView = view.findViewById(R.id.tvError)
+@Composable
+fun McpServerItem(
+    server: McpServerConfig,
+    result: ConnectionResult?,
+    isConnecting: Boolean,
+    onTestClick: () -> Unit,
+    onMoreClick: () -> Unit,
+    onItemClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onItemClick),
+        color = Color.White,
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val statusColor = when {
+                    !server.enabled -> Color(0xFF9E9E9E)
+                    isConnecting -> Color(0xFFFFC107)
+                    result == null -> Color(0xFF9E9E9E)
+                    result.success == true -> Color(0xFF4CAF50)
+                    else -> Color(0xFFF44336)
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(statusColor, CircleShape)
+                )
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        server.name,
+                        fontSize = 15.sp,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    
+                    Text(
+                        server.url,
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    
+                    val transportLabel = when (server.transportType) {
+                        McpTransportType.STREAMABLE_HTTP -> "Streamable HTTP"
+                        McpTransportType.SSE -> "SSE"
+                    }
+                    val enabledLabel = if (server.enabled) "" else " · 已禁用"
+                    
+                    Text(
+                        "$transportLabel$enabledLabel",
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                
+                TextButton(
+                    onClick = onTestClick,
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
+                ) {
+                    Text("重连", fontSize = 13.sp)
+                }
+                
+                TextButton(
+                    onClick = onMoreClick,
+                    colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                ) {
+                    Text("⋮", fontSize = 20.sp)
+                }
+            }
+            
+            if (server.enabled && isConnecting) {
+                Text(
+                    "连接中...",
+                    fontSize = 12.sp,
+                    color = Color(0xFFFFC107),
+                    modifier = Modifier.padding(
+                        start = 38.dp,
+                        end = 16.dp,
+                        bottom = 12.dp
+                    )
+                )
+            }
+            
+            if (server.enabled && !isConnecting && result != null && result.success == true && result.tools.isNotEmpty()) {
+                HorizontalDivider(
+                    color = Color(0xFFE0E0E0),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(start = 38.dp, end = 16.dp)
+                )
+                
+                Column(
+                    modifier = Modifier.padding(
+                        start = 38.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 12.dp
+                    )
+                ) {
+                    Text(
+                        "可用工具 (${result.tools.size})",
+                        fontSize = 12.sp,
+                        color = Color(0xFF4CAF50),
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    
+                    Text(
+                        result.tools.joinToString("\n") { tool ->
+                            val desc = tool.description?.let { d ->
+                                if (d.length > 60) d.take(60) + "..." else d
+                            } ?: ""
+                            if (desc.isNotEmpty()) "${tool.name} — $desc" else tool.name
+                        },
+                        fontSize = 12.sp,
+                        color = TextPrimary,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+            
+            if (server.enabled && !isConnecting && result != null && result.success == false) {
+                Text(
+                    "连接失败: ${result.error}",
+                    fontSize = 12.sp,
+                    color = Color(0xFFF44336),
+                    modifier = Modifier.padding(
+                        start = 38.dp,
+                        end = 16.dp,
+                        bottom = 12.dp
+                    )
+                )
+            }
         }
     }
 }
+
+data class ConnectionResult(
+    val success: Boolean? = null,
+    val tools: List<McpToolDefinition> = emptyList(),
+    val error: String? = null
+)
