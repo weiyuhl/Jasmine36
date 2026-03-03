@@ -124,7 +124,8 @@ fun ChatInputBar(
                 CustomDropdownMenu(
                     expanded = modelMenuExpanded,
                     onDismissRequest = { modelMenuExpanded = false },
-                    alignment = Alignment.TopEnd
+                    alignment = Alignment.BottomEnd,
+                    alignAboveAnchor = true
                 ) {
                     modelList.forEach { model ->
                         CustomDropdownMenuItem(
