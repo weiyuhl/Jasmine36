@@ -77,7 +77,6 @@ fun SettingsScreen(
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     
     var toolsEnabled by remember { mutableStateOf(ProviderManager.isToolsEnabled(context)) }
-    var showMaxTokensDialog by remember { mutableStateOf(false) }
     var showSystemPromptDialog by remember { mutableStateOf(false) }
     
     // 状态刷新触发器
@@ -290,13 +289,16 @@ fun SettingsScreen(
                 )
             }
             
-            // 最大回复 Token
+            // Token 管理
             key(refreshTrigger) {
                 SettingsItem(
-                    title = "最大回复 Token",
+                    title = "Token 管理",
                     subtitle = "限制每条回复的长度",
                     value = getMaxTokensInfo(context),
-                    onClick = { showMaxTokensDialog = true }
+                    onClick = {
+                        val intent = Intent(context, TokenManagementActivity::class.java)
+                        context.startActivity(intent)
+                    }
                 )
             }
             
@@ -311,20 +313,10 @@ fun SettingsScreen(
                     onClick = { showSystemPromptDialog = true }
                 )
             }
-            
-            // Token 用量统计
-            TokenUsageCard(conversationRepo)
         }
     }
     
     // 对话框
-    if (showMaxTokensDialog) {
-        MaxTokensDialog(
-            onDismiss = { showMaxTokensDialog = false },
-            onSave = { refreshTrigger++ }
-        )
-    }
-    
     if (showSystemPromptDialog) {
         SystemPromptDialog(
             onDismiss = { showSystemPromptDialog = false },
@@ -593,149 +585,6 @@ fun SamplingParamsCard(refreshTrigger: Int) {
             }
         }
     }
-}
-
-@Composable
-fun TokenUsageCard(conversationRepo: ConversationRepository) {
-    var promptTokens by remember { mutableStateOf(0) }
-    var completionTokens by remember { mutableStateOf(0) }
-    var totalTokens by remember { mutableStateOf(0) }
-    
-    LaunchedEffect(Unit) {
-        val stats = withContext(Dispatchers.IO) {
-            conversationRepo.getTotalUsage()
-        }
-        promptTokens = stats.promptTokens
-        completionTokens = stats.completionTokens
-        totalTokens = stats.totalTokens
-    }
-    
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-            Text(
-                text = "Token 用量统计",
-                fontSize = 15.sp,
-                color = TextPrimary,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = formatNumber(promptTokens),
-                        fontSize = 18.sp,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "提示",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                }
-                
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = formatNumber(completionTokens),
-                        fontSize = 18.sp,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "回复",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                }
-                
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = formatNumber(totalTokens),
-                        fontSize = 18.sp,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "总计",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun MaxTokensDialog(onDismiss: () -> Unit, onSave: () -> Unit) {
-    val context = LocalContext.current
-    var value by remember { mutableStateOf(ProviderManager.getMaxTokens(context).toString()) }
-    
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color.White,
-        titleContentColor = TextPrimary,
-        textContentColor = TextPrimary,
-        title = { Text("最大回复 Token 数", color = TextPrimary) },
-        text = {
-            Column {
-                Text("设置每条 AI 回复的最大 token 数量，0 或留空表示不限制。常用值：512、1024、2048、4096", color = TextPrimary)
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    placeholder = { Text("0 表示不限制", color = TextSecondary) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = TextPrimary,
-                        unfocusedBorderColor = TextSecondary,
-                        cursorColor = TextPrimary
-                    )
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val tokens = value.trim().toIntOrNull() ?: 0
-                    ProviderManager.setMaxTokens(context, tokens)
-                    onSave()
-                    onDismiss()
-                },
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
-            ) {
-                Text("保存")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
-            ) {
-                Text("取消")
-            }
-        }
-    )
 }
 
 @Composable

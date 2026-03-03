@@ -81,6 +81,9 @@
         <activity
             android:name=".TimeoutConfigActivity"
             android:exported="false" />
+        <activity
+            android:name=".TokenManagementActivity"
+            android:exported="false" />
 
     </application>
 
