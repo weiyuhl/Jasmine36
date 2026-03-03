@@ -1,84 +1,249 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import android.view.View
-import android.widget.CompoundButton
-import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.observe.event.EventCategory
+import com.lhzkml.jasmine.ui.theme.*
 
-class EventHandlerConfigActivity : AppCompatActivity() {
-
-    private lateinit var switchEnabled: SwitchCompat
-    private lateinit var layoutConfigContent: LinearLayout
-    private lateinit var tvSummary: TextView
-    private lateinit var switches: Map<EventCategory, SwitchCompat>
+class EventHandlerConfigActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_event_handler_config)
-
-        val config = AppConfig.configRepo()
-
-        findViewById<android.view.View>(R.id.btnBack).setOnClickListener { finish() }
-
-        switchEnabled = findViewById(R.id.switchEnabled)
-        layoutConfigContent = findViewById(R.id.layoutConfigContent)
-
-        switchEnabled.isChecked = config.isEventHandlerEnabled()
-        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
-        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            config.setEventHandlerEnabled(isChecked)
-            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
+        setContent {
+            JasmineTheme {
+                EventHandlerConfigScreen(
+                    onBack = { finish() }
+                )
+            }
         }
-
-        tvSummary = findViewById(R.id.tvSummary)
-
-        switches = mapOf(
-            EventCategory.AGENT to findViewById(R.id.switchEvAgent),
-            EventCategory.TOOL to findViewById(R.id.switchEvTool),
-            EventCategory.LLM to findViewById(R.id.switchEvLLM),
-            EventCategory.STRATEGY to findViewById(R.id.switchEvStrategy),
-            EventCategory.NODE to findViewById(R.id.switchEvNode),
-            EventCategory.SUBGRAPH to findViewById(R.id.switchEvSubgraph),
-            EventCategory.STREAMING to findViewById(R.id.switchEvStream)
-        )
-
-        val current = config.getEventHandlerFilter()
-        for (entry in switches) {
-            entry.value.isChecked = current.isEmpty() || entry.key in current
-        }
-
-        val listener = CompoundButton.OnCheckedChangeListener { _, _ ->
-            saveFilter()
-            refreshSummary()
-        }
-        for (entry in switches) {
-            entry.value.setOnCheckedChangeListener(listener)
-        }
-
-        refreshSummary()
     }
+}
 
-    private fun saveFilter() {
-        val config = AppConfig.configRepo()
-        val checked = mutableSetOf<EventCategory>()
-        for (entry in switches) {
-            if (entry.value.isChecked) checked.add(entry.key)
+@Composable
+fun EventHandlerConfigScreen(onBack: () -> Unit) {
+    val config = AppConfig.configRepo()
+    var enabled by remember { mutableStateOf(config.isEventHandlerEnabled()) }
+    
+    val eventCategories = remember {
+        listOf(
+            EventCategory.AGENT to "Agent 生命周期",
+            EventCategory.TOOL to "工具调用",
+            EventCategory.LLM to "LLM 调用",
+            EventCategory.STRATEGY to "策略执行",
+            EventCategory.NODE to "节点执行",
+            EventCategory.SUBGRAPH to "子图执行",
+            EventCategory.STREAMING to "LLM 流式"
+        )
+    }
+    
+    val currentFilter = config.getEventHandlerFilter()
+    val checkedStates = remember {
+        mutableStateMapOf<EventCategory, Boolean>().apply {
+            eventCategories.forEach { (category, _) ->
+                this[category] = currentFilter.isEmpty() || category in currentFilter
+            }
         }
-        val selected = if (checked.size == switches.size || checked.isEmpty()) {
-            emptySet<EventCategory>()
+    }
+    
+    var summaryText by remember { mutableStateOf("") }
+    
+    fun saveFilterAndRefresh() {
+        val checked = mutableSetOf<EventCategory>()
+        checkedStates.forEach { (category, isChecked) ->
+            if (isChecked) checked.add(category)
+        }
+        val selected = if (checked.size == eventCategories.size || checked.isEmpty()) {
+            emptySet()
         } else {
-            checked.toSet()
+            checked
         }
         config.setEventHandlerFilter(selected)
-    }
-
-    private fun refreshSummary() {
-        val config = AppConfig.configRepo()
+        
         val filter = config.getEventHandlerFilter()
-        tvSummary.text = if (filter.isEmpty()) "监听全部事件" else "监听 ${filter.size} 类事件"
+        summaryText = if (filter.isEmpty()) "监听全部事件" else "监听 ${filter.size} 类事件"
+    }
+    
+    LaunchedEffect(Unit) {
+        saveFilterAndRefresh()
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        // 顶部栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .background(Color.White)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = onBack,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary),
+                contentPadding = PaddingValues(6.dp)
+            ) {
+                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+            }
+            
+            Text(
+                text = "事件处理器配置",
+                fontSize = 17.sp,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+            
+            Spacer(modifier = Modifier.width(56.dp))
+        }
+
+        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+        ) {
+            // 启用开关
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .background(Color.White, RoundedCornerShape(16.dp))
+                    .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "启用事件处理器",
+                        fontSize = 15.sp,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Agent 生命周期事件回调",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                }
+                
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { 
+                        enabled = it
+                        config.setEventHandlerEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Accent,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0)
+                    )
+                )
+            }
+
+            if (enabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    text = "事件处理器负责在聊天界面实时显示 Agent 执行过程（[EVENT] 标签）。\n选择需要在 UI 中显示的事件类型，不选则显示全部。",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    eventCategories.forEachIndexed { index, (category, label) ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                color = Color(0xFFE8E8E8),
+                                thickness = 1.dp
+                            )
+                        }
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 14.sp,
+                                color = TextPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            Switch(
+                                checked = checkedStates[category] ?: false,
+                                onCheckedChange = { checked ->
+                                    checkedStates[category] = checked
+                                    saveFilterAndRefresh()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = Accent,
+                                    uncheckedThumbColor = Color.White,
+                                    uncheckedTrackColor = Color(0xFFE0E0E0)
+                                )
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // 当前配置摘要
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "当前配置",
+                        fontSize = 15.sp,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Text(
+                        text = summaryText,
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
     }
 }
