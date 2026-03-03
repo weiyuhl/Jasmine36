@@ -255,9 +255,13 @@ class ChatExecutor(
                 }
             }
         }
-        val executor = ToolExecutor(client, registry, eventListener = listener, tracing = getTracing())
-
         val eventHandler = buildEventHandler()
+        val executor = ToolExecutor(
+            client, registry,
+            eventListener = listener,
+            eventHandler = eventHandler,
+            tracing = getTracing()
+        )
         val agentRunId = getTracing()?.newRunId() ?: java.util.UUID.randomUUID().toString()
         eventHandler?.fireAgentStarting(AgentStartingContext(
             runId = agentRunId,

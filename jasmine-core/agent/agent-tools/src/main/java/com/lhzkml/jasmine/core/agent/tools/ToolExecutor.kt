@@ -1,5 +1,12 @@
 package com.lhzkml.jasmine.core.agent.tools
 
+import com.lhzkml.jasmine.core.agent.observe.event.EventHandler
+import com.lhzkml.jasmine.core.agent.observe.event.ToolCallCompletedContext
+import com.lhzkml.jasmine.core.agent.observe.event.ToolCallFailedContext
+import com.lhzkml.jasmine.core.agent.observe.event.ToolCallStartingContext
+import com.lhzkml.jasmine.core.agent.observe.event.LLMStreamingCompletedContext
+import com.lhzkml.jasmine.core.agent.observe.event.LLMStreamingFailedContext
+import com.lhzkml.jasmine.core.agent.observe.event.LLMStreamingStartingContext
 import com.lhzkml.jasmine.core.agent.observe.trace.TraceError
 import com.lhzkml.jasmine.core.agent.observe.trace.TraceEvent
 import com.lhzkml.jasmine.core.agent.observe.trace.Tracing
@@ -59,6 +66,7 @@ class ToolExecutor(
     private val maxIterations: Int = 10,
     private val compressionStrategy: HistoryCompressionStrategy.TokenBudget? = null,
     private val eventListener: AgentEventListener? = null,
+    private val eventHandler: EventHandler? = null,
     private val tracing: Tracing? = null,
     private val maxToolResultLength: Int = MAX_TOOL_RESULT_LENGTH
 ) {
@@ -289,6 +297,12 @@ class ToolExecutor(
                 model = session.model, messageCount = session.prompt.messages.size,
                 tools = session.tools.map { it.name }
             ))
+            eventHandler?.fireLLMStreamingStarting(LLMStreamingStartingContext(
+                runId = runId,
+                model = session.model,
+                messageCount = session.prompt.messages.size,
+                tools = session.tools.map { it.name }
+            ))
 
             val tracingOnChunk: suspend (String) -> Unit = { chunk ->
                 onChunk(chunk)
@@ -304,11 +318,22 @@ class ToolExecutor(
                     eventId = tracing.newEventId(), runId = runId,
                     model = session.model, error = TraceError.from(e)
                 ))
+                eventHandler?.fireLLMStreamingFailed(LLMStreamingFailedContext(runId, session.model, e))
                 throw e
             }
 
             totalUsage = totalUsage.add(result.usage)
 
+            eventHandler?.fireLLMStreamingCompleted(LLMStreamingCompletedContext(
+                runId = runId,
+                model = session.model,
+                responsePreview = result.content.take(100),
+                hasToolCalls = result.hasToolCalls,
+                toolCallCount = result.toolCalls.size,
+                promptTokens = result.usage?.promptTokens ?: 0,
+                completionTokens = result.usage?.completionTokens ?: 0,
+                totalTokens = result.usage?.totalTokens ?: 0
+            ))
             tracing?.emit(TraceEvent.LLMStreamCompleted(
                 eventId = tracing.newEventId(), runId = runId,
                 model = session.model, responsePreview = result.content.take(100),
@@ -352,6 +377,12 @@ class ToolExecutor(
                     eventId = tracing.newEventId(), runId = runId,
                     toolCallId = call.id, toolName = call.name, toolArgs = call.arguments
                 ))
+                eventHandler?.fireToolCallStarting(ToolCallStartingContext(
+                    runId = runId,
+                    toolCallId = call.id,
+                    toolName = call.name,
+                    toolArgs = call.arguments
+                ))
 
                 try {
                     val toolResult = registry.execute(call)
@@ -362,6 +393,13 @@ class ToolExecutor(
                         toolCallId = call.id, toolName = call.name,
                         toolArgs = call.arguments, result = toolResult.content.take(200)
                     ))
+                    eventHandler?.fireToolCallCompleted(ToolCallCompletedContext(
+                        runId = runId,
+                        toolCallId = call.id,
+                        toolName = call.name,
+                        toolArgs = call.arguments,
+                        result = toolResult.content
+                    ))
 
                     session.appendPrompt { message(ChatMessage.toolResult(truncateToolResult(toolResult))) }
                 } catch (e: Exception) {
@@ -369,6 +407,13 @@ class ToolExecutor(
                         eventId = tracing.newEventId(), runId = runId,
                         toolCallId = call.id, toolName = call.name,
                         toolArgs = call.arguments, error = TraceError.from(e)
+                    ))
+                    eventHandler?.fireToolCallFailed(ToolCallFailedContext(
+                        runId = runId,
+                        toolCallId = call.id,
+                        toolName = call.name,
+                        toolArgs = call.arguments,
+                        throwable = e
                     ))
                     throw e
                 }

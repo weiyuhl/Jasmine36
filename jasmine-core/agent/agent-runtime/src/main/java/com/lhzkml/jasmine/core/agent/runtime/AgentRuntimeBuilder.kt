@@ -75,6 +75,8 @@ class AgentRuntimeBuilder(private val configRepo: ConfigRepository) {
 
         return EventHandler.build {
             if (isEnabled(EventCategory.AGENT)) {
+                onAgentStarting { ctx -> emit("[EVENT] Agent 开始 [模型: ${ctx.model}, 工具数: ${ctx.toolCount}]\n") }
+                onAgentCompleted { ctx -> emit("[EVENT] Agent 完成: ${ctx.result?.take(80) ?: ""}\n") }
                 onAgentExecutionFailed { ctx -> emit("[EVENT] Agent 失败: ${ctx.throwable.message}\n") }
             }
             if (isEnabled(EventCategory.TOOL)) {
