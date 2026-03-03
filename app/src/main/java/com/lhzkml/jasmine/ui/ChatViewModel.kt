@@ -386,31 +386,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 messageHistory.addAll(messages.filter { it.role != "agent_log" })
                 chatStateManager.clearAll()
                 var usageIndex = 0
-                var pendingLogBlocks: MutableList<ContentBlock>? = null
                 for (msg in timedMessages) {
                     val time = ChatExecutor.formatTime(msg.createdAt)
                     when (msg.role) {
-                        "user" -> {
-                            if (pendingLogBlocks != null) {
-                                chatStateManager.addHistoryLogBlocks(pendingLogBlocks!!)
-                                pendingLogBlocks = null
-                            }
-                            chatStateManager.addUserMessage(msg.content, time)
-                        }
-                        "agent_log" -> {
-                            pendingLogBlocks = parseLogBlocks(msg.content)
-                        }
+                        "user" -> chatStateManager.addUserMessage(msg.content, time)
                         "assistant" -> {
                             val usage = usageList.getOrNull(usageIndex)
                             val usageLine = if (usage != null) {
                                 "[提示: ${usage.promptTokens} | 回复: ${usage.completionTokens} | 总计: ${usage.totalTokens}]"
                             } else ""
                             val blocks = mutableListOf<ContentBlock>()
-                            if (pendingLogBlocks != null) {
-                                blocks.addAll(pendingLogBlocks!!)
-                                pendingLogBlocks = null
-                            }
-                            if (msg.content.isNotEmpty()) {
+                            if (msg.content.contains(ChatExecutor.BLOCK_TEXT_SEPARATOR)) {
+                                val parts = msg.content.split(ChatExecutor.BLOCK_TEXT_SEPARATOR, limit = 2)
+                                val logPart = parts.getOrElse(0) { "" }
+                                val textPart = parts.getOrElse(1) { "" }
+                                if (logPart.isNotBlank()) {
+                                    blocks.addAll(parseLogBlocks(logPart))
+                                }
+                                if (textPart.isNotEmpty()) {
+                                    blocks.add(ContentBlock.Text(textPart))
+                                }
+                            } else if (msg.content.isNotEmpty()) {
                                 blocks.add(ContentBlock.Text(msg.content))
                             }
                             chatStateManager.addHistoryAiMessage(
@@ -421,9 +417,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             usageIndex++
                         }
                     }
-                }
-                if (pendingLogBlocks != null) {
-                    chatStateManager.addHistoryLogBlocks(pendingLogBlocks!!)
                 }
                 requestScrollToBottom()
             }

@@ -137,6 +137,7 @@ class ChatExecutor(
 
             setPersistence(buildPersistence())
 
+            val logContent: String
             if (toolsEnabled && registry != null) {
                 val agentResult = executeAgentMode(
                     message, client, config, registry, trimmedMessages,
@@ -144,13 +145,22 @@ class ChatExecutor(
                 )
                 result = agentResult.first
                 usage = agentResult.second
+                logContent = agentResult.third
             } else {
                 val chatResult = executeChatMode(
                     client, config, trimmedMessages, maxTokens, samplingParams
                 )
                 result = chatResult.first
                 usage = chatResult.second
+                logContent = chatResult.third
             }
+
+            val contentToSave = if (logContent.isNotBlank()) {
+                logContent + BLOCK_TEXT_SEPARATOR + result
+            } else {
+                result
+            }
+            conversationRepo.addMessage(currentConversationId()!!, ChatMessage.assistant(contentToSave))
 
             val assistantMsg = ChatMessage.assistant(result)
             messageHistory.add(assistantMsg)
@@ -161,13 +171,6 @@ class ChatExecutor(
                 lastInput = message,
                 messageHistory = listOf(userMsg, assistantMsg)
             )
-
-            val logContent = chatStateManager.getLogContent()
-            if (logContent.isNotBlank()) {
-                conversationRepo.addMessage(currentConversationId()!!, ChatMessage("agent_log", logContent))
-            }
-
-            conversationRepo.addMessage(currentConversationId()!!, assistantMsg)
 
             if (usage != null) {
                 conversationRepo.recordUsage(
@@ -231,7 +234,7 @@ class ChatExecutor(
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
         samplingParams: com.lhzkml.jasmine.core.prompt.model.SamplingParams
-    ): Pair<String, Usage?> {
+    ): Triple<String, Usage?, String> {
         var result = ""
         var usage: Usage? = null
 
@@ -335,12 +338,21 @@ class ChatExecutor(
                 }
                 result = streamResult.content
                 usage = streamResult.usage
-                withContext(Dispatchers.Main) {
-                    chatStateManager.finalizeStream(
-                        formatUsageShort(usage),
-                        formatTime(System.currentTimeMillis())
-                    )
+                val logContent = withContext(Dispatchers.Main) {
+                    chatStateManager.getLogContent().also {
+                        chatStateManager.finalizeStream(
+                            formatUsageShort(usage),
+                            formatTime(System.currentTimeMillis())
+                        )
+                    }
                 }
+                eventHandler?.fireAgentCompleted(AgentCompletedContext(
+                    runId = agentRunId,
+                    agentId = currentConversationId() ?: "unknown",
+                    result = result.take(200),
+                    totalIterations = 0
+                ))
+                return Triple(result, usage, logContent)
             }
 
             com.lhzkml.jasmine.core.config.AgentStrategyType.SINGLE_RUN_GRAPH -> {
@@ -350,23 +362,23 @@ class ChatExecutor(
                 )
                 result = graphResult ?: ""
 
-                withContext(Dispatchers.Main) {
-                    chatStateManager.finalizeStream(
-                        "",
-                        formatTime(System.currentTimeMillis())
-                    )
+                val logContent = withContext(Dispatchers.Main) {
+                    chatStateManager.getLogContent().also {
+                        chatStateManager.finalizeStream(
+                            "",
+                            formatTime(System.currentTimeMillis())
+                        )
+                    }
                 }
+                eventHandler?.fireAgentCompleted(AgentCompletedContext(
+                    runId = agentRunId,
+                    agentId = currentConversationId() ?: "unknown",
+                    result = result.take(200),
+                    totalIterations = 0
+                ))
+                return Triple(result, usage, logContent)
             }
         }
-
-        eventHandler?.fireAgentCompleted(AgentCompletedContext(
-            runId = agentRunId,
-            agentId = currentConversationId() ?: "unknown",
-            result = result.take(200),
-            totalIterations = 0
-        ))
-
-        return result to usage
     }
 
     private suspend fun executeGraphStrategy(
@@ -502,7 +514,7 @@ class ChatExecutor(
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
         samplingParams: com.lhzkml.jasmine.core.prompt.model.SamplingParams
-    ): Pair<String, Usage?> {
+    ): Triple<String, Usage?, String> {
         val resumeEnabled = ProviderManager.isStreamResumeEnabled(context)
 
         val streamResult = if (resumeEnabled) {
@@ -550,17 +562,22 @@ class ChatExecutor(
         val result = streamResult.content
         val usage = streamResult.usage
 
-        withContext(Dispatchers.Main) {
-            chatStateManager.finalizeStream(
-                formatUsageShort(usage),
-                formatTime(System.currentTimeMillis())
-            )
+        val logContent = withContext(Dispatchers.Main) {
+            chatStateManager.getLogContent().also {
+                chatStateManager.finalizeStream(
+                    formatUsageShort(usage),
+                    formatTime(System.currentTimeMillis())
+                )
+            }
         }
 
-        return result to usage
+        return Triple(result, usage, logContent)
     }
 
     companion object {
+        /** 合并保存时，日志块与最终回复的分隔符（U+001E Record Separator 双字符，避免与正文冲突） */
+        const val BLOCK_TEXT_SEPARATOR = "\u001E\u001E"
+
         fun formatUsageShort(usage: Usage?): String {
             if (usage == null) return ""
             return "[提示: ${usage.promptTokens} | 回复: ${usage.completionTokens} | 总计: ${usage.totalTokens}]"
