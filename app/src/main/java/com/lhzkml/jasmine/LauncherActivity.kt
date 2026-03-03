@@ -6,7 +6,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +16,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,10 +68,26 @@ class LauncherActivity : ComponentActivity() {
         }
 
         setContent {
+            val showPermissionDialog = remember { mutableStateOf(false) }
             JasmineTheme {
                 LauncherScreen(
                     onChatClick = { startChatMode() },
-                    onWorkspaceClick = { requestWorkspaceAccess() }
+                    onWorkspaceClick = {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
+                            !android.os.Environment.isExternalStorageManager()) {
+                            showPermissionDialog.value = true
+                        } else {
+                            folderPickerLauncher.launch(null)
+                        }
+                    },
+                    showPermissionDialog = showPermissionDialog.value,
+                    onDismissPermissionDialog = { showPermissionDialog.value = false },
+                    onGoToSettings = {
+                        showPermissionDialog.value = false
+                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                        intent.data = android.net.Uri.parse("package:$packageName")
+                        startActivity(intent)
+                    }
                 )
             }
         }
@@ -83,26 +101,6 @@ class LauncherActivity : ComponentActivity() {
         ProviderManager.setLastSession(this, true)
         startActivity(Intent(this, MainActivity::class.java))
         finish()
-    }
-
-    private fun requestWorkspaceAccess() {
-        // Android 11+ 需要 MANAGE_EXTERNAL_STORAGE 权限
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            if (!android.os.Environment.isExternalStorageManager()) {
-                AlertDialog.Builder(this)
-                    .setTitle("需要文件访问权限")
-                    .setMessage("Agent 模式需要访问设备文件。请在设置中授予\"所有文件访问\"权限。")
-                    .setPositiveButton("去设置") { _, _ ->
-                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                        intent.data = android.net.Uri.parse("package:$packageName")
-                        startActivity(intent)
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-                return
-            }
-        }
-        folderPickerLauncher.launch(null)
     }
 
     private fun resolveTreeUriToPath(treeUri: android.net.Uri): String {
@@ -123,7 +121,10 @@ class LauncherActivity : ComponentActivity() {
 @Composable
 fun LauncherScreen(
     onChatClick: () -> Unit,
-    onWorkspaceClick: () -> Unit
+    onWorkspaceClick: () -> Unit,
+    showPermissionDialog: Boolean = false,
+    onDismissPermissionDialog: () -> Unit = {},
+    onGoToSettings: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -199,5 +200,24 @@ fun LauncherScreen(
                 color = TextSecondary
             )
         }
+    }
+
+    if (showPermissionDialog) {
+        CustomAlertDialog(
+            onDismissRequest = onDismissPermissionDialog,
+            containerColor = Color.White,
+            title = { CustomText("需要文件访问权限", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = { CustomText("Agent 模式需要访问设备文件。请在设置中授予\"所有文件访问\"权限。", color = TextPrimary, fontSize = 14.sp) },
+            confirmButton = {
+                CustomTextButton(onClick = onGoToSettings, colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF2196F3))) {
+                    CustomText("去设置", fontSize = 14.sp)
+                }
+            },
+            dismissButton = {
+                CustomTextButton(onClick = onDismissPermissionDialog, colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)) {
+                    CustomText("取消", fontSize = 14.sp)
+                }
+            }
+        )
     }
 }

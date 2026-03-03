@@ -12,15 +12,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.MainActivity
+import com.lhzkml.jasmine.ui.components.CustomAlertDialog
 import com.lhzkml.jasmine.ui.components.CustomText
+import com.lhzkml.jasmine.ui.components.CustomTextButton
+import com.lhzkml.jasmine.ui.components.CustomButtonDefaults
 import com.lhzkml.jasmine.ui.theme.*
 
 @Composable
@@ -73,6 +79,57 @@ fun ChatScreen(viewModel: ChatViewModel) {
             onStop = { viewModel.stopGenerating() },
             onModelSelected = { viewModel.selectModel(it) },
             shortenModelName = { viewModel.shortenModelName(it) }
+        )
+    }
+
+    viewModel.checkpointRecoveryDialog?.let { state ->
+        CustomAlertDialog(
+            onDismissRequest = { state.onSelect(null) },
+            containerColor = Color.White,
+            title = { CustomText(state.title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    CustomText(text = state.message, fontSize = 14.sp, color = TextPrimary, modifier = Modifier.padding(bottom = 8.dp))
+                    state.labels.forEachIndexed { index, label ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { state.onSelect(index) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            CustomText(text = label, fontSize = 14.sp, color = TextPrimary)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                CustomTextButton(
+                    onClick = { state.onSelect(null) },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                ) { CustomText("取消", fontSize = 14.sp) }
+            },
+            dismissButton = null
+        )
+    }
+
+    viewModel.startupRecoveryDialog?.let { state ->
+        CustomAlertDialog(
+            onDismissRequest = { state.onConfirm(false) },
+            containerColor = Color.White,
+            title = { CustomText(state.title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = { CustomText(state.message, color = TextPrimary, fontSize = 14.sp) },
+            confirmButton = {
+                CustomTextButton(
+                    onClick = { state.onConfirm(true) },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF2196F3))
+                ) { CustomText("恢复", fontSize = 14.sp) }
+            },
+            dismissButton = {
+                CustomTextButton(
+                    onClick = { state.onConfirm(false) },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                ) { CustomText("忽略", fontSize = 14.sp) }
+            }
         )
     }
 }

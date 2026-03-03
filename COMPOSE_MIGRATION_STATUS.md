@@ -12,7 +12,6 @@
 | Activity | 20 | 0 | 1 (MainActivity) |
 | Fragment | 0 | 0 | - |
 | 列表项/布局 | - | 2 在用 | - |
-|  orphan 布局 | - | 2 (未引用) | - |
 
 **说明**：项目已移除 Material 3，Compose 页面统一使用自定义组件库（CustomButton、CustomText、CustomSwitch 等）。
 
@@ -75,7 +74,7 @@
 
 ---
 
-## 四、仍使用传统 XML 的布局（4 个）
+## 四、仍使用传统 XML 的布局（2 个）
 
 ### 1. activity_main.xml（在用）
 
@@ -87,29 +86,71 @@
 
 - **路径**：`app/src/main/res/layout/item_file_tree.xml`
 - **用途**：FileTreeAdapter 的 RecyclerView 列表项
-- **引用**：`FileTreeAdapter.kt` 第 88 行
-
-### 3. item_chat_log.xml（未引用）
-
-- **路径**：`app/src/main/res/layout/item_chat_log.xml`
-- **状态**：未在代码中引用，可能为历史遗留
-- **建议**：可删除
-
-### 4. item_model_picker.xml（未引用）
-
-- **路径**：`app/src/main/res/layout/item_model_picker.xml`
-- **状态**：未在代码中引用，可能为历史遗留
-- **建议**：可删除
+- **引用**：`app/src/main/java/com/lhzkml/jasmine/FileTreeAdapter.kt` 第 88 行
 
 ---
 
-## 五、其他使用传统 View 的代码
+## 五、使用传统 View 的代码（完整清单）
 
-### DialogHandlers.kt
+以下按文件列出所有使用传统 Android View 的代码，并标明负责的功能与调用链。
 
-- **用途**：`rankPrioritiesHandler` 等对话框
-- **实现**：`AlertDialog.Builder` + `ListView` + `android.R.layout.simple_list_item_1`
-- **位置**：`DialogHandlers.kt` 约 118 行
+### 1. MainActivity
+
+| 路径 | 传统 View 组件 | 负责功能 | 说明 |
+|-----|----------------|----------|------|
+| `app/src/main/java/com/lhzkml/jasmine/MainActivity.kt` | `setContentView`、`findViewById`、`DrawerLayout`、`LinearLayout`、`TextView`、`RecyclerView`、`ComposeView` | 主界面布局、左右抽屉、文件树 | 第 42 行 `setContentView(R.layout.activity_main)`；第 46-50 行 findViewById；第 57、64 行 ComposeView；第 79 行 `AlertDialog.Builder` 删除对话确认 |
+| 同上 | `AlertDialog.Builder` | 右侧抽屉中删除对话的确认对话框 | 第 79-84 行 |
+
+### 2. FileTreeAdapter
+
+| 路径 | 传统 View 组件 | 负责功能 | 说明 |
+|-----|----------------|----------|------|
+| `app/src/main/java/com/lhzkml/jasmine/FileTreeAdapter.kt` | `RecyclerView.Adapter`、`LayoutInflater.inflate`、`TextView`、`View.findViewById` | Agent 模式左侧文件树列表 | 第 14 行 extends RecyclerView.Adapter；第 88 行 inflate(R.layout.item_file_tree)；第 161-163 行 tvIndicator、tvIcon、tvName |
+
+### 3. DialogHandlers（Tool 工具交互）
+
+| 路径 | 传统 View 组件 | 负责功能 | 调用链 |
+|-----|----------------|----------|--------|
+| `app/src/main/java/com/lhzkml/jasmine/DialogHandlers.kt` | `AlertDialog.Builder`、`EditText` | **shellConfirmationHandler**：Shell 命令执行确认 | 第 24-31 行；由 `ChatViewModel` 注册到 `ToolRegistryBuilder`，Agent 执行 Shell 时弹出 |
+| 同上 | `AlertDialog.Builder`、`EditText` | **askUserHandler**：AI 单问题询问用户输入 | 第 38-56 行；Tool 调用 askUser 时弹出 |
+| 同上 | `AlertDialog.Builder`、`setSingleChoiceItems` | **singleSelectHandler**：AI 单选列表 | 第 63-82 行；Tool 调用 singleSelect 时弹出 |
+| 同上 | `AlertDialog.Builder`、`ListView`、`dialog.listView` | **multiSelectHandler**：AI 多选列表 | 第 88-110 行；Tool 调用 multiSelect 时弹出 |
+| 同上 | `AlertDialog.Builder`、`ListView`、`ArrayAdapter`、`android.R.layout.simple_list_item_1` | **rankPrioritiesHandler**：AI 排序优先级（可拖拽排序） | 第 116-147 行；Tool 调用 rankPriorities 时弹出 |
+| 同上 | `AlertDialog.Builder`、`LinearLayout`、`TextView`、`EditText`、`ScrollView` | **askMultipleQuestionsHandler**：AI 多问题批量输入 | 第 155-178 行；Tool 调用 askMultipleQuestions 时弹出 |
+
+**调用入口**：`app/src/main/java/com/lhzkml/jasmine/ui/ChatViewModel.kt` 第 187 行 `DialogHandlers.register(activity, toolRegistryBuilder)`
+
+### 4. CheckpointRecovery（检查点恢复）
+
+| 路径 | 传统 View 组件 | 负责功能 | 调用链 |
+|-----|----------------|----------|--------|
+| `app/src/main/java/com/lhzkml/jasmine/CheckpointRecovery.kt` | `AlertDialog.Builder`、`setItems` | **tryOfferCheckpointRecovery**：执行失败后选择恢复到的检查点 | 第 55-64 行；由 `ChatExecutor` 在 Agent 执行异常时调用（ChatViewModel 第 570-571 行） |
+| 同上 | `AlertDialog.Builder`、`setMessage`、`setPositiveButton` | **tryOfferStartupRecovery**：启动时检测到可恢复检查点的提示 | 第 129-145 行；由 `ChatViewModel.tryOfferStartupRecovery` 第 602 行在加载对话时调用 |
+
+### 5. LauncherActivity
+
+| 路径 | 传统 View 组件 | 负责功能 | 说明 |
+|-----|----------------|----------|------|
+| `app/src/main/java/com/lhzkml/jasmine/LauncherActivity.kt` | `AlertDialog.Builder` | 请求文件访问权限时的说明对话框 | 第 92-102 行；用户点击「选择工作区」且未授权时弹出 |
+
+### 6. SnapshotConfigActivity
+
+| 路径 | 传统 View 组件 | 负责功能 | 说明 |
+|-----|----------------|----------|------|
+| `app/src/main/java/com/lhzkml/jasmine/SnapshotConfigActivity.kt` | `AlertDialog.Builder` | **confirmClearCheckpoints**：内存模式下清除检查点提示 | 第 77-80 行；内存存储时点击「清除全部」 |
+| 同上 | `AlertDialog.Builder` | **confirmClearCheckpoints**：文件模式下清除检查点确认 | 第 84-96 行；文件存储时点击「清除全部」 |
+
+### 7. MessageBubbles（AI 消息 Markdown 渲染）
+
+| 路径 | 传统 View 组件 | 负责功能 | 说明 |
+|-----|----------------|----------|------|
+| `app/src/main/java/com/lhzkml/jasmine/ui/MessageBubbles.kt` | `AndroidView`、`TextView` | **AiContentBlocks**：AI 回复的 Markdown + LaTeX 渲染 | 第 120-138 行；通过 `AndroidView` 嵌入 `TextView`，配合 `MarkdownRenderer` 和 `LinkMovementMethod` |
+
+### 8. MarkdownRenderer
+
+| 路径 | 传统 View 组件 | 负责功能 | 说明 |
+|-----|----------------|----------|------|
+| `app/src/main/java/com/lhzkml/jasmine/MarkdownRenderer.kt` | `TextView`（参数） | Markdown 转 Spannable、LaTeX 占位替换 | 第 35 行 `render(text, textView)`；第 83-84 行 `injectLatexSpans` 需要 `TextView` 的 `currentTextColor`、`textSize`；被 `MessageBubbles.kt` 调用 |
 
 ---
 
@@ -125,10 +166,13 @@
 ### 低优先级
 
 2. **DialogHandlers 中的对话框**
-   - 将 `AlertDialog` + `ListView` 改为 Compose `CustomAlertDialog` + `LazyColumn` 等
+   - 将 `AlertDialog` + `ListView`/`EditText` 改为 Compose `CustomAlertDialog` + `LazyColumn`/`CustomTextField` 等
 
-3. **清理未使用布局**
-   - 删除 `item_chat_log.xml`、`item_model_picker.xml`（确认无引用后）
+3. **CheckpointRecovery、LauncherActivity、SnapshotConfigActivity 的 AlertDialog**
+   - 改为 Compose `CustomAlertDialog`
+
+4. **MessageBubbles 的 AndroidView + TextView**
+   - 需配合 MarkdownRenderer；可考虑 Compose 版 Markdown 渲染（如 Compose Markdown 库）替代
 
 ---
 
@@ -155,10 +199,13 @@
 ```
 app/src/main/res/layout/
 ├── activity_main.xml      # MainActivity 主布局
-├── item_file_tree.xml     # 文件树列表项
-├── item_chat_log.xml      # 未引用
-└── item_model_picker.xml  # 未引用
+└── item_file_tree.xml     # 文件树列表项（FileTreeAdapter）
 ```
+
+### 已删除的未引用布局
+
+- `item_chat_log.xml`（已删除）
+- `item_model_picker.xml`（已删除）
 
 ### 已删除的 XML 布局（历史迁移）
 

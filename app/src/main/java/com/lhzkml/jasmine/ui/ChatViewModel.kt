@@ -56,7 +56,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -98,6 +100,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val toolRegistryBuilder = ToolRegistryBuilder(AppConfig.configRepo())
     private val mcpConnectionManager get() = AppConfig.mcpConnectionManager()
     var userScrolledUp by mutableStateOf(false)
+
+    /** 检查点恢复选择对话框（执行失败时选择恢复轮次） */
+    var checkpointRecoveryDialog by mutableStateOf<CheckpointRecoveryDialogState?>(null)
+        private set
+
+    /** 启动恢复确认对话框 */
+    var startupRecoveryDialog by mutableStateOf<StartupRecoveryDialogState?>(null)
+        private set
+
+    data class CheckpointRecoveryDialogState(val title: String, val message: String, val labels: List<String>, val onSelect: (Int?) -> Unit)
+    data class StartupRecoveryDialogState(val title: String, val message: String, val onConfirm: (Boolean) -> Unit)
+
+    private suspend fun showCheckpointRecoveryDialog(title: String, message: String, labels: List<String>): Int? {
+        return suspendCancellableCoroutine { cont ->
+            checkpointRecoveryDialog = CheckpointRecoveryDialogState(title, message, labels) { index ->
+                checkpointRecoveryDialog = null
+                cont.resume(index)
+            }
+        }
+    }
+
+    private suspend fun showStartupRecoveryDialog(title: String, message: String): Boolean {
+        return suspendCancellableCoroutine { cont ->
+            startupRecoveryDialog = StartupRecoveryDialogState(title, message) { yes ->
+                startupRecoveryDialog = null
+                cont.resume(yes)
+            }
+        }
+    }
 
     var scrollToBottomTrigger by mutableStateOf(0)
         private set
@@ -545,7 +576,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messageHistory = messageHistory,
             conversationRepo = conversationRepo,
             autoScroll = { requestScrollToBottom() },
-            sendMessage = { sendMessage(it) }
+            sendMessage = { sendMessage(it) },
+            showCheckpointRecoveryDialog = { t, m, labels -> showCheckpointRecoveryDialog(t, m, labels) },
+            showStartupRecoveryDialog = { t, m -> showStartupRecoveryDialog(t, m) }
         )
 
         val executor = ChatExecutor(
@@ -597,7 +630,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messageHistory = messageHistory,
             conversationRepo = conversationRepo,
             autoScroll = { requestScrollToBottom() },
-            sendMessage = { sendMessage(it) }
+            sendMessage = { sendMessage(it) },
+            showCheckpointRecoveryDialog = { t, m, labels -> showCheckpointRecoveryDialog(t, m, labels) },
+            showStartupRecoveryDialog = { t, m -> showStartupRecoveryDialog(t, m) }
         )
         checkpointRecovery.tryOfferStartupRecovery(conversationId)
     }

@@ -45,7 +45,16 @@ class SnapshotConfigActivity : ComponentActivity() {
                             startActivity(Intent(this, CheckpointManagerActivity::class.java))
                         }
                     },
-                    onClearCheckpoints = { confirmClearCheckpoints() },
+                    onClearCheckpoints = { /* 由 SnapshotConfigScreen 内部处理 */ },
+                    onPerformClear = {
+                        val snapshotDir = getExternalFilesDir("snapshots")
+                        if (snapshotDir != null && snapshotDir.exists()) {
+                            snapshotDir.deleteRecursively()
+                            snapshotDir.mkdirs()
+                        }
+                        Toast.makeText(this, "已清除", Toast.LENGTH_SHORT).show()
+                        recreate()
+                    },
                     getCheckpointCount = { getCheckpointCountText() }
                 )
             }
@@ -71,31 +80,6 @@ class SnapshotConfigActivity : ComponentActivity() {
         }
     }
 
-    private fun confirmClearCheckpoints() {
-        val config = AppConfig.configRepo()
-        if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setMessage("内存存储模式下，检查点会在 APP 关闭时自动清除。")
-                .setPositiveButton("确定", null)
-                .show()
-            return
-        }
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("清除检查点")
-            .setMessage("确定要删除所有已保存的检查点吗？此操作不可撤销。")
-            .setPositiveButton("删除") { _, _ ->
-                val snapshotDir = getExternalFilesDir("snapshots")
-                if (snapshotDir != null && snapshotDir.exists()) {
-                    snapshotDir.deleteRecursively()
-                    snapshotDir.mkdirs()
-                }
-                Toast.makeText(this, "已清除", Toast.LENGTH_SHORT).show()
-                recreate() // 刷新界面
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
 }
 
 @Composable
@@ -103,11 +87,14 @@ fun SnapshotConfigScreen(
     onBack: () -> Unit,
     onViewCheckpoints: () -> Unit,
     onClearCheckpoints: () -> Unit,
+    onPerformClear: () -> Unit = {},
     getCheckpointCount: () -> String
 ) {
     val config = AppConfig.configRepo()
     
     var enabled by remember { mutableStateOf(config.isSnapshotEnabled()) }
+    var showMemoryInfoDialog by remember { mutableStateOf(false) }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
     var storageType by remember { mutableStateOf(config.getSnapshotStorage()) }
     var autoCheckpoint by remember { mutableStateOf(config.isSnapshotAutoCheckpoint()) }
     var rollbackStrategy by remember { mutableStateOf(config.getSnapshotRollbackStrategy()) }
@@ -383,7 +370,13 @@ fun SnapshotConfigScreen(
                             .clip(RoundedCornerShape(8.dp))
                             .border(1.dp, Color(0xFFE53935), RoundedCornerShape(8.dp))
                             .background(Color(0xFFE53935).copy(alpha = 0.06f))
-                            .clickable { onClearCheckpoints() }
+                            .clickable {
+                                if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
+                                    showMemoryInfoDialog = true
+                                } else {
+                                    showClearConfirmDialog = true
+                                }
+                            }
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -391,6 +384,46 @@ fun SnapshotConfigScreen(
                     }
                 }
             }
+        }
+
+        if (showMemoryInfoDialog) {
+            CustomAlertDialog(
+                onDismissRequest = { showMemoryInfoDialog = false },
+                containerColor = Color.White,
+                title = { CustomText("提示", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                text = { CustomText("内存存储模式下，检查点会在 APP 关闭时自动清除。", color = TextPrimary, fontSize = 14.sp) },
+                confirmButton = {
+                    CustomTextButton(
+                        onClick = { showMemoryInfoDialog = false },
+                        colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF2196F3))
+                    ) { CustomText("确定", fontSize = 14.sp) }
+                },
+                dismissButton = null
+            )
+        }
+
+        if (showClearConfirmDialog) {
+            CustomAlertDialog(
+                onDismissRequest = { showClearConfirmDialog = false },
+                containerColor = Color.White,
+                title = { CustomText("清除检查点", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                text = { CustomText("确定要删除所有已保存的检查点吗？此操作不可撤销。", color = TextPrimary, fontSize = 14.sp) },
+                confirmButton = {
+                    CustomTextButton(
+                        onClick = {
+                            showClearConfirmDialog = false
+                            onPerformClear()
+                        },
+                        colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFFE53935))
+                    ) { CustomText("删除", fontSize = 14.sp) }
+                },
+                dismissButton = {
+                    CustomTextButton(
+                        onClick = { showClearConfirmDialog = false },
+                        colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                    ) { CustomText("取消", fontSize = 14.sp) }
+                }
+            )
         }
     }
 }

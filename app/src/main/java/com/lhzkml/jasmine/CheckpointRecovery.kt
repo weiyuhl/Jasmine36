@@ -1,17 +1,17 @@
 package com.lhzkml.jasmine
 
-import androidx.appcompat.app.AlertDialog
 import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
  * 快照/检查点恢复逻辑，从 MainActivity 中提取。
  * 处理执行失败后的检查点恢复选择，以及启动时的检查点恢复提示。
+ * @param showCheckpointRecoveryDialog 显示检查点选择对话框 (title, message, labels)，返回用户选择的索引或 null
+ * @param showStartupRecoveryDialog 显示启动恢复确认对话框，返回用户是否确认
  */
 class CheckpointRecovery(
     private val activity: MainActivity,
@@ -19,7 +19,9 @@ class CheckpointRecovery(
     private val messageHistory: MutableList<ChatMessage>,
     private val conversationRepo: ConversationRepository,
     private val autoScroll: () -> Unit,
-    private val sendMessage: (String) -> Unit
+    private val sendMessage: (String) -> Unit,
+    private val showCheckpointRecoveryDialog: suspend (String, String, List<String>) -> Int?,
+    private val showStartupRecoveryDialog: suspend (String, String) -> Boolean
 ) {
 
     suspend fun tryOfferCheckpointRecovery(
@@ -48,22 +50,10 @@ class CheckpointRecovery(
             val time = timeFormat.format(java.util.Date(cp.createdAt))
             val userMsg = cp.messageHistory.firstOrNull { it.role == "user" }?.content?.take(30) ?: ""
             "[$time] ${cp.nodePath} - $userMsg"
-        }.toTypedArray()
-
-        val deferred = CompletableDeferred<Int?>()
-        withContext(Dispatchers.Main) {
-            AlertDialog.Builder(activity)
-                .setTitle("恢复到历史对话轮次 [$strategyName]")
-                .setMessage("执行失败: ${error.message?.take(100)}\n\n选择要恢复到的对话轮次:")
-                .setItems(checkpointLabels) { _, which ->
-                    deferred.complete(which)
-                }
-                .setNegativeButton("取消") { _, _ -> deferred.complete(null) }
-                .setCancelable(false)
-                .show()
         }
+        val errorMsg = "执行失败: ${error.message?.take(100)}\n\n选择要恢复到的对话轮次:"
 
-        val selectedIndex = deferred.await() ?: return
+        val selectedIndex = showCheckpointRecoveryDialog("恢复到历史对话轮次 [$strategyName]", errorMsg, checkpointLabels) ?: return
         val selectedCheckpoint = sortedCpsDesc[selectedIndex]
 
         val selectedIndexInAsc = sortedCps.indexOf(selectedCheckpoint)
@@ -124,25 +114,14 @@ class CheckpointRecovery(
         val latest = allCheckpoints.maxByOrNull { it.createdAt } ?: return
         val timeStr = timeFormat.format(java.util.Date(latest.createdAt))
 
-        val deferred = CompletableDeferred<Boolean>()
-        withContext(Dispatchers.Main) {
-            AlertDialog.Builder(activity)
-                .setTitle("检测到可恢复的对话状态")
-                .setMessage(
-                    "此对话有更完整的检查点记录:\n\n" +
-                    "共 $totalTurns 轮对话检查点\n" +
-                    "最后轮次: ${latest.nodePath}\n" +
-                    "时间: $timeStr\n\n" +
-                    "是否从检查点恢复完整对话？"
-                )
-                .setPositiveButton("恢复") { _, _ -> deferred.complete(true) }
-                .setNegativeButton("忽略") { _, _ -> deferred.complete(false) }
-                .setCancelable(true)
-                .setOnCancelListener { deferred.complete(false) }
-                .show()
-        }
+        val title = "检测到可恢复的对话状态"
+        val message = "此对话有更完整的检查点记录:\n\n" +
+                "共 $totalTurns 轮对话检查点\n" +
+                "最后轮次: ${latest.nodePath}\n" +
+                "时间: $timeStr\n\n" +
+                "是否从检查点恢复完整对话？"
 
-        if (!deferred.await()) return
+        if (!showStartupRecoveryDialog(title, message)) return
 
         val systemPrompt = ProviderManager.getDefaultSystemPrompt(activity)
         val rebuilt = service.rebuildHistory(conversationId, systemPrompt = systemPrompt)
