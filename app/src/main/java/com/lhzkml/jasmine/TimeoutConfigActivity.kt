@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -15,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -138,16 +140,10 @@ fun TimeoutConfigScreen(onBack: () -> Unit) {
                     fontSize = 13.sp,
                     color = TextSecondary
                 )
-                OutlinedTextField(
+                TimeoutInputField(
                     value = requestTimeout,
                     onValueChange = { requestTimeout = it },
-                    placeholder = { Text("0", fontSize = 14.sp) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Accent,
-                        unfocusedBorderColor = Color(0xFFE0E0E0)
-                    )
+                    placeholder = "0"
                 )
                 
                 // Socket 读取超时
@@ -157,16 +153,10 @@ fun TimeoutConfigScreen(onBack: () -> Unit) {
                     color = TextSecondary,
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                OutlinedTextField(
+                TimeoutInputField(
                     value = socketTimeout,
                     onValueChange = { socketTimeout = it },
-                    placeholder = { Text("0", fontSize = 14.sp) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Accent,
-                        unfocusedBorderColor = Color(0xFFE0E0E0)
-                    )
+                    placeholder = "0"
                 )
                 
                 // 连接超时
@@ -176,16 +166,10 @@ fun TimeoutConfigScreen(onBack: () -> Unit) {
                     color = TextSecondary,
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                OutlinedTextField(
+                TimeoutInputField(
                     value = connectTimeout,
                     onValueChange = { connectTimeout = it },
-                    placeholder = { Text("0", fontSize = 14.sp) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Accent,
-                        unfocusedBorderColor = Color(0xFFE0E0E0)
-                    )
+                    placeholder = "0"
                 )
             }
             
@@ -248,19 +232,53 @@ fun TimeoutConfigScreen(onBack: () -> Unit) {
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 8.dp)
                     )
-                    OutlinedTextField(
+                    TimeoutInputField(
                         value = maxRetries,
                         onValueChange = { maxRetries = it },
-                        placeholder = { Text("3", fontSize = 14.sp) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Accent,
-                            unfocusedBorderColor = Color(0xFFE0E0E0)
-                        )
+                        placeholder = "3"
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+fun TimeoutInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .background(Color.White, MaterialTheme.shapes.medium)
+            .border(1.dp, Color(0xFFE8E8E8), MaterialTheme.shapes.medium)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            textStyle = LocalTextStyle.current.copy(
+                fontSize = 14.sp,
+                color = TextPrimary
+            ),
+            cursorBrush = SolidColor(TextPrimary),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { innerTextField ->
+                if (value.isEmpty()) {
+                    Text(
+                        placeholder,
+                        fontSize = 14.sp,
+                        color = TextSecondary
+                    )
+                }
+                innerTextField()
+            }
+        )
     }
 }
