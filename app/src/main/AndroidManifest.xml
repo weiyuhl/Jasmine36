@@ -84,6 +84,12 @@
         <activity
             android:name=".TokenManagementActivity"
             android:exported="false" />
+        <activity
+            android:name=".SystemPromptConfigActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SamplingParamsConfigActivity"
+            android:exported="false" />
 
     </application>
 

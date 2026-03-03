@@ -77,7 +77,6 @@ fun SettingsScreen(
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     
     var toolsEnabled by remember { mutableStateOf(ProviderManager.isToolsEnabled(context)) }
-    var showSystemPromptDialog by remember { mutableStateOf(false) }
     
     // 状态刷新触发器
     var refreshTrigger by remember { mutableStateOf(0) }
@@ -303,25 +302,30 @@ fun SettingsScreen(
             }
             
             // 采样参数
-            SamplingParamsCard(refreshTrigger)
+            key(refreshTrigger) {
+                SettingsItem(
+                    title = "采样参数",
+                    subtitle = "控制 AI 回复的随机性和多样性",
+                    value = getSamplingParamsInfo(context),
+                    onClick = {
+                        val intent = Intent(context, SamplingParamsConfigActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                )
+            }
             
             // 系统提示词
             key(refreshTrigger) {
                 SettingsItem(
                     title = "系统提示词",
                     value = getSystemPromptPreview(context),
-                    onClick = { showSystemPromptDialog = true }
+                    onClick = {
+                        val intent = Intent(context, SystemPromptConfigActivity::class.java)
+                        context.startActivity(intent)
+                    }
                 )
             }
         }
-    }
-    
-    // 对话框
-    if (showSystemPromptDialog) {
-        SystemPromptDialog(
-            onDismiss = { showSystemPromptDialog = false },
-            onSave = { refreshTrigger++ }
-        )
     }
 }
 
@@ -417,270 +421,6 @@ fun SettingsSwitchItem(
                 )
             )
         }
-    }
-}
-
-@Composable
-fun SamplingParamsCard(refreshTrigger: Int) {
-    val context = LocalContext.current
-    val config = ProviderManager.getActiveConfig()
-    val supportsTopK = config?.apiType == ApiType.CLAUDE || config?.apiType == ApiType.GEMINI
-    
-    var temperature by remember(refreshTrigger) { 
-        mutableStateOf(ProviderManager.getTemperature(context))
-    }
-    var topP by remember(refreshTrigger) { 
-        mutableStateOf(ProviderManager.getTopP(context))
-    }
-    var topK by remember(refreshTrigger) { 
-        mutableStateOf(ProviderManager.getTopK(context))
-    }
-    
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-            Text(
-                text = "采样参数",
-                fontSize = 15.sp,
-                color = TextPrimary
-            )
-            Text(
-                text = "控制 AI 回复的随机性和多样性",
-                fontSize = 12.sp,
-                color = TextSecondary,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-            
-            // Temperature
-            Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Temperature", fontSize = 14.sp, color = TextPrimary)
-                    Text(
-                        text = if (temperature < 0f) "默认" else String.format("%.2f", temperature),
-                        fontSize = 13.sp,
-                        color = TextSecondary
-                    )
-                }
-                Slider(
-                    value = if (temperature < 0f) 0f else temperature,
-                    onValueChange = { value ->
-                        temperature = if (value == 0f) -1f else value
-                        ProviderManager.setTemperature(context, temperature)
-                    },
-                    valueRange = 0f..2f,
-                    steps = 199,
-                    modifier = Modifier.padding(top = 4.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = TextPrimary,
-                        activeTrackColor = TextPrimary,
-                        inactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
-                        activeTickColor = TextPrimary,
-                        inactiveTickColor = TextSecondary.copy(alpha = 0.3f),
-                        disabledThumbColor = TextSecondary,
-                        disabledActiveTrackColor = TextSecondary,
-                        disabledInactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
-                        disabledActiveTickColor = TextSecondary,
-                        disabledInactiveTickColor = TextSecondary.copy(alpha = 0.3f)
-                    )
-                )
-                Text(
-                    text = "值越高回复越多样，越低越确定 (0~2.0)",
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-            }
-            
-            // Top P
-            Column(modifier = Modifier.padding(bottom = if (supportsTopK) 12.dp else 0.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Top P", fontSize = 14.sp, color = TextPrimary)
-                    Text(
-                        text = if (topP < 0f) "默认" else String.format("%.2f", topP),
-                        fontSize = 13.sp,
-                        color = TextSecondary
-                    )
-                }
-                Slider(
-                    value = if (topP < 0f) 0f else topP,
-                    onValueChange = { value ->
-                        topP = if (value == 0f) -1f else value
-                        ProviderManager.setTopP(context, topP)
-                    },
-                    valueRange = 0f..1f,
-                    steps = 99,
-                    modifier = Modifier.padding(top = 4.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = TextPrimary,
-                        activeTrackColor = TextPrimary,
-                        inactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
-                        activeTickColor = TextPrimary,
-                        inactiveTickColor = TextSecondary.copy(alpha = 0.3f),
-                        disabledThumbColor = TextSecondary,
-                        disabledActiveTrackColor = TextSecondary,
-                        disabledInactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
-                        disabledActiveTickColor = TextSecondary,
-                        disabledInactiveTickColor = TextSecondary.copy(alpha = 0.3f)
-                    )
-                )
-                Text(
-                    text = "核采样阈值，所有供应商均支持 (0~1.0)",
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-            }
-            
-            // Top K (仅 Claude 和 Gemini)
-            if (supportsTopK) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Top K", fontSize = 14.sp, color = TextPrimary)
-                        Text(
-                            text = if (topK < 0) "默认" else topK.toString(),
-                            fontSize = 13.sp,
-                            color = TextSecondary
-                        )
-                    }
-                    Slider(
-                        value = if (topK < 0) 0f else topK.toFloat(),
-                        onValueChange = { value ->
-                            topK = if (value == 0f) -1 else value.toInt()
-                            ProviderManager.setTopK(context, topK)
-                        },
-                        valueRange = 0f..100f,
-                        steps = 99,
-                        modifier = Modifier.padding(top = 4.dp),
-                        colors = SliderDefaults.colors(
-                            thumbColor = TextPrimary,
-                            activeTrackColor = TextPrimary,
-                            inactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
-                            activeTickColor = TextPrimary,
-                            inactiveTickColor = TextSecondary.copy(alpha = 0.3f),
-                            disabledThumbColor = TextSecondary,
-                            disabledActiveTrackColor = TextSecondary,
-                            disabledInactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
-                            disabledActiveTickColor = TextSecondary,
-                            disabledInactiveTickColor = TextSecondary.copy(alpha = 0.3f)
-                        )
-                    )
-                    Text(
-                        text = "仅 Claude 和 Gemini 支持 (0~100)",
-                        fontSize = 11.sp,
-                        color = TextSecondary
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SystemPromptDialog(onDismiss: () -> Unit, onSave: () -> Unit) {
-    val context = LocalContext.current
-    var value by remember { mutableStateOf(ProviderManager.getDefaultSystemPrompt(context)) }
-    var showPresets by remember { mutableStateOf(false) }
-    
-    if (showPresets) {
-        AlertDialog(
-            onDismissRequest = { showPresets = false },
-            containerColor = Color.White,
-            titleContentColor = TextPrimary,
-            title = { Text("选择预设模板", color = TextPrimary) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                ) {
-                    SystemPromptManager.presets.forEach { preset ->
-                        TextButton(
-                            onClick = {
-                                value = preset.prompt
-                                showPresets = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
-                        ) {
-                            Text(preset.name, modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { showPresets = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
-                ) {
-                    Text("关闭")
-                }
-            }
-        )
-    } else {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            containerColor = Color.White,
-            titleContentColor = TextPrimary,
-            textContentColor = TextPrimary,
-            title = { Text("系统提示词", color = TextPrimary) },
-            text = {
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    maxLines = 8,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = TextPrimary,
-                        unfocusedBorderColor = TextSecondary,
-                        cursorColor = TextPrimary
-                    )
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (value.trim().isNotEmpty()) {
-                            ProviderManager.setDefaultSystemPrompt(context, value.trim())
-                            onSave()
-                            onDismiss()
-                        }
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
-                ) {
-                    Text("保存")
-                }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(
-                        onClick = { showPresets = true },
-                        colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
-                    ) {
-                        Text("预设模板")
-                    }
-                    TextButton(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
-                    ) {
-                        Text("取消")
-                    }
-                }
-            }
-        )
     }
 }
 
@@ -825,6 +565,25 @@ private fun getMaxTokensInfo(context: android.content.Context): String {
 private fun getSystemPromptPreview(context: android.content.Context): String {
     val prompt = ProviderManager.getDefaultSystemPrompt(context)
     return if (prompt.length > 30) prompt.substring(0, 30) + "..." else prompt
+}
+
+private fun getSamplingParamsInfo(context: android.content.Context): String {
+    val temperature = ProviderManager.getTemperature(context)
+    val topP = ProviderManager.getTopP(context)
+    val topK = ProviderManager.getTopK(context)
+    
+    val parts = mutableListOf<String>()
+    if (temperature >= 0f) {
+        parts.add("T: ${String.format("%.2f", temperature)}")
+    }
+    if (topP >= 0f) {
+        parts.add("P: ${String.format("%.2f", topP)}")
+    }
+    if (topK >= 0) {
+        parts.add("K: $topK")
+    }
+    
+    return if (parts.isEmpty()) "全部使用默认值" else parts.joinToString(" · ")
 }
 
 private fun formatNumber(n: Int): String {
