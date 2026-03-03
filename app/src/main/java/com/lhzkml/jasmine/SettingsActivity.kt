@@ -429,7 +429,14 @@ fun SamplingParamsCard(refreshTrigger: Int) {
                     colors = SliderDefaults.colors(
                         thumbColor = TextPrimary,
                         activeTrackColor = TextPrimary,
-                        inactiveTrackColor = TextSecondary.copy(alpha = 0.3f)
+                        inactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
+                        activeTickColor = TextPrimary,
+                        inactiveTickColor = TextSecondary.copy(alpha = 0.3f),
+                        disabledThumbColor = TextSecondary,
+                        disabledActiveTrackColor = TextSecondary,
+                        disabledInactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
+                        disabledActiveTickColor = TextSecondary,
+                        disabledInactiveTickColor = TextSecondary.copy(alpha = 0.3f)
                     )
                 )
                 Text(
@@ -464,7 +471,14 @@ fun SamplingParamsCard(refreshTrigger: Int) {
                     colors = SliderDefaults.colors(
                         thumbColor = TextPrimary,
                         activeTrackColor = TextPrimary,
-                        inactiveTrackColor = TextSecondary.copy(alpha = 0.3f)
+                        inactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
+                        activeTickColor = TextPrimary,
+                        inactiveTickColor = TextSecondary.copy(alpha = 0.3f),
+                        disabledThumbColor = TextSecondary,
+                        disabledActiveTrackColor = TextSecondary,
+                        disabledInactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
+                        disabledActiveTickColor = TextSecondary,
+                        disabledInactiveTickColor = TextSecondary.copy(alpha = 0.3f)
                     )
                 )
                 Text(
@@ -500,7 +514,14 @@ fun SamplingParamsCard(refreshTrigger: Int) {
                         colors = SliderDefaults.colors(
                             thumbColor = TextPrimary,
                             activeTrackColor = TextPrimary,
-                            inactiveTrackColor = TextSecondary.copy(alpha = 0.3f)
+                            inactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
+                            activeTickColor = TextPrimary,
+                            inactiveTickColor = TextSecondary.copy(alpha = 0.3f),
+                            disabledThumbColor = TextSecondary,
+                            disabledActiveTrackColor = TextSecondary,
+                            disabledInactiveTrackColor = TextSecondary.copy(alpha = 0.3f),
+                            disabledActiveTickColor = TextSecondary,
+                            disabledInactiveTickColor = TextSecondary.copy(alpha = 0.3f)
                         )
                     )
                     Text(
