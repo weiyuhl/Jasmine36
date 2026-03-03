@@ -270,24 +270,26 @@ fun ToolConfigScreen(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     
-                    OutlinedTextField(
+                    TextField(
                         value = brightDataKey,
                         onValueChange = { brightDataKey = it },
-                        placeholder = { Text("输入 BrightData SERP API Key", color = TextSecondary) },
+                        placeholder = { Text("输入 BrightData SERP API Key", fontSize = 14.sp, color = TextSecondary) },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(44.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
+                        colors = TextFieldDefaults.colors(
                             focusedTextColor = TextPrimary,
                             unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = TextPrimary,
-                            unfocusedBorderColor = TextSecondary,
-                            cursorColor = TextPrimary,
                             focusedContainerColor = BgInput,
-                            unfocusedContainerColor = BgInput
+                            unfocusedContainerColor = BgInput,
+                            cursorColor = TextPrimary,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent
                         ),
-                        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp)
+                        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                        shape = MaterialTheme.shapes.small
                     )
                 }
             }
