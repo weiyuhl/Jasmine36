@@ -2,140 +2,56 @@ package com.lhzkml.jasmine
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.View
-import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy
 import com.lhzkml.jasmine.core.config.SnapshotStorageType
+import com.lhzkml.jasmine.ui.theme.*
 
-class SnapshotConfigActivity : AppCompatActivity() {
-
-    private lateinit var switchEnabled: SwitchCompat
-    private lateinit var layoutConfigContent: LinearLayout
-    private lateinit var cardMemory: LinearLayout
-    private lateinit var cardFile: LinearLayout
-    private lateinit var tvMemoryCheck: TextView
-    private lateinit var tvFileCheck: TextView
-    private lateinit var switchAutoCheckpoint: SwitchCompat
-    private lateinit var cardRestartFromNode: LinearLayout
-    private lateinit var cardSkipNode: LinearLayout
-    private lateinit var cardDefaultOutput: LinearLayout
-    private lateinit var tvRestartCheck: TextView
-    private lateinit var tvSkipCheck: TextView
-    private lateinit var tvDefaultCheck: TextView
-    private lateinit var tvCheckpointCount: TextView
-
+class SnapshotConfigActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_snapshot_config)
-
-        val config = AppConfig.configRepo()
-
-        findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
-
-        switchEnabled = findViewById(R.id.switchEnabled)
-        layoutConfigContent = findViewById(R.id.layoutConfigContent)
-
-        switchEnabled.isChecked = config.isSnapshotEnabled()
-        layoutConfigContent.visibility = if (switchEnabled.isChecked) View.VISIBLE else View.GONE
-        switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-            config.setSnapshotEnabled(isChecked)
-            layoutConfigContent.visibility = if (isChecked) View.VISIBLE else View.GONE
-        }
-
-        cardMemory = findViewById(R.id.cardMemory)
-        cardFile = findViewById(R.id.cardFile)
-        tvMemoryCheck = findViewById(R.id.tvMemoryCheck)
-        tvFileCheck = findViewById(R.id.tvFileCheck)
-        switchAutoCheckpoint = findViewById(R.id.switchAutoCheckpoint)
-        cardRestartFromNode = findViewById(R.id.cardRestartFromNode)
-        cardSkipNode = findViewById(R.id.cardSkipNode)
-        cardDefaultOutput = findViewById(R.id.cardDefaultOutput)
-        tvRestartCheck = findViewById(R.id.tvRestartCheck)
-        tvSkipCheck = findViewById(R.id.tvSkipCheck)
-        tvDefaultCheck = findViewById(R.id.tvDefaultCheck)
-        tvCheckpointCount = findViewById(R.id.tvCheckpointCount)
-
-        switchAutoCheckpoint.isChecked = config.isSnapshotAutoCheckpoint()
-        switchAutoCheckpoint.setOnCheckedChangeListener { _, isChecked ->
-            config.setSnapshotAutoCheckpoint(isChecked)
-        }
-
-        cardMemory.setOnClickListener {
-            config.setSnapshotStorage(SnapshotStorageType.MEMORY)
-            refreshStorage()
-        }
-        cardFile.setOnClickListener {
-            config.setSnapshotStorage(SnapshotStorageType.FILE)
-            refreshStorage()
-        }
-
-        cardRestartFromNode.setOnClickListener {
-            config.setSnapshotRollbackStrategy(RollbackStrategy.RESTART_FROM_NODE)
-            refreshRollback()
-        }
-        cardSkipNode.setOnClickListener {
-            config.setSnapshotRollbackStrategy(RollbackStrategy.SKIP_NODE)
-            refreshRollback()
-        }
-        cardDefaultOutput.setOnClickListener {
-            config.setSnapshotRollbackStrategy(RollbackStrategy.USE_DEFAULT_OUTPUT)
-            refreshRollback()
-        }
-
-        // 检查点管理 — 跳转到独立界面
-        findViewById<View>(R.id.btnViewCheckpoints).setOnClickListener {
-            if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
-                Toast.makeText(this, "内存存储模式下无法查看检查点，请切换到文件存储", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+        setContent {
+            JasmineTheme {
+                SnapshotConfigScreen(
+                    onBack = { finish() },
+                    onViewCheckpoints = {
+                        val config = AppConfig.configRepo()
+                        if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
+                            Toast.makeText(this, "内存存储模式下无法查看检查点，请切换到文件存储", Toast.LENGTH_SHORT).show()
+                        } else {
+                            startActivity(Intent(this, CheckpointManagerActivity::class.java))
+                        }
+                    },
+                    onClearCheckpoints = { confirmClearCheckpoints() },
+                    getCheckpointCount = { getCheckpointCountText() }
+                )
             }
-            startActivity(Intent(this, CheckpointManagerActivity::class.java))
-        }
-        findViewById<View>(R.id.btnClearCheckpoints).setOnClickListener { confirmClearCheckpoints() }
-
-        refreshStorage()
-        refreshRollback()
-        refreshCheckpointCount()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        refreshCheckpointCount()
-    }
-
-    private fun refreshStorage() {
-        val config = AppConfig.configRepo()
-        val current = config.getSnapshotStorage()
-        val isMem = current == SnapshotStorageType.MEMORY
-        cardMemory.setBackgroundResource(if (isMem) R.drawable.bg_strategy_card_selected else R.drawable.bg_strategy_card)
-        cardFile.setBackgroundResource(if (!isMem) R.drawable.bg_strategy_card_selected else R.drawable.bg_strategy_card)
-        tvMemoryCheck.visibility = if (isMem) View.VISIBLE else View.GONE
-        tvFileCheck.visibility = if (!isMem) View.VISIBLE else View.GONE
-    }
-
-    private fun refreshRollback() {
-        val config = AppConfig.configRepo()
-        val current = config.getSnapshotRollbackStrategy()
-        val cards = mapOf(
-            RollbackStrategy.RESTART_FROM_NODE to Triple(cardRestartFromNode, tvRestartCheck, true),
-            RollbackStrategy.SKIP_NODE to Triple(cardSkipNode, tvSkipCheck, true),
-            RollbackStrategy.USE_DEFAULT_OUTPUT to Triple(cardDefaultOutput, tvDefaultCheck, true)
-        )
-        for ((strategy, triple) in cards) {
-            val (card, check, _) = triple
-            val selected = strategy == current
-            card.setBackgroundResource(if (selected) R.drawable.bg_strategy_card_selected else R.drawable.bg_strategy_card)
-            check.visibility = if (selected) View.VISIBLE else View.GONE
         }
     }
 
-    private fun refreshCheckpointCount() {
+    private fun getCheckpointCountText(): String {
         val config = AppConfig.configRepo()
-        if (config.getSnapshotStorage() == SnapshotStorageType.FILE) {
+        return if (config.getSnapshotStorage() == SnapshotStorageType.FILE) {
             val snapshotDir = getExternalFilesDir("snapshots")
             if (snapshotDir != null && snapshotDir.exists()) {
                 val agentDirs = snapshotDir.listFiles()?.filter { it.isDirectory } ?: emptyList()
@@ -143,26 +59,26 @@ class SnapshotConfigActivity : AppCompatActivity() {
                 for (dir in agentDirs) {
                     totalCheckpoints += dir.listFiles()?.count { it.extension == "json" } ?: 0
                 }
-                tvCheckpointCount.text = "文件存储: ${agentDirs.size} 个会话, $totalCheckpoints 个检查点"
+                "文件存储: ${agentDirs.size} 个会话, $totalCheckpoints 个检查点"
             } else {
-                tvCheckpointCount.text = "文件存储: 暂无检查点"
+                "文件存储: 暂无检查点"
             }
         } else {
-            tvCheckpointCount.text = "内存存储: 检查点仅在运行时有效"
+            "内存存储: 检查点仅在运行时有效"
         }
     }
 
     private fun confirmClearCheckpoints() {
         val config = AppConfig.configRepo()
         if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
-            AlertDialog.Builder(this)
+            androidx.appcompat.app.AlertDialog.Builder(this)
                 .setMessage("内存存储模式下，检查点会在 APP 关闭时自动清除。")
                 .setPositiveButton("确定", null)
                 .show()
             return
         }
 
-        AlertDialog.Builder(this)
+        androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("清除检查点")
             .setMessage("确定要删除所有已保存的检查点吗？此操作不可撤销。")
             .setPositiveButton("删除") { _, _ ->
@@ -171,10 +87,402 @@ class SnapshotConfigActivity : AppCompatActivity() {
                     snapshotDir.deleteRecursively()
                     snapshotDir.mkdirs()
                 }
-                refreshCheckpointCount()
                 Toast.makeText(this, "已清除", Toast.LENGTH_SHORT).show()
+                recreate() // 刷新界面
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+}
+
+@Composable
+fun SnapshotConfigScreen(
+    onBack: () -> Unit,
+    onViewCheckpoints: () -> Unit,
+    onClearCheckpoints: () -> Unit,
+    getCheckpointCount: () -> String
+) {
+    val config = AppConfig.configRepo()
+    
+    var enabled by remember { mutableStateOf(config.isSnapshotEnabled()) }
+    var storageType by remember { mutableStateOf(config.getSnapshotStorage()) }
+    var autoCheckpoint by remember { mutableStateOf(config.isSnapshotAutoCheckpoint()) }
+    var rollbackStrategy by remember { mutableStateOf(config.getSnapshotRollbackStrategy()) }
+    var checkpointCount by remember { mutableStateOf(getCheckpointCount()) }
+
+    // 监听 onResume 事件刷新检查点计数
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                checkpointCount = getCheckpointCount()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            config.setSnapshotEnabled(enabled)
+            config.setSnapshotStorage(storageType)
+            config.setSnapshotAutoCheckpoint(autoCheckpoint)
+            config.setSnapshotRollbackStrategy(rollbackStrategy)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        // 顶部栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .background(Color.White)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = onBack,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+            ) {
+                Text("<- 返回", fontSize = 14.sp, color = TextPrimary)
+            }
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            Text(
+                text = "快照配置",
+                fontSize = 17.sp,
+                color = TextPrimary,
+                modifier = Modifier.weight(1f),
+                style = androidx.compose.ui.text.font.FontWeight.Bold.let {
+                    TextStyle(fontWeight = it, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            )
+            
+            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+        ) {
+            // 启用开关
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .background(Color.White, RoundedCornerShape(16.dp))
+                    .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "启用执行快照",
+                        fontSize = 15.sp,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Agent 执行过程中自动创建检查点",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                }
+                
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { 
+                        enabled = it
+                        config.setSnapshotEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Accent,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0)
+                    )
+                )
+            }
+
+            if (enabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 存储方式标题
+                Text(
+                    text = "存储方式",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // 内存存储
+                StorageCard(
+                    title = "内存存储",
+                    description = "应用关闭后丢失，速度快",
+                    isSelected = storageType == SnapshotStorageType.MEMORY,
+                    onClick = { 
+                        storageType = SnapshotStorageType.MEMORY
+                        config.setSnapshotStorage(SnapshotStorageType.MEMORY)
+                        checkpointCount = getCheckpointCount()
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 文件存储
+                StorageCard(
+                    title = "文件存储",
+                    description = "持久化到本地，可跨会话恢复",
+                    isSelected = storageType == SnapshotStorageType.FILE,
+                    onClick = { 
+                        storageType = SnapshotStorageType.FILE
+                        config.setSnapshotStorage(SnapshotStorageType.FILE)
+                        checkpointCount = getCheckpointCount()
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 自动检查点
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "自动检查点",
+                            fontSize = 15.sp,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "每个节点执行后自动创建检查点",
+                            fontSize = 12.sp,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    
+                    Switch(
+                        checked = autoCheckpoint,
+                        onCheckedChange = { 
+                            autoCheckpoint = it
+                            config.setSnapshotAutoCheckpoint(it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Accent,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color(0xFFE0E0E0)
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 回滚策略标题
+                Text(
+                    text = "回滚策略",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // 从节点重启
+                RollbackStrategyCard(
+                    title = "从节点重启",
+                    description = "回滚到检查点并重新执行该节点",
+                    isSelected = rollbackStrategy == RollbackStrategy.RESTART_FROM_NODE,
+                    onClick = { 
+                        rollbackStrategy = RollbackStrategy.RESTART_FROM_NODE
+                        config.setSnapshotRollbackStrategy(RollbackStrategy.RESTART_FROM_NODE)
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 跳过节点
+                RollbackStrategyCard(
+                    title = "跳过节点",
+                    description = "回滚到检查点并跳过该节点",
+                    isSelected = rollbackStrategy == RollbackStrategy.SKIP_NODE,
+                    onClick = { 
+                        rollbackStrategy = RollbackStrategy.SKIP_NODE
+                        config.setSnapshotRollbackStrategy(RollbackStrategy.SKIP_NODE)
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 使用默认输出
+                RollbackStrategyCard(
+                    title = "使用默认输出",
+                    description = "回滚到检查点并使用默认输出",
+                    isSelected = rollbackStrategy == RollbackStrategy.USE_DEFAULT_OUTPUT,
+                    onClick = { 
+                        rollbackStrategy = RollbackStrategy.USE_DEFAULT_OUTPUT
+                        config.setSnapshotRollbackStrategy(RollbackStrategy.USE_DEFAULT_OUTPUT)
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 检查点管理标题
+                Text(
+                    text = "检查点管理",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Text(
+                    text = checkpointCount,
+                    fontSize = 14.sp,
+                    color = TextPrimary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onViewCheckpoints,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = TextPrimary
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8E8E8))
+                    ) {
+                        Text("查看检查点", fontSize = 13.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = onClearCheckpoints,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFFE53935)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE53935))
+                    ) {
+                        Text("清除全部", fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StorageCard(
+    title: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (isSelected) Color(0xFFF5F5F5) else Color.White,
+                RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) Accent else Color(0xFFE8E8E8),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                color = TextPrimary
+            )
+            Text(
+                text = description,
+                fontSize = 12.sp,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        
+        if (isSelected) {
+            Text(
+                text = "✓",
+                fontSize = 16.sp,
+                color = Color(0xFF2196F3)
+            )
+        }
+    }
+}
+
+@Composable
+fun RollbackStrategyCard(
+    title: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (isSelected) Color(0xFFF5F5F5) else Color.White,
+                RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) Accent else Color(0xFFE8E8E8),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                color = TextPrimary
+            )
+            Text(
+                text = description,
+                fontSize = 12.sp,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        
+        if (isSelected) {
+            Text(
+                text = "✓",
+                fontSize = 16.sp,
+                color = Color(0xFF2196F3)
+            )
+        }
     }
 }
