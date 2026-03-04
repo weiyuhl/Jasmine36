@@ -243,18 +243,39 @@ object MnnModelManager {
     }
 
     /** 将模型目录打包为 zip，返回临时 zip 文件（调用方负责写入目标 URI 后删除） */
-    fun createModelZip(context: Context, modelId: String): File? {
+    fun createModelZip(
+        context: Context,
+        modelId: String,
+        onProgress: ((Float, String) -> Unit)? = null
+    ): File? {
         val dirName = if (modelId.contains("/")) safeModelId(modelId) else modelId
         val modelDir = File(getModelsDir(context), dirName)
         if (!modelDir.exists() || !modelDir.isDirectory) return null
         return try {
+            val fileList = collectFilesWithSize(modelDir)
+            val totalBytes = fileList.sumOf { it.second }
+            onProgress?.invoke(0f, "正在打包模型…")
             val zipFile = File(context.cacheDir, "mnn_export_${dirName}.zip")
             if (zipFile.exists()) zipFile.delete()
+            var writtenBytes = 0L
             ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-                modelDir.listFiles()?.forEach { file ->
-                    addToZip(zos, file, dirName)
+                fileList.forEach { (file, size) ->
+                    val entryName = "$dirName/${file.relativeTo(modelDir).path}".replace("\\", "/")
+                    if (file.isDirectory) {
+                        zos.putNextEntry(ZipEntry("$entryName/"))
+                        zos.closeEntry()
+                    } else {
+                        zos.putNextEntry(ZipEntry(entryName))
+                        file.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                    writtenBytes += size
+                    if (totalBytes > 0) {
+                        onProgress?.invoke((writtenBytes.toFloat() / totalBytes).coerceIn(0f, 1f), "正在打包… ${formatSize(writtenBytes)} / ${formatSize(totalBytes)}")
+                    }
                 }
             }
+            onProgress?.invoke(1f, "打包完成")
             zipFile
         } catch (e: Exception) {
             Log.e(TAG, "createModelZip failed", e)
@@ -262,17 +283,23 @@ object MnnModelManager {
         }
     }
 
-    private fun addToZip(zos: ZipOutputStream, file: File, basePath: String) {
-        val entryName = "$basePath/${file.name}"
-        if (file.isDirectory) {
-            zos.putNextEntry(ZipEntry("$entryName/"))
-            zos.closeEntry()
-            file.listFiles()?.forEach { addToZip(zos, it, entryName) }
-        } else {
-            zos.putNextEntry(ZipEntry(entryName))
-            file.inputStream().use { it.copyTo(zos) }
-            zos.closeEntry()
+    /** 收集所有文件（含目录占位）及大小，目录记为 0 */
+    private fun collectFilesWithSize(dir: File): List<Pair<File, Long>> {
+        val result = mutableListOf<Pair<File, Long>>()
+        fun collect(d: File, basePath: String) {
+            d.listFiles()?.forEach { f ->
+                val rel = if (basePath.isEmpty()) f.name else "$basePath/${f.name}"
+                if (f.isDirectory) {
+                    result.add(f to 0L)
+                    collect(f, rel)
+                } else {
+                    result.add(f to f.length())
+                }
+            }
         }
+        result.add(dir to 0L)
+        collect(dir, dir.name)
+        return result
     }
 
     /**
@@ -280,15 +307,36 @@ object MnnModelManager {
      * 2) 所选目录下子目录为模型目录。
      * @return 导入的 modelId，失败返回 null
      */
-    suspend fun importModelFromTree(context: Context, treeUri: Uri): String? = withContext(Dispatchers.IO) {
+    suspend fun importModelFromTree(
+        context: Context,
+        treeUri: Uri,
+        onProgress: ((Float, String) -> Unit)? = null
+    ): String? = withContext(Dispatchers.IO) {
         val doc = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext null
         val modelDir = findModelDir(doc) ?: return@withContext null
         val dirName = modelDir.name ?: "imported_${System.currentTimeMillis()}"
         val targetDir = File(getModelsDir(context), safeModelId(dirName))
         if (targetDir.exists()) targetDir.deleteRecursively()
         targetDir.mkdirs()
-        copyDocumentToFile(context, modelDir, targetDir)
+        val totalSize = getDocumentTreeSize(modelDir)
+        val copiedRef = longArrayOf(0L)
+        copyDocumentToFileWithProgress(context, modelDir, targetDir, copiedRef) { current ->
+            if (totalSize > 0) {
+                onProgress?.invoke((current.toFloat() / totalSize).coerceIn(0f, 1f), "正在导入… ${formatSize(current)} / ${formatSize(totalSize)}")
+            } else {
+                onProgress?.invoke(0f, "正在导入…")
+            }
+        }
         if (targetDir.listFiles { f -> f.extension == "mnn" }?.isNotEmpty() == true) dirName else null
+    }
+
+    private fun getDocumentTreeSize(doc: DocumentFile): Long {
+        if (!doc.isDirectory) return doc.length()
+        var size = 0L
+        doc.listFiles().forEach { child ->
+            size += if (child.isDirectory) getDocumentTreeSize(child) else child.length()
+        }
+        return size
     }
 
     private fun findModelDir(doc: DocumentFile): DocumentFile? {
@@ -303,65 +351,120 @@ object MnnModelManager {
         return null
     }
 
-    private fun copyDocumentToFile(context: Context, doc: DocumentFile, targetDir: File) {
+    private fun copyDocumentToFileWithProgress(
+        context: Context,
+        doc: DocumentFile,
+        targetDir: File,
+        copiedRef: LongArray,
+        onProgress: (Long) -> Unit
+    ) {
         for (child in doc.listFiles()) {
             val name = child.name ?: continue
             if (child.isDirectory) {
                 val sub = File(targetDir, name)
                 sub.mkdirs()
-                copyDocumentToFile(context, child, sub)
+                copyDocumentToFileWithProgress(context, child, sub, copiedRef, onProgress)
             } else {
                 context.contentResolver.openInputStream(child.uri)?.use { input ->
-                    File(targetDir, name).outputStream().use { input.copyTo(it) }
+                    File(targetDir, name).outputStream().use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        var read: Int
+                        while (input.read(buf).also { read = it } != -1) {
+                            out.write(buf, 0, read)
+                            copiedRef[0] += read
+                            onProgress(copiedRef[0])
+                        }
+                    }
                 }
             }
         }
     }
 
     /** 从 zip 文件 URI 导入模型 */
-    suspend fun importModelFromZip(context: Context, zipUri: Uri): String? = withContext(Dispatchers.IO) {
+    suspend fun importModelFromZip(
+        context: Context,
+        zipUri: Uri,
+        onProgress: ((Float, String) -> Unit)? = null
+    ): String? = withContext(Dispatchers.IO) {
         val zipFile = File(context.cacheDir, "mnn_import_${System.currentTimeMillis()}.zip")
         try {
+            val totalSize = try {
+                context.contentResolver.openFileDescriptor(zipUri, "r")?.use { it.statSize }
+            } catch (_: Exception) { null } ?: -1L
+            var copiedBytes = 0L
             context.contentResolver.openInputStream(zipUri)?.use { input ->
-                zipFile.outputStream().use { input.copyTo(it) }
+                zipFile.outputStream().use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    var read: Int
+                    while (input.read(buf).also { read = it } != -1) {
+                        out.write(buf, 0, read)
+                        copiedBytes += read
+                        if (totalSize > 0) {
+                            onProgress?.invoke(
+                                (copiedBytes.toFloat() / totalSize * 0.4f).coerceIn(0f, 0.4f),
+                                "正在复制… ${formatSize(copiedBytes)} / ${formatSize(totalSize)}"
+                            )
+                        } else {
+                            onProgress?.invoke(0f, "正在复制…")
+                        }
+                    }
+                }
             } ?: return@withContext null
+            onProgress?.invoke(0.4f, "正在解压…")
+            var entryCount = 0
+            var totalEntries = 0
             java.util.zip.ZipInputStream(zipFile.inputStream()).use { zis ->
-                var entry = zis.nextEntry
-                var rootDirName: String? = null
-                val extractDir = File(context.cacheDir, "mnn_import_extract_${System.currentTimeMillis()}")
-                extractDir.mkdirs()
-                try {
+                var e = zis.nextEntry
+                while (e != null) {
+                    if (!e.name.contains("..")) totalEntries++
+                    e = zis.nextEntry
+                }
+            }
+            var rootDirName: String? = null
+            val extractDir = File(context.cacheDir, "mnn_import_extract_${System.currentTimeMillis()}")
+            extractDir.mkdirs()
+            try {
+                java.util.zip.ZipInputStream(zipFile.inputStream()).use { zis ->
+                    var entry = zis.nextEntry
                     while (entry != null) {
                         val name = entry.name
-                        if (name.contains("..")) { entry = zis.nextEntry; continue }
-                        if (rootDirName == null && name.contains("/")) {
-                            rootDirName = name.substringBefore("/")
-                        }
-                        val file = File(extractDir, name)
-                        if (entry.isDirectory) {
-                            file.mkdirs()
-                        } else {
-                            file.parentFile?.mkdirs()
-                            file.outputStream().use { zis.copyTo(it) }
+                        if (!name.contains("..")) {
+                            if (rootDirName == null && name.contains("/")) {
+                                rootDirName = name.substringBefore("/")
+                            }
+                            val file = File(extractDir, name)
+                            if (entry.isDirectory) {
+                                file.mkdirs()
+                            } else {
+                                file.parentFile?.mkdirs()
+                                file.outputStream().use { zis.copyTo(it) }
+                            }
+                            entryCount++
+                            if (totalEntries > 0) {
+                                val p = 0.4f + 0.6f * (entryCount.toFloat() / totalEntries)
+                                onProgress?.invoke(p.coerceIn(0f, 1f), "正在解压… $entryCount / $totalEntries")
+                            }
                         }
                         zis.closeEntry()
                         entry = zis.nextEntry
                     }
-                    val modelDir = rootDirName?.let { File(extractDir, it) }
-                        ?: extractDir.listFiles()?.firstOrNull { it.isDirectory }
-                        ?: extractDir
-                    val hasConfig = File(modelDir, CONFIG_FILE).exists()
-                    val hasMnn = modelDir.listFiles { f -> f.extension == "mnn" }?.isNotEmpty() == true
-                    if (hasConfig && hasMnn) {
-                        val dirName = modelDir.name
-                        val targetDir = File(getModelsDir(context), safeModelId(dirName))
-                        if (targetDir.exists()) targetDir.deleteRecursively()
-                        modelDir.copyRecursively(targetDir, overwrite = true)
-                        dirName
-                    } else null
-                } finally {
-                    extractDir.deleteRecursively()
                 }
+                val modelDir = rootDirName?.let { File(extractDir, it) }
+                    ?: extractDir.listFiles()?.firstOrNull { it.isDirectory }
+                    ?: extractDir
+                val hasConfig = File(modelDir, CONFIG_FILE).exists()
+                val hasMnn = modelDir.listFiles { f -> f.extension == "mnn" }?.isNotEmpty() == true
+                if (hasConfig && hasMnn) {
+                    onProgress?.invoke(0.95f, "正在写入…")
+                    val dirName = modelDir.name
+                    val targetDir = File(getModelsDir(context), safeModelId(dirName))
+                    if (targetDir.exists()) targetDir.deleteRecursively()
+                    modelDir.copyRecursively(targetDir, overwrite = true)
+                    onProgress?.invoke(1f, "导入完成")
+                    dirName
+                } else null
+            } finally {
+                extractDir.deleteRecursively()
             }
         } finally {
             zipFile.delete()

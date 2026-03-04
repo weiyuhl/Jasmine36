@@ -65,16 +65,38 @@ class MnnChatClient(
         return newSession
     }
 
+    /**
+     * 构建 MNN 模型输入 prompt。
+     * 使用应用层的系统提示词（普通聊天 / Agent 模式各自的提示词），
+     * 格式兼容 Qwen 等 chat 模型。
+     */
     private fun buildPrompt(messages: List<ChatMessage>): String {
         val sb = StringBuilder()
         for (msg in messages) {
             when (msg.role) {
-                "system" -> {}
-                "user" -> sb.appendLine("<|user|>\n${msg.content}")
-                "assistant" -> sb.appendLine("<|assistant|>\n${msg.content}")
+                "system" -> {
+                    if (msg.content.isNotBlank()) {
+                        sb.appendLine("<|im_start|>system")
+                        sb.appendLine(msg.content)
+                        sb.appendLine("<|im_end|>")
+                        sb.appendLine()
+                    }
+                }
+                "user" -> {
+                    sb.appendLine("<|im_start|>user")
+                    sb.appendLine(msg.content)
+                    sb.appendLine("<|im_end|>")
+                    sb.appendLine()
+                }
+                "assistant" -> {
+                    sb.appendLine("<|im_start|>assistant")
+                    sb.appendLine(msg.content)
+                    sb.appendLine("<|im_end|>")
+                    sb.appendLine()
+                }
             }
         }
-        sb.appendLine("<|assistant|>")
+        sb.appendLine("<|im_start|>assistant")
         return sb.toString()
     }
 

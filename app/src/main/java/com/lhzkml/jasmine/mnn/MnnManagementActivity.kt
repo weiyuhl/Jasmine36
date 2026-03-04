@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,31 +36,60 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+data class ExportImportProgress(val progress: Float, val message: String)
+
 class MnnManagementActivity : ComponentActivity() {
     private var refreshCallback: (() -> Unit)? = null
+    private val progressState = mutableStateOf<ExportImportProgress?>(null)
+
+    private fun updateProgress(progress: Float, message: String) {
+        runOnUiThread { progressState.value = ExportImportProgress(progress, message) }
+    }
+
+    private fun clearProgress() {
+        runOnUiThread { progressState.value = null }
+    }
 
     private val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri ?: return@registerForActivityResult
         val modelId = pendingExportModelId ?: return@registerForActivityResult
-        Toast.makeText(this, "正在导出模型，请稍候…", Toast.LENGTH_LONG).show()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val zip = MnnModelManager.createModelZip(this@MnnManagementActivity, modelId)
+                updateProgress(0f, "正在打包…")
+                val zip = MnnModelManager.createModelZip(this@MnnManagementActivity, modelId) { p, msg ->
+                    updateProgress(p * 0.9f, msg)
+                }
                 if (zip != null) {
+                    val zipSize = zip.length()
                     contentResolver.openOutputStream(uri)?.use { out ->
-                        zip.inputStream().use { it.copyTo(out) }
+                        zip.inputStream().use { input ->
+                            val buf = ByteArray(64 * 1024)
+                            var read: Int
+                            var written = 0L
+                            while (input.read(buf).also { read = it } != -1) {
+                                out.write(buf, 0, read)
+                                written += read
+                                if (zipSize > 0) {
+                                    val p = 0.9f + 0.1f * (written.toFloat() / zipSize)
+                                    updateProgress(p, "正在写入… ${MnnModelManager.formatSize(written)} / ${MnnModelManager.formatSize(zipSize)}")
+                                }
+                            }
+                        }
                     }
                     zip.delete()
-                    withContext(Dispatchers.Main) {
+                    clearProgress()
+                    runOnUiThread {
                         Toast.makeText(this@MnnManagementActivity, "模型已导出", Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    withContext(Dispatchers.Main) {
+                    clearProgress()
+                    runOnUiThread {
                         Toast.makeText(this@MnnManagementActivity, "导出失败：模型不存在", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
+                clearProgress()
+                runOnUiThread {
                     Toast.makeText(this@MnnManagementActivity, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -69,12 +99,21 @@ class MnnManagementActivity : ComponentActivity() {
     private val importFolderLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri ?: return@registerForActivityResult
         lifecycleScope.launch {
-            val result = MnnModelManager.importModelFromTree(this@MnnManagementActivity, uri)
-            if (result != null) {
-                Toast.makeText(this@MnnManagementActivity, "已导入模型: $result", Toast.LENGTH_SHORT).show()
-                refreshCallback?.invoke()
-            } else {
-                Toast.makeText(this@MnnManagementActivity, "导入失败：未找到有效模型目录", Toast.LENGTH_SHORT).show()
+            updateProgress(0f, "正在导入…")
+            try {
+                val result = MnnModelManager.importModelFromTree(this@MnnManagementActivity, uri) { p, msg ->
+                    updateProgress(p, msg)
+                }
+                clearProgress()
+                if (result != null) {
+                    Toast.makeText(this@MnnManagementActivity, "已导入模型: $result", Toast.LENGTH_SHORT).show()
+                    refreshCallback?.invoke()
+                } else {
+                    Toast.makeText(this@MnnManagementActivity, "导入失败：未找到有效模型目录", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                clearProgress()
+                Toast.makeText(this@MnnManagementActivity, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -82,12 +121,21 @@ class MnnManagementActivity : ComponentActivity() {
     private val importZipLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         lifecycleScope.launch {
-            val result = MnnModelManager.importModelFromZip(this@MnnManagementActivity, uri)
-            if (result != null) {
-                Toast.makeText(this@MnnManagementActivity, "已导入模型: $result", Toast.LENGTH_SHORT).show()
-                refreshCallback?.invoke()
-            } else {
-                Toast.makeText(this@MnnManagementActivity, "导入失败：无效的模型压缩包", Toast.LENGTH_SHORT).show()
+            updateProgress(0f, "正在导入…")
+            try {
+                val result = MnnModelManager.importModelFromZip(this@MnnManagementActivity, uri) { p, msg ->
+                    updateProgress(p, msg)
+                }
+                clearProgress()
+                if (result != null) {
+                    Toast.makeText(this@MnnManagementActivity, "已导入模型: $result", Toast.LENGTH_SHORT).show()
+                    refreshCallback?.invoke()
+                } else {
+                    Toast.makeText(this@MnnManagementActivity, "导入失败：无效的模型压缩包", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                clearProgress()
+                Toast.makeText(this@MnnManagementActivity, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -98,6 +146,7 @@ class MnnManagementActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
+                val progress by progressState
                 MnnManagementScreen(
                     onBack = { finish() },
                     onRefreshCallbackSet = { refreshCallback = it },
@@ -107,7 +156,8 @@ class MnnManagementActivity : ComponentActivity() {
                         exportLauncher.launch("${dirName}.zip")
                     },
                     onImportFolder = { importFolderLauncher.launch(null) },
-                    onImportZip = { importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed")) }
+                    onImportZip = { importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed")) },
+                    progressState = progress
                 )
             }
         }
@@ -125,7 +175,8 @@ fun MnnManagementScreen(
     onRefreshCallbackSet: ((() -> Unit) -> Unit)? = null,
     onExportModel: ((String) -> Unit)? = null,
     onImportFolder: (() -> Unit)? = null,
-    onImportZip: (() -> Unit)? = null
+    onImportZip: (() -> Unit)? = null,
+    progressState: ExportImportProgress? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -274,6 +325,10 @@ fun MnnManagementScreen(
         )
     }
 
+    if (progressState != null) {
+        MnnProgressDialog(progress = progressState.progress, message = progressState.message)
+    }
+
     if (showImportDialog) {
         MnnImportDialog(
             onImportFolder = {
@@ -298,6 +353,24 @@ fun MnnManagementScreen(
             },
             onDismiss = { showSourceDialog = false }
         )
+    }
+}
+
+@Composable
+fun MnnProgressDialog(progress: Float, message: String) {
+    CustomDialog(onDismissRequest = {}) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            CustomText(message, fontSize = 15.sp, color = TextPrimary)
+            Spacer(modifier = Modifier.height(16.dp))
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(6.dp),
+                color = TextPrimary,
+                trackColor = BgInput
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            CustomText("${(progress * 100).toInt()}%", fontSize = 13.sp, color = TextSecondary)
+        }
     }
 }
 
