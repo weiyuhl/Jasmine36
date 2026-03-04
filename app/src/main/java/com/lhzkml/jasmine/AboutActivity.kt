@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,6 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
+import com.lhzkml.jasmine.oss.OssLicensesListActivity
 import com.lhzkml.jasmine.ui.components.CustomHorizontalDivider
 import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.components.CustomTextButton
@@ -91,10 +94,66 @@ fun AboutScreen(onBack: () -> Unit) {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            AboutIntroCard(
+                appName = context.getString(R.string.app_name),
+                description = context.getString(R.string.about_app_description),
+                developer = context.getString(R.string.about_developer),
+                copyright = context.getString(R.string.about_copyright)
+            )
             VersionItem(title = "应用版本", value = appVersion)
             VersionItem(title = "Jasmine-core 版本", value = jasmineCoreVersion)
             VersionItem(title = "MNN 引擎版本", value = mnnVersion)
+            OssLicensesItem(context = context)
         }
+    }
+}
+
+@Composable
+private fun AboutIntroCard(
+    appName: String,
+    description: String,
+    developer: String,
+    copyright: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        CustomText(
+            text = appName,
+            fontSize = 20.sp,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold
+        )
+        CustomText(text = description, fontSize = 14.sp, color = TextSecondary)
+        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+        CustomText(text = developer, fontSize = 14.sp, color = TextPrimary)
+        CustomText(text = copyright, fontSize = 13.sp, color = TextSecondary)
+    }
+}
+
+@Composable
+private fun OssLicensesItem(context: android.content.Context) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .clickable {
+                val intent = Intent(context, OssLicensesListActivity::class.java)
+                intent.putExtra("title", context.getString(R.string.oss_licenses_title))
+                context.startActivity(intent)
+            }
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        CustomText(text = "开源许可", fontSize = 15.sp, color = TextPrimary)
+        CustomText(text = "查看", fontSize = 14.sp, color = TextSecondary)
     }
 }
 
