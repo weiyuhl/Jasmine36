@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.components.*
+import com.lhzkml.jasmine.mnn.MnnManagementActivity
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.prompt.llm.SystemPromptManager
@@ -328,15 +329,16 @@ fun SettingsScreen(
                 )
             }
             
-            // MNN 测试
+            // 本地 MNN
             SettingsItem(
-                title = "MNN 测试",
-                subtitle = "测试本地 LLM 推理引擎",
-                value = "进入测试",
+                title = "本地 MNN",
+                subtitle = "管理本地 LLM 推理模型",
+                value = "进入管理",
                 onClick = {
-                    context.startActivity(Intent(context, TestMnnActivity::class.java))
+                    context.startActivity(Intent(context, MnnManagementActivity::class.java))
                 }
             )
+            
         }
     }
 }

@@ -110,19 +110,25 @@ fun ProviderListScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             providers.forEach { provider ->
+                val isLocal = provider.apiType == ApiType.LOCAL
                 ProviderItem(
                     provider = provider,
                     isActive = provider.id == activeId,
-                    hasKey = config.getApiKey(provider.id) != null,
-                    model = registry.getModel(provider.id),
+                    hasKey = isLocal || config.getApiKey(provider.id) != null,
+                    model = if (isLocal) "本地推理" else registry.getModel(provider.id),
                     onSwitchChange = { checked ->
                         if (checked) {
-                            val key = config.getApiKey(provider.id)
-                            if (key == null) {
-                                onProviderClick(provider.id)
-                            } else {
+                            if (isLocal) {
                                 config.setActiveProviderId(provider.id)
                                 refreshTrigger++
+                            } else {
+                                val key = config.getApiKey(provider.id)
+                                if (key == null) {
+                                    onProviderClick(provider.id)
+                                } else {
+                                    config.setActiveProviderId(provider.id)
+                                    refreshTrigger++
+                                }
                             }
                         } else {
                             if (config.getActiveProviderId() == provider.id) {
@@ -131,7 +137,15 @@ fun ProviderListScreen(
                             }
                         }
                     },
-                    onClick = { onProviderClick(provider.id) },
+                    onClick = {
+                        if (isLocal) {
+                            context.startActivity(
+                                Intent(context, com.lhzkml.jasmine.mnn.MnnManagementActivity::class.java)
+                            )
+                        } else {
+                            onProviderClick(provider.id)
+                        }
+                    },
                     onDelete = if (provider.isCustom) {
                         { providerToDelete = provider }
                     } else null
@@ -296,7 +310,7 @@ fun AddCustomProviderDialog(
                     val apiTypes = listOf(
                         "OpenAI 兼容" to ApiType.OPENAI,
                         "Claude" to ApiType.CLAUDE,
-                        "Gemini" to ApiType.GEMINI
+                        "Gemini" to ApiType.GEMINI,
                     )
                     
                     Box {
@@ -343,6 +357,7 @@ fun AddCustomProviderDialog(
                                                 ApiType.OPENAI -> ""
                                                 ApiType.CLAUDE -> "https://api.anthropic.com"
                                                 ApiType.GEMINI -> "https://generativelanguage.googleapis.com"
+                                                else -> ""
                                             }
                                         }
                                         expanded = false

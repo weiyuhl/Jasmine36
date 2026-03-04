@@ -16,6 +16,7 @@ class ProviderRegistry(private val configRepo: ConfigRepository) {
         ProviderConfig("gemini", "Gemini", "https://generativelanguage.googleapis.com", "", ApiType.GEMINI),
         ProviderConfig("deepseek", "DeepSeek", "https://api.deepseek.com", "", ApiType.OPENAI),
         ProviderConfig("siliconflow", "硅基流动", "https://api.siliconflow.cn", "", ApiType.OPENAI),
+        ProviderConfig("mnn_local", "MNN 本地模型", "", "", ApiType.LOCAL),
     )
 
     private var isInitialized = false
@@ -90,6 +91,18 @@ class ProviderRegistry(private val configRepo: ConfigRepository) {
     fun getActiveConfig(): ActiveProviderConfig? {
         val id = configRepo.getActiveProviderId() ?: return null
         val provider = _providers.find { it.id == id } ?: return null
+
+        if (provider.apiType == ApiType.LOCAL) {
+            val model = getModel(id)
+            return ActiveProviderConfig(
+                providerId = id,
+                baseUrl = "",
+                model = model,
+                apiKey = "",
+                apiType = ApiType.LOCAL
+            )
+        }
+
         val vertexEnabled = configRepo.isVertexAIEnabled(id)
         val key = if (vertexEnabled) {
             configRepo.getApiKey(id) ?: ""
@@ -97,7 +110,6 @@ class ProviderRegistry(private val configRepo: ConfigRepository) {
             configRepo.getApiKey(id) ?: return null
         }
 
-        // 使用带默认值的方法获取 baseUrl 和 model
         val baseUrl = getBaseUrl(id)
         val model = getModel(id)
 

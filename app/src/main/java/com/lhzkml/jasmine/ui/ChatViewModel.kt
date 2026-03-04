@@ -51,6 +51,9 @@ import com.lhzkml.jasmine.core.prompt.model.Prompt
 import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.agent.tools.WebSearchTool
 import com.lhzkml.jasmine.core.agent.tools.FetchUrlTool
+import com.lhzkml.jasmine.core.prompt.executor.ApiType
+import com.lhzkml.jasmine.mnn.MnnChatClient
+import com.lhzkml.jasmine.mnn.MnnModelManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -313,6 +316,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             currentModel = ""
             return
         }
+
+        val provider = ProviderManager.getProvider(activeId)
+        if (provider?.apiType == ApiType.LOCAL) {
+            val localModels = MnnModelManager.getLocalModels(activity)
+            val localModelIds = localModels.map { it.modelId }
+            modelList = localModelIds
+            val model = overrideModel ?: ProviderManager.getModel(activity, activeId)
+            currentModel = if (model.isNotEmpty() && model in localModelIds) model
+                else localModelIds.firstOrNull() ?: ""
+            if (currentModel != model && currentModel.isNotEmpty()) {
+                overrideModel = currentModel
+            }
+            currentModelDisplay = "${shortenModelName(currentModel).ifEmpty { "请下载模型" }} \u02C7"
+            return
+        }
+
         val model = overrideModel ?: ProviderManager.getModel(activity, activeId)
         currentModel = model
         currentModelDisplay = "${shortenModelName(model).ifEmpty { "未选择模型" }} \u02C7"
@@ -504,36 +523,61 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var currentLocalModelId: String? = null
+
     private fun getOrCreateClient(config: ActiveProviderConfig): ChatClient {
+        if (config.apiType == ApiType.LOCAL) {
+            val modelId = overrideModel ?: config.model
+            val existing = clientRouter.getClient(config.providerId)
+            if (existing != null && currentProviderId == config.providerId && currentLocalModelId == modelId) {
+                return existing
+            }
+            if (currentProviderId != null) {
+                clientRouter.unregister(currentProviderId!!)
+            }
+            val client = MnnChatClient(ctx, modelId)
+            clientRouter.register(config.providerId, client)
+            currentProviderId = config.providerId
+            currentLocalModelId = modelId
+            contextManager = ContextManager()
+            return client
+        }
+
         val existing = clientRouter.getClient(config.providerId)
         if (existing != null && currentProviderId == config.providerId) return existing
         if (currentProviderId != null && currentProviderId != config.providerId) {
             clientRouter.unregister(currentProviderId!!)
         }
-        val provider = ProviderManager.getProvider(config.providerId)
-        val activity = _activity!!
-        val clientConfig = ChatClientConfig(
-            providerId = config.providerId,
-            providerName = provider?.name ?: config.providerId,
-            apiKey = config.apiKey,
-            baseUrl = config.baseUrl,
-            apiType = config.apiType,
-            chatPath = config.chatPath,
-            vertexEnabled = config.vertexEnabled,
-            vertexProjectId = config.vertexProjectId,
-            vertexLocation = config.vertexLocation,
-            vertexServiceAccountJson = config.vertexServiceAccountJson,
-            requestTimeoutMs = ProviderManager.getRequestTimeout(activity).toLong() * 1000,
-            connectTimeoutMs = ProviderManager.getConnectTimeout(activity).toLong() * 1000,
-            socketTimeoutMs = ProviderManager.getSocketTimeout(activity).toLong() * 1000
-        )
-        val client = ChatClientFactory.create(clientConfig)
+        currentLocalModelId = null
+
+        val client: ChatClient
+        run {
+            val provider = ProviderManager.getProvider(config.providerId)
+            val activity = _activity!!
+            val clientConfig = ChatClientConfig(
+                providerId = config.providerId,
+                providerName = provider?.name ?: config.providerId,
+                apiKey = config.apiKey,
+                baseUrl = config.baseUrl,
+                apiType = config.apiType,
+                chatPath = config.chatPath,
+                vertexEnabled = config.vertexEnabled,
+                vertexProjectId = config.vertexProjectId,
+                vertexLocation = config.vertexLocation,
+                vertexServiceAccountJson = config.vertexServiceAccountJson,
+                requestTimeoutMs = ProviderManager.getRequestTimeout(activity).toLong() * 1000,
+                connectTimeoutMs = ProviderManager.getConnectTimeout(activity).toLong() * 1000,
+                socketTimeoutMs = ProviderManager.getSocketTimeout(activity).toLong() * 1000
+            )
+            client = ChatClientFactory.create(clientConfig)
+            val llmProvider = client.provider
+            val modelMeta = ModelRegistry.find(config.model)
+            contextManager = if (modelMeta != null) ContextManager.fromModel(modelMeta)
+            else ContextManager.forModel(config.model, llmProvider)
+        }
+
         clientRouter.register(config.providerId, client)
         currentProviderId = config.providerId
-        val llmProvider = client.provider
-        val modelMeta = ModelRegistry.find(config.model)
-        contextManager = if (modelMeta != null) ContextManager.fromModel(modelMeta)
-        else ContextManager.forModel(config.model, llmProvider)
         return client
     }
 
@@ -547,11 +591,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         val actualModel = overrideModel ?: config.model
         if (actualModel.isEmpty()) {
-            Toast.makeText(activity, "请先选择模型", Toast.LENGTH_SHORT).show()
-            activity.startActivity(Intent(activity, ProviderConfigActivity::class.java).apply {
-                putExtra("provider_id", config.providerId)
-                putExtra("tab", 1)
-            })
+            if (config.apiType == ApiType.LOCAL) {
+                Toast.makeText(activity, "请先下载并选择本地模型", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(activity, "请先选择模型", Toast.LENGTH_SHORT).show()
+                activity.startActivity(Intent(activity, ProviderConfigActivity::class.java).apply {
+                    putExtra("provider_id", config.providerId)
+                    putExtra("tab", 1)
+                })
+            }
             return
         }
 

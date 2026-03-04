@@ -13,7 +13,9 @@ enum class ApiType {
     /** Claude Messages API 格式 */
     CLAUDE,
     /** Gemini generateContent API 格式 */
-    GEMINI
+    GEMINI,
+    /** 本地推理（MNN 等），不走 ChatClientFactory，由 app 层直接创建 */
+    LOCAL
 }
 
 /**
@@ -53,6 +55,9 @@ object ChatClientFactory {
             ApiType.OPENAI -> createOpenAICompatible(config, retryConfig)
             ApiType.CLAUDE -> createClaudeCompatible(config, retryConfig)
             ApiType.GEMINI -> createGeminiCompatible(config, retryConfig)
+            ApiType.LOCAL -> throw UnsupportedOperationException(
+                "LOCAL clients should be created by the app layer, not ChatClientFactory"
+            )
         }
     }
 

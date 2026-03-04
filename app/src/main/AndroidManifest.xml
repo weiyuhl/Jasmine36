@@ -91,7 +91,13 @@
             android:name=".SamplingParamsConfigActivity"
             android:exported="false" />
         <activity
-            android:name=".TestMnnActivity"
+            android:name=".mnn.MnnManagementActivity"
+            android:exported="false" />
+        <activity
+            android:name=".mnn.MnnModelMarketActivity"
+            android:exported="false" />
+        <activity
+            android:name=".mnn.MnnModelSettingsActivity"
             android:exported="false" />
 
     </application>

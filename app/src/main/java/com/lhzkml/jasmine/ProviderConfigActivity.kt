@@ -172,6 +172,7 @@ fun ProviderConfigTab(provider: ProviderConfig) {
         ApiType.OPENAI -> "/v1/chat/completions"
         ApiType.GEMINI -> "/v1beta/models/{model}:generateContent"
         ApiType.CLAUDE -> "/v1/messages"
+        ApiType.LOCAL -> ""
     }
     val keyLabel = if (vertexEnabled) "API Key (可选)" else "API Key"
     val keyHint = if (vertexEnabled) "Vertex AI 使用服务账号认证" else "sk-..."

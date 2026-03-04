@@ -84,6 +84,14 @@ dependencies {
     implementation("com.github.gregcockroft:AndroidMath:v1.1.0") {
         exclude(group = "com.google.guava", module = "guava")
     }
+    
+    // Gson for JSON parsing
+    implementation("com.google.code.gson:gson:2.10.1")
+
+    // Ktor Client (MNN 模型市场网络请求)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
 
     // Compose
     implementation(platform(libs.compose.bom))
@@ -99,6 +107,9 @@ dependencies {
     // Coroutines（UI 层需要协程来调用框架）
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+
+    // DocumentFile（导入/导出模型时访问 SAF 目录）
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
