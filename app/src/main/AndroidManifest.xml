@@ -90,6 +90,9 @@
         <activity
             android:name=".SamplingParamsConfigActivity"
             android:exported="false" />
+        <activity
+            android:name=".TestMnnActivity"
+            android:exported="false" />
 
     </application>
 

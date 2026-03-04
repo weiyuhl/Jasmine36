@@ -327,6 +327,16 @@ fun SettingsScreen(
                     }
                 )
             }
+            
+            // MNN 测试
+            SettingsItem(
+                title = "MNN 测试",
+                subtitle = "测试本地 LLM 推理引擎",
+                value = "进入测试",
+                onClick = {
+                    context.startActivity(Intent(context, TestMnnActivity::class.java))
+                }
+            )
         }
     }
 }

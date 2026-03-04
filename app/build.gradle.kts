@@ -16,6 +16,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -38,6 +42,15 @@ android {
     buildFeatures {
         compose = true
     }
+    
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+    
+    ndkVersion = "26.3.11579264"
 }
 
 dependencies {
@@ -80,6 +93,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
+    implementation("androidx.compose.material3:material3")
     debugImplementation(libs.compose.ui.tooling)
 
     // Coroutines（UI 层需要协程来调用框架）
