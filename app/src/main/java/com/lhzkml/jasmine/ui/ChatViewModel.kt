@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import com.lhzkml.jasmine.AppConfig
 import com.lhzkml.jasmine.ChatExecutor
 import com.lhzkml.jasmine.ChatItem
+import com.lhzkml.jasmine.ChatStopSignal
 import com.lhzkml.jasmine.ChatStateManager
 import com.lhzkml.jasmine.CheckpointRecovery
 import com.lhzkml.jasmine.ContentBlock
@@ -623,6 +624,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         isGenerating = true
         userScrolledUp = false
+        ChatStopSignal.reset()
         val now = ChatExecutor.formatTime(System.currentTimeMillis())
         chatStateManager.addUserMessage(message, now)
 
@@ -677,6 +679,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopGenerating() {
+        ChatStopSignal.requestStop()
         currentJob?.cancel()
         isGenerating = false
     }

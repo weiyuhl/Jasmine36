@@ -2,6 +2,7 @@ package com.lhzkml.jasmine.mnn
 
 import android.content.Context
 import android.util.Log
+import com.lhzkml.jasmine.ChatStopSignal
 import com.lhzkml.jasmine.ProviderManager
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
@@ -166,7 +167,7 @@ class MnnChatClient(
             s.generate(prompt) { token ->
                 fullResult.append(token)
                 kotlinx.coroutines.runBlocking { onChunk(token) }
-                false
+                ChatStopSignal.isRequested()
             }
         }
         return StreamResult(
