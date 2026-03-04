@@ -1,5 +1,7 @@
 package com.lhzkml.jasmine.ui
 
+import android.graphics.drawable.AnimationDrawable
+import android.widget.ImageView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +31,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.R
 import com.lhzkml.jasmine.ui.components.CustomDropdownMenu
@@ -95,20 +99,32 @@ fun ChatInputBar(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(if (isGenerating) GeneratingGreen else Accent)
+                                .then(if (!isGenerating) Modifier.background(Accent) else Modifier)
                                 .clickable {
-                                if (isGenerating) {
-                                    onStop()
-                                } else {
-                                    val msg = inputText.trim()
-                                    if (msg.isNotEmpty()) {
-                                        onSend(msg)
-                                        inputText = ""
+                                    if (isGenerating) {
+                                        onStop()
+                                    } else {
+                                        val msg = inputText.trim()
+                                        if (msg.isNotEmpty()) {
+                                            onSend(msg)
+                                            inputText = ""
+                                        }
                                     }
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isGenerating) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        ImageView(ctx).apply {
+                                            setImageResource(R.drawable.stop_button_animated)
+                                            scaleType = ImageView.ScaleType.CENTER_CROP
+                                            (drawable as? AnimationDrawable)?.start()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                             CustomText(
                                 text = if (isGenerating) "■" else "↑",
                                 color = BgPrimary,

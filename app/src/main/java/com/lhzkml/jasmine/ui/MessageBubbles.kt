@@ -8,29 +8,23 @@ import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.graphics.Typeface
 import android.widget.TextView
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import android.graphics.drawable.AnimationDrawable
+import android.widget.ImageView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -216,36 +210,23 @@ private fun appendPlan(sb: SpannableStringBuilder, plan: ContentBlock.Plan) {
 
 @Composable
 fun TypingIndicator() {
-    val transition = rememberInfiniteTransition(label = "typing")
-    val dot1Alpha by transition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(600, easing = LinearEasing), RepeatMode.Reverse),
-        label = "dot1"
-    )
-    val dot2Alpha by transition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(600, delayMillis = 200, easing = LinearEasing), RepeatMode.Reverse),
-        label = "dot2"
-    )
-    val dot3Alpha by transition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(600, delayMillis = 400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "dot3"
-    )
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.Start
     ) {
-        listOf(dot1Alpha, dot2Alpha, dot3Alpha).forEach { alpha ->
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .alpha(alpha)
-                    .background(TextSecondary, CircleShape)
-            )
-        }
+        AndroidView(
+            factory = { ctx ->
+                ImageView(ctx).apply {
+                    setImageResource(com.lhzkml.jasmine.R.drawable.typing_indicator_animated)
+                    contentDescription = ctx.getString(com.lhzkml.jasmine.R.string.typing_indicator_content_description)
+                    scaleType = ImageView.ScaleType.CENTER
+                    adjustViewBounds = true
+                    (drawable as? AnimationDrawable)?.start()
+                }
+            },
+            modifier = Modifier.wrapContentWidth()
+        )
     }
 }
