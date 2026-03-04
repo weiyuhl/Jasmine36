@@ -13,6 +13,12 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
@@ -150,12 +156,50 @@ object MnnModelManager {
         }
     }
 
+    /**
+     * 递归删除目录。参考官方 MNN DownloadFileUtils.deleteDirectoryRecursively，
+     * 使用 Files.walkFileTree 先删文件再删目录，相比 File.deleteRecursively() 更可靠。
+     */
+    private fun deleteDirectoryRecursively(dir: File?): Boolean {
+        if (dir == null || !dir.exists()) return false
+        val dirPath: Path = dir.toPath()
+        return try {
+            Files.walkFileTree(dirPath, object : SimpleFileVisitor<Path>() {
+                @Throws(IOException::class)
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    Files.delete(file)
+                    return FileVisitResult.CONTINUE
+                }
+
+                @Throws(IOException::class)
+                override fun postVisitDirectory(directory: Path, exc: IOException?): FileVisitResult {
+                    Files.delete(directory)
+                    return FileVisitResult.CONTINUE
+                }
+
+                @Throws(IOException::class)
+                override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult {
+                    Log.e(TAG, "visitFileFailed: $file", exc)
+                    return FileVisitResult.TERMINATE
+                }
+            })
+            true
+        } catch (e: IOException) {
+            Log.e(TAG, "deleteDirectoryRecursively failed: ${dir.absolutePath}", e)
+            false
+        }
+    }
+
     fun deleteModel(context: Context, modelId: String): Boolean {
         return try {
             val dirName = if (modelId.contains("/")) safeModelId(modelId) else modelId
-            File(getModelsDir(context), dirName).deleteRecursively()
+            val modelDir = File(getModelsDir(context), dirName)
+            if (!modelDir.exists()) return true // 目录不存在视为已删除
+            val ok = deleteDirectoryRecursively(modelDir)
+            if (!ok) Log.e(TAG, "deleteModel failed: $modelId -> ${modelDir.absolutePath}")
+            ok
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "deleteModel error: $modelId", e)
             false
         }
     }

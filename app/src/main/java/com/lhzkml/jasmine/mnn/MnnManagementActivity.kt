@@ -310,9 +310,14 @@ fun MnnManagementScreen(
             },
             confirmButton = {
                 CustomTextButton(onClick = {
-                    MnnModelManager.deleteModel(context, model.modelId)
+                    val ok = MnnModelManager.deleteModel(context, model.modelId)
                     showDeleteDialog = null
-                    refresh()
+                    if (ok) {
+                        refresh()
+                    } else {
+                        Toast.makeText(context, "删除失败，文件可能被占用，请先切换模型后重试", Toast.LENGTH_LONG).show()
+                        refresh() // 仍刷新以显示当前真实状态
+                    }
                 }, contentColor = Color(0xFFF44336)) {
                     CustomText("删除", fontSize = 14.sp, color = Color(0xFFF44336))
                 }
