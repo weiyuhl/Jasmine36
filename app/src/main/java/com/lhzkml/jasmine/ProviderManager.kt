@@ -259,4 +259,17 @@ object ProviderManager {
     fun setLastConversationId(context: Context, id: String) = configRepo.setLastConversationId(id)
     fun hasLastSession(context: Context): Boolean = configRepo.hasLastSession()
     fun setLastSession(context: Context, active: Boolean) = configRepo.setLastSession(active)
+
+    // ========== MNN 本地模型 ==========
+
+    /** 是否启用 Thinking 模式（深度思考），默认 true */
+    fun getMnnThinkingEnabled(context: Context, modelId: String): Boolean {
+        val prefs = context.getSharedPreferences("jasmine_mnn", Context.MODE_PRIVATE)
+        return prefs.getBoolean("thinking_$modelId", true)
+    }
+
+    fun setMnnThinkingEnabled(context: Context, modelId: String, enabled: Boolean) {
+        context.getSharedPreferences("jasmine_mnn", Context.MODE_PRIVATE)
+            .edit().putBoolean("thinking_$modelId", enabled).apply()
+    }
 }

@@ -61,6 +61,16 @@ class MnnLlmSession(
     }
     
     /**
+     * 运行时切换深度思考模式（仅 Thinking 模型有效）
+     */
+    fun updateThinking(thinking: Boolean) {
+        if (!isInitialized || nativePtr == 0L) return
+        val configJson = """{"jinja":{"context":{"enable_thinking":$thinking}}}"""
+        nativeUpdateConfig(nativePtr, configJson)
+        Log.d(TAG, "Thinking mode updated: $thinking")
+    }
+
+    /**
      * 释放资源
      */
     fun release() {
@@ -74,6 +84,7 @@ class MnnLlmSession(
     
     // Native 方法
     private external fun nativeInit(modelPath: String, configJson: String): Long
+    private external fun nativeUpdateConfig(sessionPtr: Long, configJson: String)
     private external fun nativeRelease(sessionPtr: Long)
     private external fun nativeGenerate(sessionPtr: Long, prompt: String, callback: GenerateCallback): String
     
@@ -97,7 +108,9 @@ data class MnnConfig(
     val temperature: Float = 0.7f,
     val topP: Float = 0.9f,
     val topK: Int = 40,
-    val systemPrompt: String = "You are a helpful assistant."
+    val systemPrompt: String = "You are a helpful assistant.",
+    /** 是否启用深度思考模式（Thinking 模型如 Qwen3-Thinking 等） */
+    val enableThinking: Boolean = true
 ) {
     fun toJson(): String {
         return """
@@ -106,7 +119,12 @@ data class MnnConfig(
                 "temperature": $temperature,
                 "top_p": $topP,
                 "top_k": $topK,
-                "system_prompt": "$systemPrompt"
+                "system_prompt": "$systemPrompt",
+                "jinja": {
+                    "context": {
+                        "enable_thinking": $enableThinking
+                    }
+                }
             }
         """.trimIndent()
     }

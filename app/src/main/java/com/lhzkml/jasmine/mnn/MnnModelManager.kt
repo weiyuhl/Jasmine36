@@ -52,6 +52,32 @@ object MnnModelManager {
     /** 将 modelId 转为安全的目录名（官方 demo 的 safeModelId 做法） */
     fun safeModelId(modelId: String): String = modelId.replace("/", "_")
 
+    /**
+     * 获取模型的额外标签（来自市场缓存），用于判断能力如 ThinkingSwitch
+     */
+    fun getExtraTagsForModel(context: Context, modelId: String): List<String> {
+        val cacheFile = File(context.filesDir, MARKET_CACHE_FILE)
+        if (!cacheFile.exists()) return emptyList()
+        return try {
+            val data = Gson().fromJson(cacheFile.readText(), MnnMarketData::class.java) ?: return emptyList()
+            val safe = safeModelId(modelId)
+            val marketModel = data.models.find { m ->
+                m.modelId == modelId || safeModelId(m.modelId) == safe
+            }
+            marketModel?.extraTags ?: emptyList()
+        } catch (e: Exception) {
+            Log.w(TAG, "getExtraTagsForModel error", e)
+            emptyList()
+        }
+    }
+
+    /** 模型是否支持 Thinking 开关（含 ThinkingSwitch 标签或名称含 Thinking） */
+    fun isSupportThinkingSwitch(context: Context, modelId: String): Boolean {
+        val tags = getExtraTagsForModel(context, modelId)
+        if (tags.any { it.equals("ThinkingSwitch", ignoreCase = true) }) return true
+        return modelId.contains("Thinking", ignoreCase = true)
+    }
+
     fun getLocalModels(context: Context): List<MnnModelInfo> {
         val modelsDir = getModelsDir(context)
         val models = mutableListOf<MnnModelInfo>()

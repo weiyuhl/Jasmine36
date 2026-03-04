@@ -78,7 +78,10 @@ fun ChatScreen(viewModel: ChatViewModel) {
             onSend = { viewModel.sendMessage(it) },
             onStop = { viewModel.stopGenerating() },
             onModelSelected = { viewModel.selectModel(it) },
-            shortenModelName = { viewModel.shortenModelName(it) }
+            shortenModelName = { viewModel.shortenModelName(it) },
+            supportsThinkingMode = viewModel.supportsThinkingMode,
+            isThinkingModeEnabled = viewModel.isThinkingModeEnabled,
+            onThinkingModeChanged = if (viewModel.supportsThinkingMode) { { enabled -> viewModel.setThinkingMode(enabled) } } else null
         )
     }
 

@@ -1,10 +1,12 @@
 package com.lhzkml.jasmine.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,10 +23,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.R
 import com.lhzkml.jasmine.ui.components.CustomDropdownMenu
 import com.lhzkml.jasmine.ui.components.CustomDropdownMenuItem
 import com.lhzkml.jasmine.ui.components.CustomText
@@ -39,6 +45,9 @@ fun ChatInputBar(
     onStop: () -> Unit,
     onModelSelected: (String) -> Unit,
     shortenModelName: (String) -> String,
+    supportsThinkingMode: Boolean = false,
+    isThinkingModeEnabled: Boolean = true,
+    onThinkingModeChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var inputText by remember { mutableStateOf("") }
@@ -81,12 +90,13 @@ fun ChatInputBar(
                 )
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(if (isGenerating) GeneratingGreen else Accent)
-                            .clickable {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (isGenerating) GeneratingGreen else Accent)
+                                .clickable {
                                 if (isGenerating) {
                                     onStop()
                                 } else {
@@ -99,29 +109,71 @@ fun ChatInputBar(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        CustomText(
-                            text = if (isGenerating) "■" else "↑",
-                            color = BgPrimary,
-                            fontSize = 16.sp
-                        )
+                            CustomText(
+                                text = if (isGenerating) "■" else "↑",
+                                color = BgPrimary,
+                                fontSize = 16.sp
+                            )
+                        }
                     }
                 }
             }
 
-            Box(
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 2.dp, bottom = 2.dp)
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                CustomText(
-                    text = currentModelDisplay,
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.clickable {
-                        if (modelList.size > 1) modelMenuExpanded = true
+                if (supportsThinkingMode && onThinkingModeChanged != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .border(
+                                width = 1.dp,
+                                color = if (isThinkingModeEnabled) Accent else TextSecondary.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                            .background(
+                                if (isThinkingModeEnabled) Accent.copy(alpha = 0.15f)
+                                else Color.Transparent
+                            )
+                            .clickable(enabled = !isGenerating) {
+                                onThinkingModeChanged(!isThinkingModeEnabled)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_think),
+                                contentDescription = "深度思考",
+                                modifier = Modifier.size(18.dp),
+                                tint = if (isThinkingModeEnabled) Accent else TextSecondary
+                            )
+                            CustomText(
+                                text = "Thinking",
+                                fontSize = 12.sp,
+                                color = if (isThinkingModeEnabled) Accent else TextSecondary,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
                     }
-                )
-                CustomDropdownMenu(
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                Box(modifier = Modifier.padding(end = 2.dp, bottom = 2.dp)) {
+                    CustomText(
+                        text = currentModelDisplay,
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable {
+                            if (modelList.size > 1) modelMenuExpanded = true
+                        }
+                    )
+                    CustomDropdownMenu(
                     expanded = modelMenuExpanded,
                     onDismissRequest = { modelMenuExpanded = false },
                     alignment = Alignment.BottomEnd,
@@ -145,5 +197,6 @@ fun ChatInputBar(
                 }
             }
         }
+    }
     }
 }

@@ -104,6 +104,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val mcpConnectionManager get() = AppConfig.mcpConnectionManager()
     var userScrolledUp by mutableStateOf(false)
 
+    /** 当前 MNN 模型是否支持 Thinking 开关 */
+    var supportsThinkingMode by mutableStateOf(false)
+    /** Thinking 模式是否开启 */
+    var isThinkingModeEnabled by mutableStateOf(true)
+
     /** 检查点恢复选择对话框（执行失败时选择恢复轮次） */
     var checkpointRecoveryDialog by mutableStateOf<CheckpointRecoveryDialogState?>(null)
         private set
@@ -314,6 +319,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             currentModelDisplay = "未配置"
             modelList = emptyList()
             currentModel = ""
+            supportsThinkingMode = false
             return
         }
 
@@ -329,9 +335,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 overrideModel = currentModel
             }
             currentModelDisplay = "${shortenModelName(currentModel).ifEmpty { "请下载模型" }} \u02C7"
+            supportsThinkingMode = MnnModelManager.isSupportThinkingSwitch(activity, currentModel)
+            isThinkingModeEnabled = ProviderManager.getMnnThinkingEnabled(activity, currentModel)
             return
         }
 
+        supportsThinkingMode = false
         val model = overrideModel ?: ProviderManager.getModel(activity, activeId)
         currentModel = model
         currentModelDisplay = "${shortenModelName(model).ifEmpty { "未选择模型" }} \u02C7"
@@ -353,6 +362,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val baseUrl = ProviderManager.getBaseUrl(activity, activeId)
         ProviderManager.saveConfig(activity, activeId, key, baseUrl, model)
         refreshModelSelector()
+    }
+
+    fun setThinkingMode(enabled: Boolean) {
+        val activity = _activity ?: return
+        if (!supportsThinkingMode || currentModel.isEmpty()) return
+        isThinkingModeEnabled = enabled
+        ProviderManager.setMnnThinkingEnabled(activity, currentModel, enabled)
+        val client = clientRouter.getClient(MnnChatClient.PROVIDER_ID) as? MnnChatClient
+        client?.updateThinking(enabled)
     }
 
     fun shortenModelName(model: String): String = model.substringAfterLast("/")

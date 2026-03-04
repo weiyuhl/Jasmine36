@@ -167,6 +167,25 @@ Java_com_lhzkml_jasmine_mnn_MnnLlmSession_nativeInit(
 }
 
 JNIEXPORT void JNICALL
+Java_com_lhzkml_jasmine_mnn_MnnLlmSession_nativeUpdateConfig(
+    JNIEnv *env,
+    jobject thiz,
+    jlong sessionPtr,
+    jstring configJson
+) {
+    auto *llm = reinterpret_cast<Llm*>(sessionPtr);
+    if (!llm) return;
+    const char *config_str = env->GetStringUTFChars(configJson, nullptr);
+    try {
+        llm->set_config(config_str);
+        LOGD("Config updated: %s", config_str);
+    } catch (const std::exception &e) {
+        LOGE("Update config failed: %s", e.what());
+    }
+    env->ReleaseStringUTFChars(configJson, config_str);
+}
+
+JNIEXPORT void JNICALL
 Java_com_lhzkml_jasmine_mnn_MnnLlmSession_nativeRelease(
     JNIEnv *env,
     jobject thiz,

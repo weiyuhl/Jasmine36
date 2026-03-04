@@ -2,6 +2,7 @@ package com.lhzkml.jasmine.mnn
 
 import android.content.Context
 import android.util.Log
+import com.lhzkml.jasmine.ProviderManager
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
 import com.lhzkml.jasmine.core.prompt.llm.StreamResult
@@ -49,12 +50,14 @@ class MnnChatClient(
             ?: throw IllegalStateException("本地模型 $targetId 不存在，请先下载")
 
         val defaults = MnnModelManager.getGlobalDefaults(context) ?: MnnModelManager.defaultGlobalConfig()
+        val enableThinking = ProviderManager.getMnnThinkingEnabled(context, targetId)
         val mnnConfig = MnnConfig(
             maxNewTokens = defaults.maxNewTokens ?: 2048,
             temperature = defaults.temperature ?: 0.6f,
             topP = defaults.topP ?: 0.95f,
             topK = defaults.topK ?: 20,
-            systemPrompt = ""
+            systemPrompt = "",
+            enableThinking = enableThinking
         )
 
         val newSession = MnnLlmSession(modelInfo.modelPath, mnnConfig)
@@ -185,6 +188,14 @@ class MnnChatClient(
     }
 
     override suspend fun getBalance(): BalanceInfo? = null
+
+    /**
+     * 运行时切换 Thinking 模式（仅 Thinking 模型有效）
+     */
+    fun updateThinking(thinking: Boolean) {
+        session?.updateThinking(thinking)
+        ProviderManager.setMnnThinkingEnabled(context, modelId, thinking)
+    }
 
     override fun close() {
         try {
