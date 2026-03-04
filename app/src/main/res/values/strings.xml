@@ -3,6 +3,6 @@
     <string name="typing_indicator_content_description">模型正在思考</string>
     <string name="oss_licenses_title">开源许可</string>
     <string name="about_app_description">一款支持本地 MNN 推理与云端大语言模型的智能对话应用，支持 Agent 模式、工具调用与工作区，适用于多场景对话与任务处理。</string>
-    <string name="about_developer">开发者：莱赫茨凯姆勒</string>
-    <string name="about_copyright">Copyright © 2026 莱赫茨凯姆勒. All Rights Reserved. 莱赫茨凯姆勒 版权所有</string>
+    <string name="about_copyright_line1">Copyright ©2026 莱赫茨凯姆勒.All Rights Reserved.</string>
+    <string name="about_copyright_line2">莱赫茨凯姆勒 版权所有</string>
 </resources>

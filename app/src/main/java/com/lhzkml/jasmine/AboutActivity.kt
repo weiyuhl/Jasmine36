@@ -96,14 +96,33 @@ fun AboutScreen(onBack: () -> Unit) {
         ) {
             AboutIntroCard(
                 appName = context.getString(R.string.app_name),
-                description = context.getString(R.string.about_app_description),
-                developer = context.getString(R.string.about_developer),
-                copyright = context.getString(R.string.about_copyright)
+                description = context.getString(R.string.about_app_description)
             )
             VersionItem(title = "应用版本", value = appVersion)
             VersionItem(title = "Jasmine-core 版本", value = jasmineCoreVersion)
             VersionItem(title = "MNN 引擎版本", value = mnnVersion)
             OssLicensesItem(context = context)
+            Spacer(modifier = Modifier.height(24.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                CustomText(
+                    text = context.getString(R.string.about_copyright_line1),
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                CustomText(
+                    text = context.getString(R.string.about_copyright_line2),
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -111,9 +130,7 @@ fun AboutScreen(onBack: () -> Unit) {
 @Composable
 private fun AboutIntroCard(
     appName: String,
-    description: String,
-    developer: String,
-    copyright: String
+    description: String
 ) {
     Column(
         modifier = Modifier
@@ -130,9 +147,6 @@ private fun AboutIntroCard(
             fontWeight = FontWeight.Bold
         )
         CustomText(text = description, fontSize = 14.sp, color = TextSecondary)
-        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
-        CustomText(text = developer, fontSize = 14.sp, color = TextPrimary)
-        CustomText(text = copyright, fontSize = 13.sp, color = TextSecondary)
     }
 }
 
