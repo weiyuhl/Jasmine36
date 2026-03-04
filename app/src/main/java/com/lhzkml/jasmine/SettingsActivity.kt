@@ -153,7 +153,7 @@ fun SettingsScreen(
         ) {
             // 使用 key 让所有设置项在 refreshTrigger 变化时重新读取状态
             key(refreshTrigger) {
-                // 模型供应商
+                // ─── 一、模型与供应商 ───
                 SettingsItem(
                     title = "模型供应商",
                     value = getProviderStatus(context),
@@ -161,9 +161,42 @@ fun SettingsScreen(
                         context.startActivity(Intent(context, ProviderListActivity::class.java))
                     }
                 )
+                SettingsItem(
+                    title = "本地 MNN",
+                    subtitle = "管理本地 LLM 推理模型",
+                    value = "进入管理",
+                    onClick = {
+                        context.startActivity(Intent(context, MnnManagementActivity::class.java))
+                    }
+                )
+
+                // ─── 二、模型参数 ───
+                SettingsItem(
+                    title = "Token 管理",
+                    subtitle = "限制每条回复的长度",
+                    value = getMaxTokensInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, TokenManagementActivity::class.java))
+                    }
+                )
+                SettingsItem(
+                    title = "采样参数",
+                    subtitle = "控制 AI 回复的随机性和多样性",
+                    value = getSamplingParamsInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, SamplingParamsConfigActivity::class.java))
+                    }
+                )
+                SettingsItem(
+                    title = "系统提示词",
+                    value = getSystemPromptPreview(context),
+                    onClick = {
+                        context.startActivity(Intent(context, SystemPromptConfigActivity::class.java))
+                    }
+                )
             }
-            
-            // 工具调用开关
+
+            // ─── 三、Agent 与工具 ───
             SettingsSwitchItem(
                 title = "工具调用",
                 subtitle = "启用 Agent 模式，AI 可调用工具",
@@ -174,8 +207,6 @@ fun SettingsScreen(
                     refreshTrigger++
                 }
             )
-            
-            // Agent 工具预设（仅工具开启时显示）
             if (toolsEnabled) {
                 key(refreshTrigger) {
                     SettingsItem(
@@ -187,12 +218,6 @@ fun SettingsScreen(
                             })
                         }
                     )
-                }
-            }
-            
-            // Agent 策略（仅工具开启时显示）
-            if (toolsEnabled) {
-                key(refreshTrigger) {
                     SettingsItem(
                         title = "Agent 策略",
                         value = getAgentStrategyInfo(context),
@@ -200,32 +225,24 @@ fun SettingsScreen(
                             context.startActivity(Intent(context, AgentStrategyActivity::class.java))
                         }
                     )
+                    SettingsItem(
+                        title = "MCP 工具",
+                        value = getMcpInfo(context),
+                        onClick = {
+                            context.startActivity(Intent(context, McpServerActivity::class.java))
+                        }
+                    )
+                    SettingsItem(
+                        title = "Shell 命令策略",
+                        value = getShellPolicyInfo(context),
+                        onClick = {
+                            context.startActivity(Intent(context, ShellPolicyActivity::class.java))
+                        }
+                    )
                 }
             }
-            
-            // MCP 工具
-            key(refreshTrigger) {
-                SettingsItem(
-                    title = "MCP 工具",
-                    value = getMcpInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, McpServerActivity::class.java))
-                    }
-                )
-            }
-            
-            // Shell 命令策略
-            key(refreshTrigger) {
-                SettingsItem(
-                    title = "Shell 命令策略",
-                    value = getShellPolicyInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, ShellPolicyActivity::class.java))
-                    }
-                )
-            }
-            
-            // 智能上下文压缩
+
+            // ─── 四、执行与调试 ───
             key(refreshTrigger) {
                 SettingsItem(
                     title = "智能上下文压缩",
@@ -234,10 +251,13 @@ fun SettingsScreen(
                         context.startActivity(Intent(context, CompressionConfigActivity::class.java))
                     }
                 )
-            }
-            
-            // 执行追踪
-            key(refreshTrigger) {
+                SettingsItem(
+                    title = "超时与续传",
+                    value = getTimeoutInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, TimeoutConfigActivity::class.java))
+                    }
+                )
                 SettingsItem(
                     title = "执行追踪",
                     value = getTraceInfo(context),
@@ -245,10 +265,6 @@ fun SettingsScreen(
                         context.startActivity(Intent(context, TraceConfigActivity::class.java))
                     }
                 )
-            }
-            
-            // 任务规划
-            key(refreshTrigger) {
                 SettingsItem(
                     title = "任务规划",
                     value = getPlannerInfo(context),
@@ -256,10 +272,6 @@ fun SettingsScreen(
                         context.startActivity(Intent(context, PlannerConfigActivity::class.java))
                     }
                 )
-            }
-            
-            // 执行快照
-            key(refreshTrigger) {
                 SettingsItem(
                     title = "执行快照",
                     value = getSnapshotInfo(context),
@@ -267,10 +279,6 @@ fun SettingsScreen(
                         context.startActivity(Intent(context, SnapshotConfigActivity::class.java))
                     }
                 )
-            }
-            
-            // 事件处理器
-            key(refreshTrigger) {
                 SettingsItem(
                     title = "事件处理器",
                     value = getEventHandlerInfo(context),
@@ -279,63 +287,14 @@ fun SettingsScreen(
                     }
                 )
             }
-            
-            // 超时与续传
-            key(refreshTrigger) {
-                SettingsItem(
-                    title = "超时与续传",
-                    value = getTimeoutInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, TimeoutConfigActivity::class.java))
-                    }
-                )
-            }
-            
-            // Token 管理
-            key(refreshTrigger) {
-                SettingsItem(
-                    title = "Token 管理",
-                    subtitle = "限制每条回复的长度",
-                    value = getMaxTokensInfo(context),
-                    onClick = {
-                        val intent = Intent(context, TokenManagementActivity::class.java)
-                        context.startActivity(intent)
-                    }
-                )
-            }
-            
-            // 采样参数
-            key(refreshTrigger) {
-                SettingsItem(
-                    title = "采样参数",
-                    subtitle = "控制 AI 回复的随机性和多样性",
-                    value = getSamplingParamsInfo(context),
-                    onClick = {
-                        val intent = Intent(context, SamplingParamsConfigActivity::class.java)
-                        context.startActivity(intent)
-                    }
-                )
-            }
-            
-            // 系统提示词
-            key(refreshTrigger) {
-                SettingsItem(
-                    title = "系统提示词",
-                    value = getSystemPromptPreview(context),
-                    onClick = {
-                        val intent = Intent(context, SystemPromptConfigActivity::class.java)
-                        context.startActivity(intent)
-                    }
-                )
-            }
-            
-            // 本地 MNN
+
+            // ─── 五、关于 ───
             SettingsItem(
-                title = "本地 MNN",
-                subtitle = "管理本地 LLM 推理模型",
-                value = "进入管理",
+                title = "关于",
+                subtitle = "应用与依赖版本信息",
+                value = "查看",
                 onClick = {
-                    context.startActivity(Intent(context, MnnManagementActivity::class.java))
+                    context.startActivity(Intent(context, AboutActivity::class.java))
                 }
             )
             

@@ -15,6 +15,8 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        buildConfigField("String", "JASMINE_CORE_VERSION", "\"1.0\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         ndk {
@@ -41,6 +43,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     
     externalNativeBuild {

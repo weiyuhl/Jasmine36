@@ -99,6 +99,9 @@
         <activity
             android:name=".mnn.MnnModelSettingsActivity"
             android:exported="false" />
+        <activity
+            android:name=".AboutActivity"
+            android:exported="false" />
 
     </application>
 
