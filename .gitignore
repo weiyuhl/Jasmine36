@@ -23,3 +23,5 @@ local.properties
 /ima/
 /MNN-master/
 /.kiro/
+keystore.properties
+app/release.keystore

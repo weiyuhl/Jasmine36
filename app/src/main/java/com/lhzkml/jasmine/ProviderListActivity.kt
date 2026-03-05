@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.config.ProviderConfig
+import com.lhzkml.jasmine.ui.theme.Accent
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
@@ -269,7 +270,7 @@ fun ProviderItem(
                 onCheckedChange = onSwitchChange,
                 colors = CustomSwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = TextPrimary,
+                    checkedTrackColor = Accent,
                     uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f),
                     uncheckedBorderColor = TextSecondary.copy(alpha = 0.5f)

@@ -124,7 +124,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
             confirmButton = {
                 CustomTextButton(
                     onClick = { state.onConfirm(true) },
-                    colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF2196F3))
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = Accent)
                 ) { CustomText("恢复", fontSize = 14.sp) }
             },
             dismissButton = {

@@ -355,13 +355,13 @@ fun SnapshotConfigScreen(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0xFF2196F3), RoundedCornerShape(8.dp))
-                            .background(Color(0xFF2196F3).copy(alpha = 0.06f))
+                            .border(1.dp, Accent, RoundedCornerShape(8.dp))
+                            .background(Accent.copy(alpha = 0.06f))
                             .clickable { onViewCheckpoints() }
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CustomText("查看检查点", fontSize = 13.sp, color = Color(0xFF2196F3))
+                        CustomText("查看检查点", fontSize = 13.sp, color = Accent)
                     }
 
                     Box(
@@ -395,7 +395,7 @@ fun SnapshotConfigScreen(
                 confirmButton = {
                     CustomTextButton(
                         onClick = { showMemoryInfoDialog = false },
-                        colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF2196F3))
+                        colors = CustomButtonDefaults.textButtonColors(contentColor = Accent)
                     ) { CustomText("确定", fontSize = 14.sp) }
                 },
                 dismissButton = null
@@ -469,7 +469,7 @@ fun StorageCard(
             CustomText(
                 text = "✓",
                 fontSize = 16.sp,
-                color = Color(0xFF2196F3)
+                color = Accent
             )
         }
     }
@@ -516,7 +516,7 @@ fun RollbackStrategyCard(
             CustomText(
                 text = "✓",
                 fontSize = 16.sp,
-                color = Color(0xFF2196F3)
+                color = Accent
             )
         }
     }

@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.lhzkml.jasmine.ui.theme.JasmineTheme
+import com.lhzkml.jasmine.ui.theme.SwitchTrackUnchecked
 
 @Composable
 fun CustomSwitch(
@@ -23,7 +24,7 @@ fun CustomSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     checkedTrackColor: Color = JasmineTheme.colors.accent,
-    uncheckedTrackColor: Color = Color(0xFFE0E0E0),
+    uncheckedTrackColor: Color = SwitchTrackUnchecked,
     checkedThumbColor: Color = Color.White,
     uncheckedThumbColor: Color = Color.White,
     colors: SwitchColors? = null
@@ -75,7 +76,7 @@ object CustomSwitchDefaults {
         checkedThumbColor: Color = Color.White,
         checkedTrackColor: Color = JasmineTheme.colors.accent,
         uncheckedThumbColor: Color = Color.White,
-        uncheckedTrackColor: Color = Color(0xFFE0E0E0),
+        uncheckedTrackColor: Color = SwitchTrackUnchecked,
         uncheckedBorderColor: Color = Color.Transparent
     ) = SwitchColors(checkedThumbColor, checkedTrackColor, uncheckedThumbColor, uncheckedTrackColor, uncheckedBorderColor)
 }

@@ -264,7 +264,7 @@ fun ProviderConfigTab(provider: ProviderConfig) {
                         onCheckedChange = { vertexEnabled = it },
                         colors = CustomSwitchDefaults.colors(
                             checkedThumbColor = Color.White,
-                            checkedTrackColor = TextPrimary,
+                            checkedTrackColor = Accent,
                             uncheckedThumbColor = Color.White,
                             uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f)
                         )

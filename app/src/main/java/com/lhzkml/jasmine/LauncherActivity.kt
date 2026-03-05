@@ -209,7 +209,7 @@ fun LauncherScreen(
             title = { CustomText("需要文件访问权限", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
             text = { CustomText("Agent 模式需要访问设备文件。请在设置中授予\"所有文件访问\"权限。", color = TextPrimary, fontSize = 14.sp) },
             confirmButton = {
-                CustomTextButton(onClick = onGoToSettings, colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFF2196F3))) {
+                CustomTextButton(onClick = onGoToSettings, colors = CustomButtonDefaults.textButtonColors(contentColor = Accent)) {
                     CustomText("去设置", fontSize = 14.sp)
                 }
             },

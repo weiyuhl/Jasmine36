@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.mcp.McpToolDefinition
 import com.lhzkml.jasmine.core.config.McpServerConfig
 import com.lhzkml.jasmine.core.config.McpTransportType
+import com.lhzkml.jasmine.ui.theme.Accent
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.JasmineTheme
 import com.lhzkml.jasmine.ui.theme.TextPrimary
@@ -260,9 +261,8 @@ fun McpServerScreen(
                     },
                     colors = CustomSwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF4CAF50),
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color(0xFFE0E0E0)
+                        checkedTrackColor = Accent,
+                        uncheckedThumbColor = Color.White
                     )
                 )
             }

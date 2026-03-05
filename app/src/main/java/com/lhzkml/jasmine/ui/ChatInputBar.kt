@@ -66,84 +66,96 @@ fun ChatInputBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp)
+                .height(136.dp)
+                .border(
+                    width = 0.5.dp,
+                    color = Divider,
+                    shape = RoundedCornerShape(16.dp)
+                )
                 .background(BgInput, RoundedCornerShape(16.dp))
                 .padding(10.dp)
         ) {
-            Row(modifier = Modifier.matchParentSize()) {
-                BasicTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    textStyle = TextStyle(
-                        color = TextPrimary,
-                        fontSize = 15.sp
-                    ),
-                    cursorBrush = SolidColor(Accent),
-                    maxLines = 4,
-                    decorationBox = { innerTextField ->
-                        Box {
-                            if (inputText.isEmpty()) {
-                                CustomText("输入消息...", color = TextSecondary, fontSize = 15.sp)
+            Column(
+                modifier = Modifier.matchParentSize()
+            ) {
+                // 顶部：输入框 + 发送按钮
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BasicTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        textStyle = TextStyle(
+                            color = TextPrimary,
+                            fontSize = 15.sp
+                        ),
+                        cursorBrush = SolidColor(Accent),
+                        maxLines = 6,
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (inputText.isEmpty()) {
+                                    CustomText("输入消息...", color = TextSecondary, fontSize = 15.sp)
+                                }
+                                innerTextField()
                             }
-                            innerTextField()
-                        }
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 8.dp)
-                )
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .then(if (!isGenerating) Modifier.background(Accent) else Modifier)
-                                .clickable {
-                                    if (isGenerating) {
-                                        onStop()
-                                    } else {
-                                        val msg = inputText.trim()
-                                        if (msg.isNotEmpty()) {
-                                            onSend(msg)
-                                            inputText = ""
-                                        }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .then(if (!isGenerating) Modifier.background(Accent) else Modifier)
+                            .clickable {
+                                if (isGenerating) {
+                                    onStop()
+                                } else {
+                                    val msg = inputText.trim()
+                                    if (msg.isNotEmpty()) {
+                                        onSend(msg)
+                                        inputText = ""
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isGenerating) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    ImageView(ctx).apply {
+                                        setImageResource(R.drawable.stop_button_animated)
+                                        scaleType = ImageView.ScaleType.CENTER_CROP
+                                        (drawable as? AnimationDrawable)?.start()
                                     }
                                 },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isGenerating) {
-                                AndroidView(
-                                    factory = { ctx ->
-                                        ImageView(ctx).apply {
-                                            setImageResource(R.drawable.stop_button_animated)
-                                            scaleType = ImageView.ScaleType.CENTER_CROP
-                                            (drawable as? AnimationDrawable)?.start()
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                            CustomText(
-                                text = if (isGenerating) "■" else "↑",
-                                color = BgPrimary,
-                                fontSize = 16.sp
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
+                        CustomText(
+                            text = if (isGenerating) "■" else "↑",
+                            color = BgPrimary,
+                            fontSize = 16.sp
+                        )
                     }
                 }
-            }
 
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (supportsThinkingMode && onThinkingModeChanged != null) {
+                Spacer(modifier = Modifier.weight(1f))
+
+                // 底部：思考按钮 + 模型切换
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (supportsThinkingMode && onThinkingModeChanged != null) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(18.dp))
@@ -177,42 +189,43 @@ fun ChatInputBar(
                             )
                         }
                     }
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-                Box(modifier = Modifier.padding(end = 2.dp, bottom = 2.dp)) {
-                    CustomText(
-                        text = currentModelDisplay,
-                        color = TextSecondary,
-                        fontSize = 12.sp,
-                        modifier = Modifier.clickable {
-                            if (modelList.size > 1) modelMenuExpanded = true
-                        }
-                    )
-                    CustomDropdownMenu(
-                    expanded = modelMenuExpanded,
-                    onDismissRequest = { modelMenuExpanded = false },
-                    alignment = Alignment.BottomEnd,
-                    alignAboveAnchor = true
-                ) {
-                    modelList.forEach { model ->
-                        CustomDropdownMenuItem(
-                            text = {
-                                CustomText(
-                                    text = shortenModelName(model),
-                                    color = if (model == currentModel) Accent else TextPrimary,
-                                    fontSize = 14.sp
-                                )
-                            },
-                            onClick = {
-                                onModelSelected(model)
-                                modelMenuExpanded = false
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    Box(modifier = Modifier.padding(end = 2.dp, bottom = 2.dp)) {
+                        CustomText(
+                            text = currentModelDisplay,
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable {
+                                if (modelList.size > 1) modelMenuExpanded = true
                             }
                         )
+                        CustomDropdownMenu(
+                            expanded = modelMenuExpanded,
+                            onDismissRequest = { modelMenuExpanded = false },
+                            alignment = Alignment.BottomEnd,
+                            alignAboveAnchor = true
+                        ) {
+                            modelList.forEach { model ->
+                                CustomDropdownMenuItem(
+                                    text = {
+                                        CustomText(
+                                            text = shortenModelName(model),
+                                            color = if (model == currentModel) Accent else TextPrimary,
+                                            fontSize = 14.sp
+                                        )
+                                    },
+                                    onClick = {
+                                        onModelSelected(model)
+                                        modelMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
-    }
     }
 }

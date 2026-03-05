@@ -6,7 +6,7 @@
     <color name="bg_input">#FFF5F5F5</color>
     <color name="text_primary">#FF1A1A1A</color>
     <color name="text_secondary">#FF888888</color>
-    <color name="accent">#FF2D2D2D</color>
+    <color name="accent">#FF0C84FF</color>
     <color name="accent_light">#FFF0F0F0</color>
     <color name="generating_green">#FF4CAF50</color>
     <color name="generating_green_light">#FFA5D6A7</color>

@@ -295,7 +295,7 @@ private fun SessionHeaderItem(
             modifier = Modifier
                 .size(6.dp)
                 .clip(RoundedCornerShape(3.dp))
-                .background(Color(0xFF2196F3))
+                .background(Accent)
         )
         CustomText(
             text = "会话: $displayId",
@@ -309,13 +309,13 @@ private fun SessionHeaderItem(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(4.dp))
-                .background(Color(0xFF2196F3).copy(alpha = 0.1f))
+                .background(Accent.copy(alpha = 0.1f))
                 .padding(horizontal = 8.dp, vertical = 2.dp)
         ) {
             CustomText(
                 text = "$count 个检查点",
                 fontSize = 11.sp,
-                color = Color(0xFF2196F3)
+                color = Accent
             )
         }
         CustomText(
@@ -355,7 +355,7 @@ private fun CheckpointCardItem(
             modifier = Modifier
                 .width(4.dp)
                 .height(64.dp)
-                .background(Color(0xFF2196F3), RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
+                .background(Accent, RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
         )
 
         Column(

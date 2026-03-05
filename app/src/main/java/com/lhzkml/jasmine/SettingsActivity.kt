@@ -26,6 +26,7 @@ import com.lhzkml.jasmine.mnn.MnnManagementActivity
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.prompt.llm.SystemPromptManager
+import com.lhzkml.jasmine.ui.theme.Accent
 import com.lhzkml.jasmine.ui.theme.BgInput
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
@@ -391,7 +392,7 @@ fun SettingsSwitchItem(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
                 checkedThumbColor = Color.White,
-                checkedTrackColor = TextPrimary,
+                checkedTrackColor = Accent,
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f)
             )
