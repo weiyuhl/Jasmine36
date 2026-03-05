@@ -76,7 +76,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     var isAgentMode by mutableStateOf(false)
     var workspacePath by mutableStateOf("")
     var workspaceLabel by mutableStateOf("")
-    var modeLabelText by mutableStateOf("Chat")
     var showFileTree by mutableStateOf(false)
 
     val drawerConversations = mutableStateListOf<ConversationInfo>()
@@ -290,13 +289,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val isAgent = ProviderManager.isAgentMode(activity)
         isAgentMode = isAgent
         if (isAgent) {
-            modeLabelText = "Agent"
             val path = ProviderManager.getWorkspacePath(activity)
             workspacePath = path
             showFileTree = true
             workspaceLabel = if (path.isNotEmpty()) path else "未选择工作区"
         } else {
-            modeLabelText = "Chat"
             showFileTree = false
             workspaceLabel = "普通聊天"
             workspacePath = ""

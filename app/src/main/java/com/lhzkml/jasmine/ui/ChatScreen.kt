@@ -5,14 +5,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -41,7 +38,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
             .background(BgPrimary)
     ) {
         TopBar(
-            modeLabelText = viewModel.modeLabelText,
             isAgentMode = viewModel.isAgentMode,
             onMenuClick = { activity?.openDrawerEnd() },
             onFileTreeClick = { activity?.openDrawerStart() }
@@ -165,7 +161,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
 @Composable
 fun TopBar(
-    modeLabelText: String,
     isAgentMode: Boolean,
     onMenuClick: () -> Unit,
     onFileTreeClick: () -> Unit
@@ -195,23 +190,6 @@ fun TopBar(
                     .padding(end = 8.dp)
             )
         }
-
-        Box(
-            modifier = Modifier
-                .background(
-                    if (isAgentMode) Accent else AccentLight,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
-                )
-                .padding(horizontal = 10.dp, vertical = 4.dp)
-        ) {
-            CustomText(
-                text = modeLabelText,
-                color = if (isAgentMode) BgPrimary else TextSecondary,
-                fontSize = 12.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.width(10.dp))
 
         CustomText(
             text = "☰",
