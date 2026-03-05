@@ -253,15 +253,11 @@ fun ProviderItem(
             }
             
             if (onDelete != null) {
-                CustomIconButton(
+                CustomTextButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(32.dp)
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
                 ) {
-                    CustomText(
-                        text = "🗑",
-                        fontSize = 16.sp,
-                        color = TextSecondary
-                    )
+                    CustomText("删除", fontSize = 14.sp)
                 }
             }
             

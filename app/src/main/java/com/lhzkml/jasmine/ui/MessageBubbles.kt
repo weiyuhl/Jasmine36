@@ -117,11 +117,9 @@ fun AiContentBlocks(blocks: List<ContentBlock>, isStreaming: Boolean) {
                 textSize = 15f
                 setTextColor(android.graphics.Color.parseColor("#FF1A1A1A"))
                 setLineSpacing(4f * ctx.resources.displayMetrics.density, 1f)
-                setTextIsSelectable(!isStreaming)
             }
         },
         update = { tv ->
-            tv.setTextIsSelectable(!isStreaming)
             val rendered = renderContentBlocks(blocks, tv, mdRenderer, isStreaming)
             tv.text = rendered
             if (!isStreaming) {
