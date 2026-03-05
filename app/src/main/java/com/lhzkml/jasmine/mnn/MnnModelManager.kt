@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -54,6 +55,7 @@ object MnnModelManager {
 
     /**
      * 获取模型的额外标签（来自市场缓存），用于判断能力如 ThinkingSwitch
+     * 支持精确匹配和模糊匹配（手动导入的目录名可能与市场 modelId 格式不同）
      */
     fun getExtraTagsForModel(context: Context, modelId: String): List<String> {
         val cacheFile = File(context.filesDir, MARKET_CACHE_FILE)
@@ -62,7 +64,9 @@ object MnnModelManager {
             val data = Gson().fromJson(cacheFile.readText(), MnnMarketData::class.java) ?: return emptyList()
             val safe = safeModelId(modelId)
             val marketModel = data.models.find { m ->
-                m.modelId == modelId || safeModelId(m.modelId) == safe
+                val mSafe = safeModelId(m.modelId)
+                m.modelId == modelId || mSafe == safe ||
+                    mSafe.contains(modelId)  // 手动导入目录名如 Qwen3-Thinking-8B 可匹配市场 MNN/Qwen3-Thinking-8B-MNN
             }
             marketModel?.extraTags ?: emptyList()
         } catch (e: Exception) {
@@ -71,11 +75,34 @@ object MnnModelManager {
         }
     }
 
-    /** 模型是否支持 Thinking 开关（含 ThinkingSwitch 标签或名称含 Thinking） */
+    /**
+     * 模型是否支持 Thinking 开关。
+     * 检测顺序：1) 市场 extraTags 含 ThinkingSwitch；2) 模型目录名/模型名含 Thinking；
+     * 3) config.json 含 jinja.context.enable_thinking（部分模型在配置中声明）
+     */
     fun isSupportThinkingSwitch(context: Context, modelId: String): Boolean {
         val tags = getExtraTagsForModel(context, modelId)
         if (tags.any { it.equals("ThinkingSwitch", ignoreCase = true) }) return true
-        return modelId.contains("Thinking", ignoreCase = true)
+        if (modelId.contains("Thinking", ignoreCase = true)) return true
+
+        val dirName = if (modelId.contains("/")) safeModelId(modelId) else modelId
+        val modelDir = File(getModelsDir(context), dirName)
+        if (!modelDir.exists() || !modelDir.isDirectory) return false
+
+        val localInfo = getLocalModels(context).find { it.modelId == modelId }
+        if (localInfo != null && localInfo.modelName.contains("Thinking", ignoreCase = true)) return true
+
+        val configFile = File(modelDir, CONFIG_FILE)
+        if (configFile.exists()) {
+            try {
+                val root = Gson().fromJson(configFile.readText(), JsonObject::class.java) ?: return false
+                val jinja = root.getAsJsonObject("jinja")
+                val contextObj = jinja?.getAsJsonObject("context")
+                if (contextObj?.has("enable_thinking") == true) return true
+            } catch (_: Exception) {}
+        }
+
+        return false
     }
 
     fun getLocalModels(context: Context): List<MnnModelInfo> {
