@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,28 +62,53 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 .background(Divider)
         )
 
-        ChatMessageList(
-            items = viewModel.chatItems,
-            isGenerating = viewModel.isGenerating,
-            scrollTrigger = viewModel.scrollToBottomTrigger,
-            onUserScrollUp = { viewModel.userScrolledUp = true },
-            onReachBottom = { viewModel.userScrolledUp = false },
-            modifier = Modifier.weight(1f)
-        )
+        if (viewModel.chatItems.isEmpty()) {
+            // IMA 风格：空状态时输入框在屏幕中间偏下，点击输入时键盘弹出会上移
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                ChatInputBar(
+                    isGenerating = viewModel.isGenerating,
+                    currentModelDisplay = viewModel.currentModelDisplay,
+                    modelList = viewModel.modelList,
+                    currentModel = viewModel.currentModel,
+                    onSend = { viewModel.sendMessage(it) },
+                    onStop = { viewModel.stopGenerating() },
+                    onModelSelected = { viewModel.selectModel(it) },
+                    shortenModelName = { viewModel.shortenModelName(it) },
+                    supportsThinkingMode = viewModel.supportsThinkingMode,
+                    isThinkingModeEnabled = viewModel.isThinkingModeEnabled,
+                    onThinkingModeChanged = if (viewModel.supportsThinkingMode) { { enabled -> viewModel.setThinkingMode(enabled) } } else null,
+                    modifier = Modifier.offset(y = 24.dp)
+                )
+            }
+        } else {
+            ChatMessageList(
+                items = viewModel.chatItems,
+                isGenerating = viewModel.isGenerating,
+                scrollTrigger = viewModel.scrollToBottomTrigger,
+                onUserScrollUp = { viewModel.userScrolledUp = true },
+                onReachBottom = { viewModel.userScrolledUp = false },
+                modifier = Modifier.weight(1f)
+            )
 
-        ChatInputBar(
-            isGenerating = viewModel.isGenerating,
-            currentModelDisplay = viewModel.currentModelDisplay,
-            modelList = viewModel.modelList,
-            currentModel = viewModel.currentModel,
-            onSend = { viewModel.sendMessage(it) },
-            onStop = { viewModel.stopGenerating() },
-            onModelSelected = { viewModel.selectModel(it) },
-            shortenModelName = { viewModel.shortenModelName(it) },
-            supportsThinkingMode = viewModel.supportsThinkingMode,
-            isThinkingModeEnabled = viewModel.isThinkingModeEnabled,
-            onThinkingModeChanged = if (viewModel.supportsThinkingMode) { { enabled -> viewModel.setThinkingMode(enabled) } } else null
-        )
+            ChatInputBar(
+                isGenerating = viewModel.isGenerating,
+                currentModelDisplay = viewModel.currentModelDisplay,
+                modelList = viewModel.modelList,
+                currentModel = viewModel.currentModel,
+                onSend = { viewModel.sendMessage(it) },
+                onStop = { viewModel.stopGenerating() },
+                onModelSelected = { viewModel.selectModel(it) },
+                shortenModelName = { viewModel.shortenModelName(it) },
+                supportsThinkingMode = viewModel.supportsThinkingMode,
+                isThinkingModeEnabled = viewModel.isThinkingModeEnabled,
+                onThinkingModeChanged = if (viewModel.supportsThinkingMode) { { enabled -> viewModel.setThinkingMode(enabled) } } else null
+            )
+        }
     }
 
     viewModel.checkpointRecoveryDialog?.let { state ->
