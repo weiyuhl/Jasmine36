@@ -37,12 +37,20 @@ class OssLicensesListActivity : ComponentActivity() {
             OssLicensesListScreen(
                 title = title,
                 onBack = { finish() },
-                onLicenseClick = { entry ->
+                onPluginLicenseClick = { entry ->
                     startActivity(
                         Intent(this, OssLicensesDetailActivity::class.java).apply {
                             putExtra("name", entry.name)
                             putExtra("offset", entry.offset)
                             putExtra("length", entry.length)
+                        }
+                    )
+                },
+                onManualLicenseClick = { entry ->
+                    startActivity(
+                        Intent(this, OssLicensesDetailActivity::class.java).apply {
+                            putExtra("name", entry.name)
+                            putExtra("licenseUrl", entry.licenseUrl)
                         }
                     )
                 }
@@ -55,14 +63,18 @@ class OssLicensesListActivity : ComponentActivity() {
 fun OssLicensesListScreen(
     title: String,
     onBack: () -> Unit,
-    onLicenseClick: (OssLicenseEntry) -> Unit
+    onPluginLicenseClick: (OssLicenseEntry) -> Unit,
+    onManualLicenseClick: (ManualLicenseEntry) -> Unit
 ) {
     val context = LocalContext.current
-    val licenseList = remember {
+    val pluginList = remember {
         OssLicenseLoader.loadLicenseList(context)
     }
+    val manualList = remember {
+        OssLicenseLoader.manualLicenses
+    }
     val hasLicenses = remember {
-        OssLicenseLoader.hasLicenses(context)
+        OssLicenseLoader.hasLicenses(context) || manualList.isNotEmpty()
     }
 
     Column(
@@ -102,7 +114,7 @@ fun OssLicensesListScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (!hasLicenses || licenseList.isEmpty()) {
+            if (!hasLicenses) {
                 CustomText(
                     text = "许可信息仅在 release 构建中提供。请使用 release 版本查看开源许可。",
                     fontSize = 14.sp,
@@ -110,10 +122,16 @@ fun OssLicensesListScreen(
                     modifier = Modifier.padding(16.dp)
                 )
             } else {
-                licenseList.forEach { entry ->
+                manualList.forEach { entry ->
                     OssLicenseListItem(
                         name = entry.name,
-                        onClick = { onLicenseClick(entry) }
+                        onClick = { onManualLicenseClick(entry) }
+                    )
+                }
+                pluginList.forEach { entry ->
+                    OssLicenseListItem(
+                        name = entry.name,
+                        onClick = { onPluginLicenseClick(entry) }
                     )
                 }
             }

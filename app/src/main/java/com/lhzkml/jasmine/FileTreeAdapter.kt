@@ -120,7 +120,7 @@ class FileTreeAdapter : RecyclerView.Adapter<FileTreeAdapter.VH>() {
 
         // 点击事件
         holder.itemView.setOnClickListener {
-            val pos = holder.adapterPosition
+            val pos = holder.bindingAdapterPosition
             if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
             val n = visibleNodes[pos]
             if (n.isDirectory) {

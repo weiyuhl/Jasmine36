@@ -143,7 +143,7 @@ fun MnnModelMarketScreen(onBack: () -> Unit) {
                     val s = getModelDownloadState(model.modelId)
                     s == MnnDownloadState.DOWNLOADING || s == MnnDownloadState.PAUSED
                 }
-                null -> true
+                else -> true
             }
             matchSource && matchSearch && matchTag && matchSize && matchVendor && matchDownload
         }

@@ -83,7 +83,15 @@ class MarkdownRenderer(private val context: Context) {
         textView: TextView
     ) {
         val textColor = textView.currentTextColor
-        val textSizeSp = textView.textSize / context.resources.displayMetrics.scaledDensity
+        val res = context.resources
+        val dm = res.displayMetrics
+        val scaledDensity = if (android.os.Build.VERSION.SDK_INT >= 34) {
+            dm.density * res.configuration.fontScale
+        } else {
+            @Suppress("DEPRECATION")
+            dm.scaledDensity
+        }
+        val textSizeSp = textView.textSize / scaledDensity
 
         for ((placeholder, entry) in latexMap) {
             val idx = sb.indexOf(placeholder)

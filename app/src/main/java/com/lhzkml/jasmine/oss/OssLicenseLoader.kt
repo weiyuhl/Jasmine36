@@ -14,7 +14,18 @@ data class OssLicenseEntry(
     val length: Int
 )
 
+/** 手动集成的库（如 NDK 编译的 MNN），oss-licenses-plugin 无法自动收集 */
+data class ManualLicenseEntry(
+    val name: String,
+    val licenseUrl: String
+)
+
 object OssLicenseLoader {
+
+    /** 手动添加的许可（非 Maven 依赖，如 NDK 编译的 MNN） */
+    val manualLicenses: List<ManualLicenseEntry> = listOf(
+        ManualLicenseEntry("MNN", "http://www.apache.org/licenses/LICENSE-2.0.txt")
+    )
 
     private const val METADATA_RES = "third_party_license_metadata"
     private const val LICENSES_RES = "third_party_licenses"

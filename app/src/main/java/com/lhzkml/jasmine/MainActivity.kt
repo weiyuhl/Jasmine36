@@ -147,7 +147,7 @@ class MainActivity : AppCompatActivity() {
         viewModel.handleNewIntent(intent)
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun onBackPressed() {
         if (drawerLayout.isDrawerOpen(Gravity.START)) {
             drawerLayout.closeDrawer(Gravity.START)
