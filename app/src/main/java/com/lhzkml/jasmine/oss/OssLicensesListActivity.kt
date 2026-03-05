@@ -68,7 +68,7 @@ fun OssLicensesListScreen(
 ) {
     val context = LocalContext.current
     val pluginList = remember {
-        OssLicenseLoader.loadLicenseList(context)
+        OssLicenseLoader.loadLicenseList(context).distinctBy { it.name }
     }
     val manualList = remember {
         OssLicenseLoader.manualLicenses
@@ -122,18 +122,21 @@ fun OssLicensesListScreen(
                     modifier = Modifier.padding(16.dp)
                 )
             } else {
+                val manualNames = manualList.map { it.name }.toSet()
                 manualList.forEach { entry ->
                     OssLicenseListItem(
                         name = entry.name,
                         onClick = { onManualLicenseClick(entry) }
                     )
                 }
-                pluginList.forEach { entry ->
-                    OssLicenseListItem(
-                        name = entry.name,
-                        onClick = { onPluginLicenseClick(entry) }
-                    )
-                }
+                pluginList
+                    .filter { it.name !in manualNames }
+                    .forEach { entry ->
+                        OssLicenseListItem(
+                            name = entry.name,
+                            onClick = { onPluginLicenseClick(entry) }
+                        )
+                    }
             }
         }
     }

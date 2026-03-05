@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,86 +76,97 @@ fun ChatInputBar(
                 .background(BgInput, RoundedCornerShape(16.dp))
                 .padding(10.dp)
         ) {
-            Column(
-                modifier = Modifier.matchParentSize()
+            // 顶部：输入框 + 发送按钮（固定顶部，输入框高度受限）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopStart),
+                verticalAlignment = Alignment.Top
             ) {
-                // 顶部：输入框 + 发送按钮
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BasicTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        textStyle = TextStyle(
-                            color = TextPrimary,
-                            fontSize = 15.sp
-                        ),
-                        cursorBrush = SolidColor(Accent),
-                        maxLines = 6,
-                        decorationBox = { innerTextField ->
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (inputText.isEmpty()) {
+                BasicTextField(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    textStyle = TextStyle(
+                        color = TextPrimary,
+                        fontSize = 15.sp
+                    ),
+                    cursorBrush = SolidColor(Accent),
+                    maxLines = 6,
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 36.dp)
+                        ) {
+                            if (inputText.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(36.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
                                     CustomText("输入消息...", color = TextSecondary, fontSize = 15.sp)
                                 }
+                            }
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.TopStart
+                            ) {
                                 innerTextField()
                             }
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 36.dp, max = 72.dp)
+                        .padding(end = 8.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .then(if (!isGenerating) Modifier.background(Accent) else Modifier)
+                        .clickable {
+                            if (isGenerating) {
+                                onStop()
+                            } else {
+                                val msg = inputText.trim()
+                                if (msg.isNotEmpty()) {
+                                    onSend(msg)
+                                    inputText = ""
+                                }
+                            }
                         },
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .then(if (!isGenerating) Modifier.background(Accent) else Modifier)
-                            .clickable {
-                                if (isGenerating) {
-                                    onStop()
-                                } else {
-                                    val msg = inputText.trim()
-                                    if (msg.isNotEmpty()) {
-                                        onSend(msg)
-                                        inputText = ""
-                                    }
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isGenerating) {
+                        AndroidView(
+                            factory = { ctx ->
+                                ImageView(ctx).apply {
+                                    setImageResource(R.drawable.stop_button_animated)
+                                    scaleType = ImageView.ScaleType.CENTER_CROP
+                                    (drawable as? AnimationDrawable)?.start()
                                 }
                             },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isGenerating) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    ImageView(ctx).apply {
-                                        setImageResource(R.drawable.stop_button_animated)
-                                        scaleType = ImageView.ScaleType.CENTER_CROP
-                                        (drawable as? AnimationDrawable)?.start()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                        CustomText(
-                            text = if (isGenerating) "■" else "↑",
-                            color = BgPrimary,
-                            fontSize = 16.sp
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
+                    CustomText(
+                        text = if (isGenerating) "■" else "↑",
+                        color = BgPrimary,
+                        fontSize = 16.sp
+                    )
                 }
+            }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                // 底部：思考按钮 + 模型切换
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            // 底部：思考按钮 + 模型切换（固定底部）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomStart),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                     if (supportsThinkingMode && onThinkingModeChanged != null) {
                     Box(
                         modifier = Modifier
@@ -228,4 +240,3 @@ fun ChatInputBar(
             }
         }
     }
-}
