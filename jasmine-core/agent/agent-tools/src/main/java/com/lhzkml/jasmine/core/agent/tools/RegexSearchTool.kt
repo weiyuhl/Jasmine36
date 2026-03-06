@@ -11,8 +11,15 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 
 /**
- * 参考 koog 的 RegexSearchTool
- * 在文件或目录中执行正则表达式搜索，返回匹配的文件路径、行号和上下文片段
+ * 强大的正则搜索工具（对标 Cursor Grep / ripgrep）
+ *
+ * 功能：
+ * - 三种输出模式：content（匹配行+上下文）、files_with_matches（仅文件路径）、count（匹配计数）
+ * - 可配置上下文行数（-A, -B, -C）
+ * - glob 文件过滤和 type 文件类型过滤
+ * - head_limit 限制结果数量 + offset 分页
+ * - multiline 跨行匹配
+ * - 大小写不敏感选项
  *
  * @param basePath 基础路径限制（安全沙箱），null 表示不限制
  */
@@ -20,106 +27,417 @@ class RegexSearchTool(
     private val basePath: String? = null
 ) : Tool() {
 
+    companion object {
+        private const val DEFAULT_LIMIT = 50
+        private const val MAX_FILE_SIZE = 10L * 1024 * 1024
+        private val BINARY_EXTENSIONS = setOf(
+            "jar", "class", "so", "dll", "exe", "png", "jpg", "jpeg",
+            "gif", "webp", "zip", "gz", "tar", "pdf", "ico", "bmp",
+            "mp3", "mp4", "avi", "mov", "ttf", "otf", "woff", "woff2",
+            "apk", "aab", "dex", "o", "a", "lib"
+        )
+        private val SKIP_DIRS = setOf(
+            ".git", ".svn", ".hg", "node_modules", "build", ".gradle",
+            ".idea", "__pycache__", ".DS_Store", "dist", ".next"
+        )
+
+        private val TYPE_EXTENSIONS = mapOf(
+            "kt" to setOf("kt", "kts"),
+            "java" to setOf("java"),
+            "js" to setOf("js", "mjs", "cjs"),
+            "ts" to setOf("ts", "tsx"),
+            "py" to setOf("py", "pyi"),
+            "rust" to setOf("rs"),
+            "go" to setOf("go"),
+            "c" to setOf("c", "h"),
+            "cpp" to setOf("cpp", "cxx", "cc", "hpp", "hxx", "hh"),
+            "swift" to setOf("swift"),
+            "ruby" to setOf("rb"),
+            "php" to setOf("php"),
+            "xml" to setOf("xml"),
+            "json" to setOf("json"),
+            "yaml" to setOf("yaml", "yml"),
+            "toml" to setOf("toml"),
+            "md" to setOf("md", "markdown"),
+            "html" to setOf("html", "htm"),
+            "css" to setOf("css", "scss", "sass", "less"),
+            "sql" to setOf("sql"),
+            "sh" to setOf("sh", "bash", "zsh"),
+            "gradle" to setOf("gradle", "gradle.kts")
+        )
+    }
+
     override val descriptor = ToolDescriptor(
         name = "search_by_regex",
-        description = "Executes a regular expression search on file or directory contents. " +
-            "Returns file paths, line numbers, and excerpts where the pattern was found. Read-only. " +
+        description = "A powerful search tool built on regular expressions. " +
+            "Supports full regex syntax. " +
+            "Filter files with glob parameter (e.g. '*.kt', '**/*.tsx') or type parameter (e.g. 'kt', 'py', 'js'). " +
+            "Output modes: 'content' shows matching lines with context (default), " +
+            "'files_with_matches' shows only file paths, 'count' shows match counts per file. " +
+            "Use context_before/context_after to control context lines shown around matches. " +
+            "Multiline matching: set multiline=true for patterns that span across lines. " +
+            "Results are capped by head_limit; use offset for pagination. " +
             "Path can be relative (resolved against workspace root) or absolute. Use '.' for workspace root.",
         requiredParameters = listOf(
-            ToolParameterDescriptor("path", "Starting directory or file path (relative to workspace root, or absolute)", ToolParameterType.StringType),
-            ToolParameterDescriptor("regex", "Regular expression pattern to search for", ToolParameterType.StringType)
+            ToolParameterDescriptor("pattern", "The regular expression pattern to search for in file contents", ToolParameterType.StringType),
+            ToolParameterDescriptor("path", "File or directory to search in. Use '.' for workspace root", ToolParameterType.StringType)
         ),
         optionalParameters = listOf(
-            ToolParameterDescriptor("limit", "Maximum number of matching files to return. Default 25", ToolParameterType.IntegerType),
-            ToolParameterDescriptor("caseSensitive", "If true, case-sensitive matching. Default false", ToolParameterType.BooleanType)
+            ToolParameterDescriptor("output_mode",
+                "Output mode: 'content' shows matching lines (default), 'files_with_matches' shows file paths, 'count' shows match counts",
+                ToolParameterType.EnumType(listOf("content", "files_with_matches", "count"))),
+            ToolParameterDescriptor("context_before",
+                "Number of lines to show before each match (like rg -B). Default 0. Only for content mode",
+                ToolParameterType.IntegerType),
+            ToolParameterDescriptor("context_after",
+                "Number of lines to show after each match (like rg -A). Default 0. Only for content mode",
+                ToolParameterType.IntegerType),
+            ToolParameterDescriptor("context",
+                "Number of lines to show before AND after each match (like rg -C). Overrides context_before/context_after if set",
+                ToolParameterType.IntegerType),
+            ToolParameterDescriptor("case_insensitive",
+                "Case insensitive search (like rg -i). Default false",
+                ToolParameterType.BooleanType),
+            ToolParameterDescriptor("glob",
+                "Glob pattern to filter files (e.g. '*.kt', '*.{ts,tsx}')",
+                ToolParameterType.StringType),
+            ToolParameterDescriptor("type",
+                "File type to search (e.g. 'kt', 'py', 'js', 'java', 'ts', 'go', 'rust'). More efficient than glob for standard types",
+                ToolParameterType.StringType),
+            ToolParameterDescriptor("head_limit",
+                "Limit output size. For content mode: limits total matches shown. For files/count modes: limits number of files. Default 50",
+                ToolParameterType.IntegerType),
+            ToolParameterDescriptor("offset",
+                "Skip first N entries for pagination. Default 0",
+                ToolParameterType.IntegerType),
+            ToolParameterDescriptor("multiline",
+                "Enable multiline mode where . matches newlines and patterns can span lines. Default false",
+                ToolParameterType.BooleanType)
         )
     )
 
     override suspend fun execute(arguments: String): String {
         val obj = Json.parseToJsonElement(arguments).jsonObject
+        val pattern = obj["pattern"]?.jsonPrimitive?.content
+            ?: return "Error: Missing parameter 'pattern'"
         val path = obj["path"]?.jsonPrimitive?.content
             ?: return "Error: Missing parameter 'path'"
-        val pattern = obj["regex"]?.jsonPrimitive?.content
-            ?: return "Error: Missing parameter 'regex'"
-        val limit = obj["limit"]?.jsonPrimitive?.int ?: 25
-        val caseSensitive = obj["caseSensitive"]?.jsonPrimitive?.boolean ?: false
+
+        val outputMode = obj["output_mode"]?.jsonPrimitive?.content ?: "content"
+        val contextC = obj["context"]?.jsonPrimitive?.int
+        val contextBefore = contextC ?: (obj["context_before"]?.jsonPrimitive?.int ?: 0)
+        val contextAfter = contextC ?: (obj["context_after"]?.jsonPrimitive?.int ?: 0)
+        val caseInsensitive = obj["case_insensitive"]?.jsonPrimitive?.boolean ?: false
+        val globPattern = obj["glob"]?.jsonPrimitive?.content
+        val fileType = obj["type"]?.jsonPrimitive?.content
+        val headLimit = obj["head_limit"]?.jsonPrimitive?.int ?: DEFAULT_LIMIT
+        val offset = obj["offset"]?.jsonPrimitive?.int ?: 0
+        val multiline = obj["multiline"]?.jsonPrimitive?.boolean ?: false
 
         val file = resolveFile(path) ?: return "Error: Path not allowed: $path"
         if (!file.exists()) return "Error: Path does not exist: $path"
 
-        val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
+        val regexOptions = mutableSetOf<RegexOption>()
+        if (caseInsensitive) regexOptions.add(RegexOption.IGNORE_CASE)
+        if (multiline) {
+            regexOptions.add(RegexOption.MULTILINE)
+            regexOptions.add(RegexOption.DOT_MATCHES_ALL)
+        }
+
         val regex = try {
-            Regex(pattern, options)
+            Regex(pattern, regexOptions)
         } catch (e: Exception) {
             return "Error: Invalid regex: ${e.message}"
         }
 
+        val typeExtensions = fileType?.let { TYPE_EXTENSIONS[it.lowercase()] }
+        val globRegex = globPattern?.let { buildGlobRegex(it) }
+
         return try {
-            val results = mutableListOf<String>()
-            searchFiles(file, regex, limit, results)
-            if (results.isEmpty()) "No matches found."
-            else results.joinToString("\n\n")
+            when (outputMode) {
+                "files_with_matches" -> searchFilesOnly(file, regex, globRegex, typeExtensions, headLimit, offset, multiline)
+                "count" -> searchCount(file, regex, globRegex, typeExtensions, headLimit, offset, multiline)
+                else -> searchContent(file, regex, globRegex, typeExtensions, contextBefore, contextAfter, headLimit, offset, multiline)
+            }
         } catch (e: Exception) {
             "Error: ${e.message}"
         }
     }
 
-    private fun searchFiles(file: File, regex: Regex, limit: Int, results: MutableList<String>) {
-        if (results.size >= limit) return
+    // ==================== Content mode ====================
 
-        if (file.isFile) {
-            searchInFile(file, regex, results, limit)
-        } else if (file.isDirectory) {
-            val children = file.listFiles()?.sortedBy { it.name } ?: return
+    private fun searchContent(
+        root: File, regex: Regex, globRegex: Regex?, typeExts: Set<String>?,
+        ctxBefore: Int, ctxAfter: Int, limit: Int, offset: Int, multiline: Boolean
+    ): String {
+        val allMatches = mutableListOf<MatchEntry>()
+        collectMatches(root, root, regex, globRegex, typeExts, allMatches, multiline)
+
+        val total = allMatches.size
+        val paginated = allMatches.drop(offset).take(limit)
+
+        if (paginated.isEmpty()) {
+            return if (total == 0) "No matches found."
+            else "No matches in range (total: $total, offset: $offset, limit: $limit)"
+        }
+
+        return buildString {
+            for (entry in paginated) {
+                val relPath = relativePath(root, entry.file)
+                appendLine(relPath)
+                for (match in entry.matches) {
+                    val lines = entry.lines
+                    val startCtx = (match.lineNum - ctxBefore).coerceAtLeast(0)
+                    val endCtx = (match.lineNum + ctxAfter + 1).coerceAtMost(lines.size)
+
+                    for (i in startCtx until endCtx) {
+                        val prefix = if (i == match.lineNum) ":" else "-"
+                        appendLine("${i + 1}$prefix${lines[i]}")
+                    }
+                    if (ctxBefore > 0 || ctxAfter > 0) appendLine("--")
+                }
+                appendLine()
+            }
+            if (total > offset + limit) {
+                appendLine("... showing ${paginated.size} of at least $total matches (offset=$offset, limit=$limit)")
+            }
+        }.trimEnd()
+    }
+
+    // ==================== Files-only mode ====================
+
+    private fun searchFilesOnly(
+        root: File, regex: Regex, globRegex: Regex?, typeExts: Set<String>?,
+        limit: Int, offset: Int, multiline: Boolean
+    ): String {
+        val matchingFiles = mutableListOf<File>()
+        collectMatchingFiles(root, root, regex, globRegex, typeExts, matchingFiles, multiline)
+
+        val total = matchingFiles.size
+        val paginated = matchingFiles.drop(offset).take(limit)
+
+        if (paginated.isEmpty()) {
+            return if (total == 0) "No matching files found."
+            else "No files in range (total: $total, offset: $offset, limit: $limit)"
+        }
+
+        return buildString {
+            paginated.forEach { f ->
+                appendLine(relativePath(root, f))
+            }
+            if (total > offset + limit) {
+                appendLine("... $total total files (showing ${paginated.size})")
+            }
+        }.trimEnd()
+    }
+
+    // ==================== Count mode ====================
+
+    private fun searchCount(
+        root: File, regex: Regex, globRegex: Regex?, typeExts: Set<String>?,
+        limit: Int, offset: Int, multiline: Boolean
+    ): String {
+        val counts = mutableListOf<Pair<File, Int>>()
+        collectCounts(root, root, regex, globRegex, typeExts, counts, multiline)
+
+        val total = counts.size
+        val paginated = counts.drop(offset).take(limit)
+
+        if (paginated.isEmpty()) {
+            return if (total == 0) "No matches found."
+            else "No files in range (total: $total, offset: $offset, limit: $limit)"
+        }
+
+        return buildString {
+            paginated.forEach { (file, count) ->
+                appendLine("${relativePath(root, file)}:$count")
+            }
+            if (total > offset + limit) {
+                appendLine("... $total total files (showing ${paginated.size})")
+            }
+        }.trimEnd()
+    }
+
+    // ==================== Collectors ====================
+
+    private data class LineMatch(val lineNum: Int, val line: String)
+    private data class MatchEntry(val file: File, val lines: List<String>, val matches: List<LineMatch>)
+
+    private fun collectMatches(
+        root: File, current: File, regex: Regex, globRegex: Regex?,
+        typeExts: Set<String>?, results: MutableList<MatchEntry>, multiline: Boolean
+    ) {
+        if (current.isFile) {
+            if (!shouldSearchFile(current, root, globRegex, typeExts)) return
+            findMatchesInFile(current, regex, multiline)?.let { results.add(it) }
+        } else if (current.isDirectory) {
+            val children = current.listFiles()?.sortedBy { it.name } ?: return
             for (child in children) {
-                if (results.size >= limit) return
-                searchFiles(child, regex, limit, results)
+                if (child.isDirectory && child.name in SKIP_DIRS) continue
+                collectMatches(root, child, regex, globRegex, typeExts, results, multiline)
             }
         }
     }
 
-    private fun searchInFile(file: File, regex: Regex, results: MutableList<String>, limit: Int) {
-        if (results.size >= limit) return
-        // 跳过二进制文件（简单启发式）
-        if (isBinaryFile(file)) return
-
-        try {
-            val lines = file.readLines()
-            val matches = mutableListOf<String>()
-
-            for ((lineNum, line) in lines.withIndex()) {
-                if (regex.containsMatchIn(line)) {
-                    // 上下文：前后各 2 行
-                    val contextStart = (lineNum - 2).coerceAtLeast(0)
-                    val contextEnd = (lineNum + 3).coerceAtMost(lines.size)
-                    val snippet = lines.subList(contextStart, contextEnd)
-                        .mapIndexed { i, l ->
-                            val num = contextStart + i
-                            val marker = if (num == lineNum) ">" else " "
-                            "$marker${num}: $l"
-                        }.joinToString("\n")
-                    matches.add(snippet)
-                }
+    private fun collectMatchingFiles(
+        root: File, current: File, regex: Regex, globRegex: Regex?,
+        typeExts: Set<String>?, results: MutableList<File>, multiline: Boolean
+    ) {
+        if (current.isFile) {
+            if (!shouldSearchFile(current, root, globRegex, typeExts)) return
+            if (fileContainsMatch(current, regex, multiline)) results.add(current)
+        } else if (current.isDirectory) {
+            val children = current.listFiles()?.sortedBy { it.name } ?: return
+            for (child in children) {
+                if (child.isDirectory && child.name in SKIP_DIRS) continue
+                collectMatchingFiles(root, child, regex, globRegex, typeExts, results, multiline)
             }
+        }
+    }
 
-            if (matches.isNotEmpty()) {
-                val entry = buildString {
-                    appendLine("File: ${file.path}")
-                    appendLine("Matches: ${matches.size}")
-                    matches.take(5).forEach { appendLine(it) }
-                    if (matches.size > 5) appendLine("... and ${matches.size - 5} more matches")
+    private fun collectCounts(
+        root: File, current: File, regex: Regex, globRegex: Regex?,
+        typeExts: Set<String>?, results: MutableList<Pair<File, Int>>, multiline: Boolean
+    ) {
+        if (current.isFile) {
+            if (!shouldSearchFile(current, root, globRegex, typeExts)) return
+            val count = countMatchesInFile(current, regex, multiline)
+            if (count > 0) results.add(current to count)
+        } else if (current.isDirectory) {
+            val children = current.listFiles()?.sortedBy { it.name } ?: return
+            for (child in children) {
+                if (child.isDirectory && child.name in SKIP_DIRS) continue
+                collectCounts(root, child, regex, globRegex, typeExts, results, multiline)
+            }
+        }
+    }
+
+    // ==================== File-level search ====================
+
+    private fun findMatchesInFile(file: File, regex: Regex, multiline: Boolean): MatchEntry? {
+        if (isBinaryFile(file)) return null
+        return try {
+            if (multiline) {
+                val content = file.readText()
+                val matchResults = regex.findAll(content).toList()
+                if (matchResults.isEmpty()) return null
+                val lines = content.lines()
+                val lineMatches = mutableListOf<LineMatch>()
+                for (m in matchResults) {
+                    val lineNum = content.substring(0, m.range.first).count { it == '\n' }
+                    lineMatches.add(LineMatch(lineNum, lines.getOrElse(lineNum) { "" }))
                 }
-                results.add(entry.trimEnd())
+                MatchEntry(file, lines, lineMatches)
+            } else {
+                val lines = file.readLines()
+                val lineMatches = mutableListOf<LineMatch>()
+                for ((idx, line) in lines.withIndex()) {
+                    if (regex.containsMatchIn(line)) {
+                        lineMatches.add(LineMatch(idx, line))
+                    }
+                }
+                if (lineMatches.isEmpty()) null
+                else MatchEntry(file, lines, lineMatches)
             }
         } catch (_: Exception) {
-            // 忽略无法读取的文件
+            null
         }
+    }
+
+    private fun fileContainsMatch(file: File, regex: Regex, multiline: Boolean): Boolean {
+        if (isBinaryFile(file)) return false
+        return try {
+            if (multiline) {
+                regex.containsMatchIn(file.readText())
+            } else {
+                file.useLines { lines -> lines.any { regex.containsMatchIn(it) } }
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun countMatchesInFile(file: File, regex: Regex, multiline: Boolean): Int {
+        if (isBinaryFile(file)) return 0
+        return try {
+            if (multiline) {
+                regex.findAll(file.readText()).count()
+            } else {
+                file.useLines { lines -> lines.count { regex.containsMatchIn(it) } }
+            }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    // ==================== Filtering ====================
+
+    private fun shouldSearchFile(file: File, root: File, globRegex: Regex?, typeExts: Set<String>?): Boolean {
+        if (isBinaryFile(file)) return false
+        if (typeExts != null && file.extension.lowercase() !in typeExts) return false
+        if (globRegex != null) {
+            val relPath = file.relativeTo(root).path.replace('\\', '/')
+            val name = file.name
+            if (!globRegex.matches(relPath) && !globRegex.matches(name)) return false
+        }
+        return true
     }
 
     private fun isBinaryFile(file: File): Boolean {
-        if (file.length() > 10 * 1024 * 1024) return true // 跳过 >10MB
-        val binaryExtensions = setOf("jar", "class", "so", "dll", "exe", "png", "jpg", "gif", "zip", "gz", "tar", "pdf")
-        return file.extension.lowercase() in binaryExtensions
+        if (file.length() > MAX_FILE_SIZE) return true
+        return file.extension.lowercase() in BINARY_EXTENSIONS
+    }
+
+    // ==================== Helpers ====================
+
+    private fun relativePath(root: File, file: File): String {
+        return try {
+            if (basePath != null) {
+                file.relativeTo(File(basePath)).path.replace('\\', '/')
+            } else if (root.isDirectory) {
+                file.relativeTo(root).path.replace('\\', '/')
+            } else {
+                file.absolutePath
+            }
+        } catch (_: Exception) {
+            file.absolutePath
+        }
+    }
+
+    private fun buildGlobRegex(glob: String): Regex {
+        val regex = buildString {
+            append("^")
+            var i = 0
+            while (i < glob.length) {
+                when (glob[i]) {
+                    '*' -> {
+                        if (i + 1 < glob.length && glob[i + 1] == '*') {
+                            append(".*")
+                            i += 2
+                            if (i < glob.length && glob[i] == '/') i++
+                            continue
+                        } else {
+                            append("[^/]*")
+                        }
+                    }
+                    '?' -> append("[^/]")
+                    '.' -> append("\\.")
+                    '{' -> append("(?:")
+                    '}' -> append(")")
+                    ',' -> append("|")
+                    '(' -> append("\\(")
+                    ')' -> append("\\)")
+                    '+' -> append("\\+")
+                    '^' -> append("\\^")
+                    '$' -> append("\\$")
+                    '/' -> append("/")
+                    else -> append(glob[i])
+                }
+                i++
+            }
+            append("$")
+        }
+        return Regex(regex, RegexOption.IGNORE_CASE)
     }
 
     private fun resolveFile(path: String): File? {

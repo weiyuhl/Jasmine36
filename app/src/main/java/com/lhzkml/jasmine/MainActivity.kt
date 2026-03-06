@@ -1,4 +1,4 @@
-﻿package com.lhzkml.jasmine
+package com.lhzkml.jasmine
 
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -241,12 +241,12 @@ class MainActivity : AppCompatActivity() {
                 )
 
                 register(ExecuteShellCommandTool(
-                    confirmationHandler = { command, _ ->
+                    confirmationHandler = { command, purpose, _ ->
                         val deferred = CompletableDeferred<Boolean>()
                         withContext(Dispatchers.Main) {
                             AlertDialog.Builder(this@MainActivity)
                                 .setTitle("执行命令确认")
-                                .setMessage("AI 请求执行以下命令：\n\n$command\n\n是否允许？")
+                                .setMessage("目的：$purpose\n\n命令：$command\n\n是否允许执行？")
                                 .setPositiveButton("允许") { _, _ -> deferred.complete(true) }
                                 .setNegativeButton("拒绝") { _, _ -> deferred.complete(false) }
                                 .setCancelable(false)
@@ -271,7 +271,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // URL 抓取（本地直接请求）
+            // URL 抓取（本地直接请求，支持 HTML/文本/JSON/Markdown）
             if (isEnabled("fetch_url")) {
                 fetchUrlTool?.close()
                 val ft = FetchUrlTool()
@@ -279,6 +279,7 @@ class MainActivity : AppCompatActivity() {
                 register(ft.fetchHtml)
                 register(ft.fetchText)
                 register(ft.fetchJson)
+                register(ft.fetchMarkdown)
             }
 
             // Agent 显式完成工具
@@ -1097,6 +1098,24 @@ class MainActivity : AppCompatActivity() {
                 val registry = if (toolsEnabled) {
                     val r = buildToolRegistry()
                     loadMcpToolsInto(r)
+
+                    // 注册子代理工具（需要 client/model 的延迟引用）
+                    val enabledTools = if (ProviderManager.isAgentMode(this@MainActivity)) {
+                        ProviderManager.getAgentToolPreset(this@MainActivity)
+                    } else {
+                        ProviderManager.getEnabledTools(this@MainActivity)
+                    }
+                    if (enabledTools.isEmpty() || "invoke_subagent" in enabledTools) {
+                        r.register(SubAgentTool(
+                            clientProvider = { client },
+                            modelProvider = { config.model },
+                            parentRegistry = r,
+                            config = SubAgentConfig(),
+                            currentDepth = 0,
+                            eventListener = null
+                        ))
+                    }
+
                     r
                 } else null
 

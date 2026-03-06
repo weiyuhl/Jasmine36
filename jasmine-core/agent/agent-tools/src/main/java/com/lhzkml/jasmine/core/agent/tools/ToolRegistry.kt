@@ -35,6 +35,16 @@ class ToolRegistry {
         return calls.map { execute(it) }
     }
 
+    /**
+     * 从当前注册表中筛选出指定名称的工具子集，创建新的 ToolRegistry
+     */
+    fun subset(names: Set<String>): ToolRegistry {
+        val filtered = tools.filter { it.key in names }.values
+        return build {
+            filtered.forEach { register(it) }
+        }
+    }
+
     companion object {
         fun build(block: ToolRegistry.() -> Unit): ToolRegistry {
             return ToolRegistry().apply(block)
