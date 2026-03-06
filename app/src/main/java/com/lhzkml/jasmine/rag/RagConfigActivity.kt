@@ -62,9 +62,6 @@ fun RagConfigScreen(onBack: () -> Unit) {
 
     var enabled by remember { mutableStateOf(ProviderManager.isRagEnabled(context)) }
     var topK by remember { mutableStateOf(ProviderManager.getRagTopK(context).toString()) }
-    var baseUrl by remember { mutableStateOf(ProviderManager.getRagEmbeddingBaseUrl(context)) }
-    var apiKey by remember { mutableStateOf(ProviderManager.getRagEmbeddingApiKey(context)) }
-    var model by remember { mutableStateOf(ProviderManager.getRagEmbeddingModel(context)) }
     var isIndexing by remember { mutableStateOf(false) }
     var indexStatus by remember { mutableStateOf<String?>(null) }
     var manualSaveStatus by remember { mutableStateOf<String?>(null) }
@@ -93,9 +90,6 @@ fun RagConfigScreen(onBack: () -> Unit) {
         onDispose {
             ProviderManager.setRagEnabled(context, enabled)
             ProviderManager.setRagTopK(context, topK.toIntOrNull()?.coerceIn(1, 32) ?: 5)
-            ProviderManager.setRagEmbeddingBaseUrl(context, baseUrl.trim())
-            ProviderManager.setRagEmbeddingApiKey(context, apiKey)
-            ProviderManager.setRagEmbeddingModel(context, model.trim().ifBlank { "text-embedding-3-small" })
             persistLibraries()
         }
     }
@@ -176,37 +170,12 @@ fun RagConfigScreen(onBack: () -> Unit) {
                         .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
-                    CustomText(text = "Embedding 服务", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                     CustomText(
-                        text = "使用 OpenAI 兼容的 /v1/embeddings 接口",
+                        text = "Embedding 服务请在「设置」-「模型供应商」-「Embedding 服务」中配置",
                         fontSize = 12.sp,
                         color = TextSecondary,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
-
-                    CustomText(text = "API 地址", fontSize = 14.sp, color = TextPrimary)
-                    CustomText(text = "例如 https://api.openai.com", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
-                    RagTextField(value = baseUrl, onValueChange = { baseUrl = it }, placeholder = "https://api.openai.com")
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    CustomText(text = "API Key", fontSize = 14.sp, color = TextPrimary)
-                    CustomText(text = "Bearer 认证", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
-                    RagTextField(
-                        value = apiKey,
-                        onValueChange = { apiKey = it },
-                        placeholder = "sk-...",
-                        keyboardType = KeyboardType.Password
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    CustomText(text = "模型名称", fontSize = 14.sp, color = TextPrimary)
-                    CustomText(text = "如 text-embedding-3-small（384 维）", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
-                    RagTextField(value = model, onValueChange = { model = it }, placeholder = "text-embedding-3-small")
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
                     CustomText(text = "检索数量 TopK", fontSize = 14.sp, color = TextPrimary)
                     CustomText(text = "返回最相关的文档条数 (1~32)", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
                     RagTextField(

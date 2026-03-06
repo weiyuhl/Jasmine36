@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.config.ProviderConfig
+import com.lhzkml.jasmine.ProviderManager
 import com.lhzkml.jasmine.ui.theme.Accent
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
@@ -102,7 +103,7 @@ fun ProviderListScreen(
         
         CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
         
-        // 供应商列表
+        // Embedding 服务入口
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -110,6 +111,31 @@ fun ProviderListScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        context.startActivity(Intent(context, com.lhzkml.jasmine.rag.EmbeddingConfigActivity::class.java))
+                    }
+            ) {
+                ProviderItem(
+                    provider = ProviderConfig(
+                        id = "embedding",
+                        name = "Embedding 服务",
+                        defaultBaseUrl = "",
+                        defaultModel = "",
+                        apiType = ApiType.OPENAI,
+                        isCustom = false
+                    ),
+                    isActive = false,
+                    hasKey = ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank() && ProviderManager.getRagEmbeddingApiKey(context).isNotBlank(),
+                    model = if (ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank()) "已配置" else "未配置",
+                    onSwitchChange = { },
+                    onClick = { context.startActivity(Intent(context, com.lhzkml.jasmine.rag.EmbeddingConfigActivity::class.java)) },
+                    onDelete = null,
+                    showSwitch = false
+                )
+            }
             providers.forEach { provider ->
                 val isLocal = provider.apiType == ApiType.LOCAL
                 ProviderItem(
@@ -225,7 +251,8 @@ fun ProviderItem(
     model: String,
     onSwitchChange: (Boolean) -> Unit,
     onClick: () -> Unit,
-    onDelete: (() -> Unit)?
+    onDelete: (() -> Unit)?,
+    showSwitch: Boolean = true
 ) {
     Box(
         modifier = Modifier
@@ -262,17 +289,19 @@ fun ProviderItem(
                 }
             }
             
-            CustomSwitch(
-                checked = isActive,
-                onCheckedChange = onSwitchChange,
-                colors = CustomSwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Accent,
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f),
-                    uncheckedBorderColor = TextSecondary.copy(alpha = 0.5f)
+            if (showSwitch) {
+                CustomSwitch(
+                    checked = isActive,
+                    onCheckedChange = onSwitchChange,
+                    colors = CustomSwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Accent,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f),
+                        uncheckedBorderColor = TextSecondary.copy(alpha = 0.5f)
+                    )
                 )
-            )
+            }
         }
     }
 }
