@@ -272,6 +272,10 @@ object ProviderManager {
     fun setRagEmbeddingApiKey(context: Context, key: String) = configRepo.setRagEmbeddingApiKey(key)
     fun getRagEmbeddingModel(context: Context): String = configRepo.getRagEmbeddingModel()
     fun setRagEmbeddingModel(context: Context, model: String) = configRepo.setRagEmbeddingModel(model)
+    fun getRagLibraries(context: Context): List<RagLibraryConfig> = configRepo.getRagLibraries()
+    fun setRagLibraries(context: Context, libraries: List<RagLibraryConfig>) = configRepo.setRagLibraries(libraries)
+    fun getRagActiveLibraryIds(context: Context): Set<String> = configRepo.getRagActiveLibraryIds()
+    fun setRagActiveLibraryIds(context: Context, ids: Set<String>) = configRepo.setRagActiveLibraryIds(ids)
 
     // ========== Agent 模式 ==========
 

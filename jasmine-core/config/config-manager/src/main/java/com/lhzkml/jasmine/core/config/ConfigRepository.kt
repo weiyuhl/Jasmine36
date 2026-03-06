@@ -190,6 +190,10 @@ interface ConfigRepository {
     fun setRagEmbeddingApiKey(key: String)
     fun getRagEmbeddingModel(): String
     fun setRagEmbeddingModel(model: String)
+    fun getRagLibraries(): List<RagLibraryConfig>
+    fun setRagLibraries(libraries: List<RagLibraryConfig>)
+    fun getRagActiveLibraryIds(): Set<String>
+    fun setRagActiveLibraryIds(ids: Set<String>)
 
     // ========== Agent 模式 ==========
 

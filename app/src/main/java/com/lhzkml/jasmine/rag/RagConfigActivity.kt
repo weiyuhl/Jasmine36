@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,12 +29,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ProviderManager
 import com.lhzkml.jasmine.RagStore
+import com.lhzkml.jasmine.core.config.RagLibraryConfig
 import com.lhzkml.jasmine.core.rag.IndexDocument
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 import com.lhzkml.jasmine.ui.components.CustomHorizontalDivider
 import com.lhzkml.jasmine.ui.components.CustomSwitch
 import com.lhzkml.jasmine.ui.components.CustomText
@@ -61,6 +66,27 @@ fun RagConfigScreen(onBack: () -> Unit) {
     var model by remember { mutableStateOf(ProviderManager.getRagEmbeddingModel(context)) }
     var isIndexing by remember { mutableStateOf(false) }
     var indexStatus by remember { mutableStateOf<String?>(null) }
+    var manualSaveStatus by remember { mutableStateOf<String?>(null) }
+
+    var libraries by remember { mutableStateOf(ProviderManager.getRagLibraries(context)) }
+    var activeIds by remember { mutableStateOf(ProviderManager.getRagActiveLibraryIds(context)) }
+    var showAddLibraryDialog by remember { mutableStateOf(false) }
+    var newLibName by remember { mutableStateOf("") }
+    var newLibDesc by remember { mutableStateOf("") }
+    var selectedLibForManual by remember { mutableStateOf(libraries.firstOrNull()?.id ?: "default") }
+    var manualTitle by remember { mutableStateOf("") }
+    var manualContent by remember { mutableStateOf("") }
+    var workspaceTargetLib by remember { mutableStateOf(libraries.firstOrNull()?.id ?: "default") }
+
+    LaunchedEffect(libraries) {
+        if (selectedLibForManual !in libraries.map { it.id }) selectedLibForManual = libraries.firstOrNull()?.id ?: "default"
+        if (workspaceTargetLib !in libraries.map { it.id }) workspaceTargetLib = libraries.firstOrNull()?.id ?: "default"
+    }
+
+    fun persistLibraries() {
+        ProviderManager.setRagLibraries(context, libraries)
+        ProviderManager.setRagActiveLibraryIds(context, activeIds)
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -69,6 +95,7 @@ fun RagConfigScreen(onBack: () -> Unit) {
             ProviderManager.setRagEmbeddingBaseUrl(context, baseUrl.trim())
             ProviderManager.setRagEmbeddingApiKey(context, apiKey)
             ProviderManager.setRagEmbeddingModel(context, model.trim().ifBlank { "text-embedding-3-small" })
+            persistLibraries()
         }
     }
 
@@ -190,14 +217,194 @@ fun RagConfigScreen(onBack: () -> Unit) {
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // 重建索引
-                    CustomText(text = "工作区索引", fontSize = 14.sp, color = TextPrimary)
+                    // 知识库管理
+                    CustomText(text = "知识库管理", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                     CustomText(
-                        text = "扫描工作区文件并建立向量索引",
-                        fontSize = 11.sp,
+                        text = "不同知识库用于区分用途，勾选「参与检索」的库会在对话时被搜索",
+                        fontSize = 12.sp,
                         color = TextSecondary,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                     )
+                    libraries.forEach { lib ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CustomSwitch(
+                                checked = lib.id in activeIds,
+                                onCheckedChange = {
+                                    activeIds = if (it) activeIds + lib.id else activeIds - lib.id
+                                    persistLibraries()
+                                },
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Accent,
+                                uncheckedThumbColor = Color.White,
+                                uncheckedTrackColor = TextSecondary.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                CustomText(text = lib.name, fontSize = 14.sp, color = TextPrimary)
+                                if (lib.description.isNotBlank()) {
+                                    CustomText(text = lib.description, fontSize = 11.sp, color = TextSecondary)
+                                }
+                            }
+                            if (lib.id != "default") {
+                                CustomTextButton(
+                                    onClick = {
+                                        libraries = libraries.filter { it.id != lib.id }
+                                        activeIds = activeIds - lib.id
+                                        persistLibraries()
+                                    },
+                                    contentColor = Color(0xFFE53935),
+                                    contentPadding = PaddingValues(8.dp)
+                                ) {
+                                    CustomText("删除", fontSize = 12.sp, color = Color(0xFFE53935))
+                                }
+                            }
+                        }
+                    }
+                    CustomTextButton(
+                        onClick = { showAddLibraryDialog = true },
+                        contentColor = Accent,
+                        contentPadding = PaddingValues(8.dp)
+                    ) {
+                        CustomText("+ 添加知识库", fontSize = 14.sp, color = Accent)
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // 手动添加知识
+                    CustomText(text = "手动添加知识", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    CustomText(
+                        text = "直接输入内容保存到指定知识库",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                    )
+                    CustomText(text = "目标知识库", fontSize = 14.sp, color = TextPrimary)
+                    libraries.forEach { lib ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedLibForManual = lib.id }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .border(2.dp, if (selectedLibForManual == lib.id) Accent else Color(0xFFE8E8E8), RoundedCornerShape(9.dp))
+                                    .background(if (selectedLibForManual == lib.id) Accent else Color.Transparent)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            CustomText(text = lib.name, fontSize = 14.sp, color = TextPrimary)
+                        }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .background(Color.White, RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(8.dp))
+                    ) {
+                        BasicTextField(
+                            value = manualTitle,
+                            onValueChange = { manualTitle = it },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            textStyle = TextStyle(fontSize = 14.sp, color = TextPrimary),
+                            cursorBrush = SolidColor(TextPrimary),
+                            decorationBox = { inner ->
+                                Box {
+                                    if (manualTitle.isEmpty()) CustomText("标题（可选）", fontSize = 14.sp, color = TextSecondary)
+                                    inner()
+                                }
+                            }
+                        )
+                        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                        BasicTextField(
+                            value = manualContent,
+                            onValueChange = { manualContent = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(12.dp),
+                            textStyle = TextStyle(fontSize = 14.sp, color = TextPrimary),
+                            cursorBrush = SolidColor(TextPrimary),
+                            decorationBox = { inner ->
+                                Box {
+                                    if (manualContent.isEmpty()) CustomText("知识内容…", fontSize = 14.sp, color = TextSecondary)
+                                    inner()
+                                }
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row {
+                        CustomTextButton(
+                            onClick = {
+                                if (manualContent.isBlank()) {
+                                    manualSaveStatus = "请输入知识内容"
+                                    return@CustomTextButton
+                                }
+                                manualSaveStatus = null
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    val msg = withContext(Dispatchers.IO) {
+                                        saveManualEntry(context, selectedLibForManual, manualTitle.ifBlank { "manual_${System.currentTimeMillis()}" }, manualContent)
+                                    }
+                                    manualSaveStatus = msg
+                                    if (msg.startsWith("已保存")) {
+                                        manualTitle = ""
+                                        manualContent = ""
+                                    }
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            contentColor = Accent,
+                            contentPadding = PaddingValues(12.dp)
+                        ) {
+                            CustomText("保存到知识库", fontSize = 14.sp, color = Accent)
+                        }
+                        manualSaveStatus?.let { CustomText(it, fontSize = 12.sp, color = TextSecondary, modifier = Modifier.padding(12.dp)) }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // 工作区索引
+                    CustomText(text = "工作区索引", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    CustomText(
+                        text = "扫描工作区文件并建立向量索引，可指定目标知识库",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                    )
+                    CustomText(text = "目标知识库", fontSize = 14.sp, color = TextPrimary)
+                    libraries.forEach { lib ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { workspaceTargetLib = lib.id }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .border(2.dp, if (workspaceTargetLib == lib.id) Accent else Color(0xFFE8E8E8), RoundedCornerShape(9.dp))
+                                    .then(
+                                        if (workspaceTargetLib == lib.id) Modifier.background(Accent) else Modifier
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            CustomText(text = lib.name, fontSize = 14.sp, color = TextPrimary)
+                        }
+                    }
                     CustomTextButton(
                         onClick = {
                             if (isIndexing) return@CustomTextButton
@@ -215,7 +422,7 @@ fun RagConfigScreen(onBack: () -> Unit) {
                             indexStatus = "正在扫描…"
                             CoroutineScope(Dispatchers.Main).launch {
                                 val result = withContext(Dispatchers.IO) {
-                                    runIndexing(context, wsPath)
+                                    runIndexing(context, wsPath, workspaceTargetLib)
                                 }
                                 isIndexing = false
                                 indexStatus = result
@@ -243,11 +450,54 @@ fun RagConfigScreen(onBack: () -> Unit) {
             }
         }
     }
+
+    if (showAddLibraryDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddLibraryDialog = false },
+            title = { CustomText("添加知识库", fontSize = 16.sp, color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    CustomText("名称", fontSize = 14.sp, color = TextPrimary)
+                    RagTextField(value = newLibName, onValueChange = { newLibName = it }, placeholder = "例如：项目文档")
+                    Spacer(Modifier.height(12.dp))
+                    CustomText("用途描述", fontSize = 14.sp, color = TextPrimary)
+                    RagTextField(value = newLibDesc, onValueChange = { newLibDesc = it }, placeholder = "可选")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newLibName.trim()
+                        if (name.isBlank()) {
+                            Toast.makeText(context, "请输入名称", Toast.LENGTH_SHORT).show()
+                            return@TextButton
+                        }
+                        val id = "lib_${name.replace(Regex("[^a-zA-Z0-9\u4e00-\u9fa5]"), "_").lowercase()}_${UUID.randomUUID().toString().take(8)}"
+                        libraries = libraries + RagLibraryConfig(id, name, newLibDesc.trim())
+                        persistLibraries()
+                        showAddLibraryDialog = false
+                        newLibName = ""
+                        newLibDesc = ""
+                        Toast.makeText(context, "已添加", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    CustomText("添加", fontSize = 14.sp, color = Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddLibraryDialog = false }) {
+                    CustomText("取消", fontSize = 14.sp, color = TextSecondary)
+                }
+            }
+        )
+    }
 }
 
-private suspend fun runIndexing(
+private suspend fun saveManualEntry(
     context: android.content.Context,
-    workspacePath: String
+    libraryId: String,
+    sourceId: String,
+    content: String
 ): String {
     val configProvider = {
         com.lhzkml.jasmine.core.rag.RagConfig(
@@ -255,7 +505,33 @@ private suspend fun runIndexing(
             topK = ProviderManager.getRagTopK(context),
             embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(context),
             embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(context),
-            embeddingModel = ProviderManager.getRagEmbeddingModel(context)
+            embeddingModel = ProviderManager.getRagEmbeddingModel(context),
+            activeLibraryIds = ProviderManager.getRagActiveLibraryIds(context)
+        )
+    }
+    val indexingService = RagStore.buildIndexingService(configProvider)
+        ?: return "请先配置 Embedding API 地址和 Key"
+    return try {
+        val result = indexingService.indexDocument(IndexDocument(sourceId, content, libraryId))
+        if (result.success) "已保存，${result.chunksIndexed} 个块已索引" else "保存失败: ${result.error}"
+    } catch (e: Exception) {
+        "保存失败: ${e.message}"
+    }
+}
+
+private suspend fun runIndexing(
+    context: android.content.Context,
+    workspacePath: String,
+    libraryId: String = "default"
+): String {
+    val configProvider = {
+        com.lhzkml.jasmine.core.rag.RagConfig(
+            enabled = ProviderManager.isRagEnabled(context),
+            topK = ProviderManager.getRagTopK(context),
+            embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(context),
+            embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(context),
+            embeddingModel = ProviderManager.getRagEmbeddingModel(context),
+            activeLibraryIds = ProviderManager.getRagActiveLibraryIds(context)
         )
     }
     val indexingService = RagStore.buildIndexingService(configProvider)
@@ -271,7 +547,7 @@ private suspend fun runIndexing(
                 val content = file.readText(Charsets.UTF_8)
                 if (content.isNotBlank()) {
                     val relativePath = file.relativeTo(root).path
-                    documents.add(IndexDocument(relativePath, content))
+                    documents.add(IndexDocument(relativePath, content, libraryId = libraryId))
                 }
             } catch (_: Exception) { /* skip */ }
         }

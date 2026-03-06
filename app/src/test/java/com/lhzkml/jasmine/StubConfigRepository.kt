@@ -138,4 +138,8 @@ class StubConfigRepository : ConfigRepository {
     override fun setLastConversationId(id: String) {}
     override fun hasLastSession(): Boolean = false
     override fun setLastSession(active: Boolean) {}
+    override fun getRagLibraries(): List<RagLibraryConfig> = listOf(RagLibraryConfig("default", "默认库", "通用知识"))
+    override fun setRagLibraries(libraries: List<RagLibraryConfig>) {}
+    override fun getRagActiveLibraryIds(): Set<String> = setOf("default")
+    override fun setRagActiveLibraryIds(ids: Set<String>) {}
 }

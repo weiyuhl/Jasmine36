@@ -29,12 +29,18 @@ interface KnowledgeIndex {
      * 向量相似度检索
      * @param queryVector 查询向量
      * @param topK 返回数量
+     * @param libraryIds 限定检索的知识库 ID 集合，null 或空表示检索全部
      * @return 按相似度排序的 chunks
      */
-    suspend fun search(queryVector: FloatArray, topK: Int): List<ScoredChunk>
+    suspend fun search(queryVector: FloatArray, topK: Int, libraryIds: Set<String>? = null): List<ScoredChunk>
 
-    /** 当前索引的 chunk 数量 */
-    suspend fun count(): Long
+    /**
+     * 按 libraryId 删除（删除整库）
+     */
+    suspend fun deleteByLibraryId(libraryId: String)
+
+    /** 当前索引的 chunk 数量，可选按 libraryId 统计 */
+    suspend fun count(libraryId: String? = null): Long
 }
 
 /**
@@ -42,6 +48,7 @@ interface KnowledgeIndex {
  */
 data class KnowledgeChunk(
     val id: Long = 0,
+    val libraryId: String = "default",
     val sourceId: String,
     val content: String,
     val metadata: String = "{}",
@@ -51,12 +58,13 @@ data class KnowledgeChunk(
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as KnowledgeChunk
-        return id == other.id && sourceId == other.sourceId && content == other.content &&
+        return id == other.id && libraryId == other.libraryId && sourceId == other.sourceId && content == other.content &&
             metadata == other.metadata && (embedding?.contentEquals(other.embedding ?: return false) ?: (other.embedding == null))
     }
 
     override fun hashCode(): Int {
         var result = id.hashCode()
+        result = 31 * result + libraryId.hashCode()
         result = 31 * result + sourceId.hashCode()
         result = 31 * result + content.hashCode()
         result = 31 * result + metadata.hashCode()

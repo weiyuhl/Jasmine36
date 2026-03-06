@@ -11,5 +11,7 @@ data class RagConfig(
     val knowledgeSourcePath: String = "",
     val embeddingBaseUrl: String = "",
     val embeddingApiKey: String = "",
-    val embeddingModel: String = "text-embedding-3-small"
+    val embeddingModel: String = "text-embedding-3-small",
+    /** 参与检索的知识库 ID 集合，空表示检索全部 */
+    val activeLibraryIds: Set<String> = emptySet()
 )

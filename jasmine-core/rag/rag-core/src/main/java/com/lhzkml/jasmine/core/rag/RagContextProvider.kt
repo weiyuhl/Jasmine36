@@ -22,7 +22,8 @@ class RagContextProvider(
 
         val vector = embeddingService.embed(query.trim()) ?: return null
         val topK = cfg.topK.coerceIn(1, 32)
-        val chunks = knowledgeIndex.search(vector, topK)
+        val libraryIds = cfg.activeLibraryIds.takeIf { it.isNotEmpty() }
+        val chunks = knowledgeIndex.search(vector, topK, libraryIds)
 
         val filtered = cfg.minScoreThreshold?.let { threshold ->
             chunks.filter { it.score <= threshold }

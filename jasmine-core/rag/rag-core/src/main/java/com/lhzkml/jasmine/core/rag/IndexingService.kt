@@ -2,10 +2,12 @@ package com.lhzkml.jasmine.core.rag
 
 /**
  * 待索引文档
+ * @param libraryId 所属知识库 ID，用于区分不同用途（如项目文档、个人笔记）
  */
 data class IndexDocument(
     val sourceId: String,
-    val content: String
+    val content: String,
+    val libraryId: String = "default"
 )
 
 /**
@@ -43,6 +45,7 @@ class IndexingService(
 
             val toInsert = chunks.zip(vectors).mapNotNull { (chunk, vec) ->
                 if (vec != null) KnowledgeChunk(
+                    libraryId = doc.libraryId,
                     sourceId = doc.sourceId,
                     content = chunk.content,
                     metadata = chunk.metadata,
@@ -63,9 +66,8 @@ class IndexingService(
         documents: List<IndexDocument>,
         replaceSourceIds: Boolean = true
     ): List<IndexingResult> {
-        val sourceIds = documents.map { it.sourceId }.toSet()
         if (replaceSourceIds) {
-            sourceIds.forEach { knowledgeIndex.deleteBySourceId(it) }
+            documents.groupBy { it.sourceId }.keys.forEach { knowledgeIndex.deleteBySourceId(it) }
         }
         return documents.map { indexDocument(it) }
     }
@@ -82,5 +84,12 @@ class IndexingService(
      */
     suspend fun clear() {
         knowledgeIndex.clear()
+    }
+
+    /**
+     * 按知识库删除
+     */
+    suspend fun removeByLibraryId(libraryId: String) {
+        knowledgeIndex.deleteByLibraryId(libraryId)
     }
 }

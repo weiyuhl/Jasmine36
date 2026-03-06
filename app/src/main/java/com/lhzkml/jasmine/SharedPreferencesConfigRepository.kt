@@ -416,6 +416,30 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun setRagEmbeddingApiKey(key: String) { prefs().edit().putString("rag_embedding_api_key", key).apply() }
     override fun getRagEmbeddingModel(): String = prefs().getString("rag_embedding_model", null) ?: "text-embedding-3-small"
     override fun setRagEmbeddingModel(model: String) { prefs().edit().putString("rag_embedding_model", model).apply() }
+    override fun getRagLibraries(): List<RagLibraryConfig> {
+        val raw = prefs().getString("rag_libraries", null) ?: return listOf(
+            RagLibraryConfig("default", "默认库", "通用知识")
+        )
+        return raw.split("|||").filter { it.isNotBlank() }.mapNotNull { entry ->
+            val parts = entry.split(":::")
+            if (parts.size >= 2) RagLibraryConfig(
+                id = parts[0],
+                name = parts[1],
+                description = parts.getOrElse(2) { "" }
+            ) else null
+        }.ifEmpty { listOf(RagLibraryConfig("default", "默认库", "通用知识")) }
+    }
+    override fun setRagLibraries(libraries: List<RagLibraryConfig>) {
+        val raw = libraries.joinToString("|||") { "${it.id}:::${it.name}:::${it.description}" }
+        prefs().edit().putString("rag_libraries", raw).apply()
+    }
+    override fun getRagActiveLibraryIds(): Set<String> {
+        val raw = prefs().getString("rag_active_library_ids", null) ?: return emptySet()
+        return raw.split(",").filter { it.isNotBlank() }.toSet()
+    }
+    override fun setRagActiveLibraryIds(ids: Set<String>) {
+        prefs().edit().putString("rag_active_library_ids", ids.joinToString(",")).apply()
+    }
 
     // ========== Agent 模式 ==========
 

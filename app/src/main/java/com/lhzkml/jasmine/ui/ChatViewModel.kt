@@ -218,16 +218,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val modelName = if (activeId != null) {
             overrideModel ?: ProviderManager.getModel(activity, activeId)
         } else ""
-        val additionalProviders: List<SystemContextProvider> = buildList {
-            val ragProvider = RagStore.buildRagContextProvider {
-                RagConfig(
-                    enabled = ProviderManager.isRagEnabled(activity),
-                    topK = ProviderManager.getRagTopK(activity),
-                    embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(activity),
-                    embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(activity),
-                    embeddingModel = ProviderManager.getRagEmbeddingModel(activity)
-                )
-            }
+            val additionalProviders: List<SystemContextProvider> = buildList {
+                val ragProvider = RagStore.buildRagContextProvider {
+                    RagConfig(
+                        enabled = ProviderManager.isRagEnabled(activity),
+                        topK = ProviderManager.getRagTopK(activity),
+                        embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(activity),
+                        embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(activity),
+                        embeddingModel = ProviderManager.getRagEmbeddingModel(activity),
+                        activeLibraryIds = ProviderManager.getRagActiveLibraryIds(activity)
+                    )
+                }
             if (ragProvider != null) add(ragProvider)
         }
         contextCollector = runtimeBuilder.buildSystemContext(

@@ -13,6 +13,7 @@ import io.objectbox.annotation.Id
 @Entity
 data class KnowledgeChunkEntity(
     @Id var id: Long = 0,
+    var libraryId: String = "default",
     var sourceId: String = "",
     var content: String = "",
     var metadata: String = "{}",
@@ -22,12 +23,13 @@ data class KnowledgeChunkEntity(
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as KnowledgeChunkEntity
-        return id == other.id && sourceId == other.sourceId && content == other.content &&
+        return id == other.id && libraryId == other.libraryId && sourceId == other.sourceId && content == other.content &&
             metadata == other.metadata && (embedding?.contentEquals(other.embedding ?: return false) ?: (other.embedding == null))
     }
 
     override fun hashCode(): Int {
         var result = id.hashCode()
+        result = 31 * result + libraryId.hashCode()
         result = 31 * result + sourceId.hashCode()
         result = 31 * result + content.hashCode()
         result = 31 * result + metadata.hashCode()
@@ -38,6 +40,7 @@ data class KnowledgeChunkEntity(
 
 internal fun KnowledgeChunkEntity.toChunk() = KnowledgeChunk(
     id = id,
+    libraryId = libraryId,
     sourceId = sourceId,
     content = content,
     metadata = metadata,
@@ -46,6 +49,7 @@ internal fun KnowledgeChunkEntity.toChunk() = KnowledgeChunk(
 
 internal fun KnowledgeChunk.toEntity() = KnowledgeChunkEntity(
     id = id,
+    libraryId = libraryId,
     sourceId = sourceId,
     content = content,
     metadata = metadata,
