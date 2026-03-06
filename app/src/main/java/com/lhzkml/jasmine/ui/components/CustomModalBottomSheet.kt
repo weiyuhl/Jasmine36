@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -153,13 +154,58 @@ fun CustomModalBottomSheet(
             val maxExpandRef = remember { mutableFloatStateOf(maxExpandPx) }
             maxExpandRef.floatValue = maxExpandPx
 
+            fun snapToNearestState(currentH: Float) {
+                val distances = listOf(
+                    STATE_PEEK to kotlin.math.abs(currentH - minHPx),
+                    STATE_HALF to kotlin.math.abs(currentH - halfHPx),
+                    STATE_FULL to kotlin.math.abs(currentH - maxSheetPx)
+                )
+                expansionState = distances.minByOrNull { it.second }!!.first
+            }
+
+            fun performReleaseLogic() {
+                val curH = currentHeightRef.floatValue
+                val tgtH = targetHeightPx
+                val maxExp = maxExpandRef.floatValue
+                if (dragOffsetPx > COLLAPSE_THRESHOLD_PX) {
+                    when {
+                        dragOffsetPx / curH > DISMISS_THRESHOLD && expansionState == STATE_PEEK ->
+                            dismiss(animateToPx = curH + 100f)
+                        expansionState > STATE_PEEK -> {
+                            expansionState = when (expansionState) {
+                                STATE_FULL -> STATE_HALF
+                                STATE_HALF -> STATE_PEEK
+                                else -> expansionState
+                            }
+                            dragOffsetPx = 0f
+                        }
+                        else -> dragOffsetPx = 0f
+                    }
+                } else {
+                    val snapH = tgtH + expandOffsetPx.coerceIn(0f, maxExp)
+                    snapToNearestState(snapH)
+                    expandOffsetPx = 0f
+                    dragOffsetPx = 0f
+                }
+            }
+
             val contentNestedConnection = remember(dragFromContentArea) {
                 if (!dragFromContentArea) null
                 else object : NestedScrollConnection {
                     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                         if (scrollState.value == 0 && available.y > 0) {
                             val maxH = currentHeightRef.floatValue
-                            dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, maxH)
+                            val maxExp = maxExpandRef.floatValue
+                            if (expandOffsetPx > 0) {
+                                val reduce = minOf(expandOffsetPx, available.y)
+                                expandOffsetPx -= reduce
+                                val leftover = available.y - reduce
+                                if (leftover > 0f) {
+                                    dragOffsetPx = (dragOffsetPx + leftover).coerceIn(0f, maxH)
+                                }
+                            } else {
+                                dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, maxH)
+                            }
                             return Offset(0f, available.y)
                         }
                         return Offset.Zero
@@ -173,21 +219,26 @@ fun CustomModalBottomSheet(
                         }
                         if (scrollState.value >= scrollState.maxValue && available.y > 0) {
                             val maxH = currentHeightRef.floatValue
-                            dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, maxH)
+                            val maxExp = maxExpandRef.floatValue
+                            if (expandOffsetPx > 0) {
+                                val reduce = minOf(expandOffsetPx, available.y)
+                                expandOffsetPx -= reduce
+                                val leftover = available.y - reduce
+                                if (leftover > 0f) {
+                                    dragOffsetPx = (dragOffsetPx + leftover).coerceIn(0f, maxH)
+                                }
+                            } else {
+                                dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, maxH)
+                            }
                             return Offset(0f, available.y)
                         }
                         return Offset.Zero
                     }
+                    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                        if (dragOffsetPx > 0f) performReleaseLogic()
+                        return Velocity.Zero
+                    }
                 }
-            }
-
-            fun snapToNearestState(currentH: Float) {
-                val distances = listOf(
-                    STATE_PEEK to kotlin.math.abs(currentH - minHPx),
-                    STATE_HALF to kotlin.math.abs(currentH - halfHPx),
-                    STATE_FULL to kotlin.math.abs(currentH - maxSheetPx)
-                )
-                expansionState = distances.minByOrNull { it.second }!!.first
             }
 
             val sheetModifier = if (contentNestedConnection != null) {
