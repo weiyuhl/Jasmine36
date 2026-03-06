@@ -154,6 +154,8 @@ private fun renderContentBlocks(
             is ContentBlock.GraphLog -> appendStyled(sb, block.content, 0xFF78909C.toInt(), mono = true)
             is ContentBlock.Error -> appendStyled(sb, block.message, 0xFFF44336.toInt(), bold = true)
             is ContentBlock.SystemLog -> appendSystemOrEventLog(sb, block.content)
+            is ContentBlock.SubAgentStart -> appendStyled(sb, "[SubAgent] ${block.purpose} (${block.subagentType})", 0xFF7E57C2.toInt(), bold = true)
+            is ContentBlock.SubAgentResult -> appendStyled(sb, "[SubAgent Result] ${block.purpose}: ${block.result}", 0xFF26A69A.toInt())
         }
     }
     return sb

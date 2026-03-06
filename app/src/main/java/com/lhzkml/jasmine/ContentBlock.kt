@@ -9,4 +9,6 @@ sealed class ContentBlock {
     data class GraphLog(val content: String) : ContentBlock()
     data class Error(val message: String) : ContentBlock()
     data class SystemLog(val content: String) : ContentBlock()
+    data class SubAgentStart(val purpose: String, val subagentType: String) : ContentBlock()
+    data class SubAgentResult(val purpose: String, val result: String) : ContentBlock()
 }

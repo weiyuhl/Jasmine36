@@ -85,6 +85,21 @@ class StreamProcessor {
         return snapshot()
     }
 
+    fun onSubAgentStart(purpose: String, type: String): StreamUpdate {
+        flushAll()
+        blocks.add(ContentBlock.SubAgentStart(purpose, type))
+        logBuilder.append("\n[SubAgent] $purpose (type=$type)\n")
+        return snapshot()
+    }
+
+    fun onSubAgentResult(purpose: String, result: String): StreamUpdate {
+        flushAll()
+        val preview = if (result.length > 500) result.take(500) + "…" else result
+        blocks.add(ContentBlock.SubAgentResult(purpose, preview))
+        logBuilder.append("[SubAgent Result] $purpose: $preview\n\n")
+        return snapshot()
+    }
+
     fun finalize(): StreamUpdate {
         flushAll()
         return StreamUpdate(blocks.toList(), isComplete = true)
@@ -102,14 +117,23 @@ class StreamProcessor {
         inThinking = false
     }
 
+    fun getBufferedText(): String {
+        val sb = StringBuilder()
+        if (thinkingBuffer.isNotEmpty()) sb.append(thinkingBuffer)
+        if (textBuffer.isNotEmpty()) sb.append(textBuffer)
+        return sb.toString()
+    }
+
     private fun flushText() {
         if (textBuffer.isNotEmpty()) {
+            val text = textBuffer.toString()
             val lastBlock = blocks.lastOrNull()
             if (lastBlock is ContentBlock.Text) {
-                blocks[blocks.lastIndex] = ContentBlock.Text(lastBlock.content + textBuffer)
+                blocks[blocks.lastIndex] = ContentBlock.Text(lastBlock.content + text)
             } else {
-                blocks.add(ContentBlock.Text(textBuffer.toString()))
+                blocks.add(ContentBlock.Text(text))
             }
+            logBuilder.append("[Text] ").append(text).append("\n")
             textBuffer.setLength(0)
         }
     }

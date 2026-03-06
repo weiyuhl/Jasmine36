@@ -220,11 +220,40 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private fun buildToolRegistry(): ToolRegistry {
+    private fun buildToolRegistry(client: com.lhzkml.jasmine.core.prompt.llm.ChatClient, model: String): ToolRegistry {
         val activity = _activity ?: throw IllegalStateException("Activity not set")
         toolRegistryBuilder.workspacePath = ProviderManager.getWorkspacePath(activity)
         toolRegistryBuilder.fallbackBasePath = activity.getExternalFilesDir(null)?.absolutePath
         DialogHandlers.register(activity, toolRegistryBuilder)
+        toolRegistryBuilder.subAgentClientProvider = { client }
+        toolRegistryBuilder.subAgentModelProvider = { model }
+        toolRegistryBuilder.subAgentEventListener = object : com.lhzkml.jasmine.core.agent.tools.AgentEventListener {
+            override suspend fun onToolCallStart(toolName: String, arguments: String) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    chatStateManager.handleToolCall(toolName, arguments)
+                }
+            }
+            override suspend fun onToolCallResult(toolName: String, result: String) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    chatStateManager.handleToolResult(toolName, result)
+                }
+            }
+            override suspend fun onThinking(content: String) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    chatStateManager.handleThinking(content)
+                }
+            }
+        }
+        toolRegistryBuilder.onSubAgentStart = { purpose, type ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                chatStateManager.handleSubAgentStart(purpose, type)
+            }
+        }
+        toolRegistryBuilder.onSubAgentResult = { purpose, result ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                chatStateManager.handleSubAgentResult(purpose, result)
+            }
+        }
         return toolRegistryBuilder.build(ProviderManager.isAgentMode(activity))
     }
 
@@ -467,6 +496,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private val logMarkerPrefixes = listOf(
+        "[Text] ", "[Think] ", "[Tool] ", "[Result] ",
+        "[Plan] ", "[SubAgent] ", "[SubAgent Result] ", "[Goal] "
+    )
+
+    private fun isLogMarkerLine(line: String): Boolean =
+        logMarkerPrefixes.any { line.startsWith(it) }
+
     private fun parseLogBlocks(logContent: String): MutableList<ContentBlock> {
         val blocks = mutableListOf<ContentBlock>()
         val lines = logContent.lines()
@@ -474,14 +511,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         while (i < lines.size) {
             val line = lines[i]
             when {
+                line.startsWith("[Text] ") -> {
+                    val textContent = StringBuilder(line.removePrefix("[Text] "))
+                    i++
+                    while (i < lines.size && !isLogMarkerLine(lines[i])) {
+                        textContent.append("\n").append(lines[i])
+                        i++
+                    }
+                    val text = textContent.toString().trimEnd()
+                    if (text.isNotEmpty()) blocks.add(ContentBlock.Text(text))
+                }
                 line.startsWith("[Think] ") -> {
                     val thinkText = StringBuilder(line.removePrefix("[Think] "))
                     i++
-                    while (i < lines.size && !lines[i].startsWith("[") && lines[i].isNotBlank()) {
+                    while (i < lines.size && !isLogMarkerLine(lines[i])) {
                         thinkText.append("\n").append(lines[i])
                         i++
                     }
-                    blocks.add(ContentBlock.Thinking(thinkText.toString()))
+                    blocks.add(ContentBlock.Thinking(thinkText.toString().trimEnd()))
                 }
                 line.startsWith("[Tool] 调用工具: ") -> {
                     val toolDesc = line.removePrefix("[Tool] 调用工具: ")
@@ -520,6 +567,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         i++
                     }
                     blocks.add(ContentBlock.Plan(goal, steps))
+                }
+                line.startsWith("[SubAgent] ") -> {
+                    val info = line.removePrefix("[SubAgent] ")
+                    val typeMatch = Regex("\\(type=(.+?)\\)$").find(info)
+                    val type = typeMatch?.groupValues?.getOrNull(1) ?: "general"
+                    val purpose = if (typeMatch != null) info.substring(0, typeMatch.range.first).trim() else info
+                    blocks.add(ContentBlock.SubAgentStart(purpose, type))
+                    i++
+                }
+                line.startsWith("[SubAgent Result] ") -> {
+                    val resultPart = line.removePrefix("[SubAgent Result] ")
+                    val colonIdx = resultPart.indexOf(": ")
+                    if (colonIdx > 0) {
+                        val purpose = resultPart.substring(0, colonIdx)
+                        val result = resultPart.substring(colonIdx + 2)
+                        blocks.add(ContentBlock.SubAgentResult(purpose, result))
+                    } else {
+                        blocks.add(ContentBlock.SystemLog(line))
+                    }
+                    i++
                 }
                 line.isBlank() -> {
                     i++
@@ -651,7 +718,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             currentConversationId = { currentConversationId },
             setConversationId = { currentConversationId = it },
             messageHistory = messageHistory,
-            buildToolRegistry = { buildToolRegistry() },
+            buildToolRegistry = { c, m -> buildToolRegistry(c, m) },
             loadMcpTools = { loadMcpToolsInto(it) },
             refreshContextCollector = { refreshContextCollector() },
             buildTracing = { buildTracing() },
@@ -693,12 +760,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val convId = currentConversationId ?: return
         val partialText = chatStateManager.getPartialContent()
         val logContent = chatStateManager.getLogContent()
+        val bufferedText = chatStateManager.getBufferedText()
         if (partialText.isEmpty()) return
 
         stopGenerating()
 
         val contentToSave = if (logContent.isNotBlank()) {
-            logContent + ChatExecutor.BLOCK_TEXT_SEPARATOR + partialText
+            logContent + ChatExecutor.BLOCK_TEXT_SEPARATOR + bufferedText
         } else {
             partialText
         }

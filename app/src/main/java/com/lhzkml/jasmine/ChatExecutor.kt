@@ -48,7 +48,7 @@ class ChatExecutor(
     private val currentConversationId: () -> String?,
     private val setConversationId: (String) -> Unit,
     private val messageHistory: MutableList<ChatMessage>,
-    private val buildToolRegistry: suspend () -> ToolRegistry,
+    private val buildToolRegistry: suspend (ChatClient, String) -> ToolRegistry,
     private val loadMcpTools: suspend (ToolRegistry) -> Unit,
     private val refreshContextCollector: () -> Unit,
     private val buildTracing: () -> Tracing?,
@@ -77,7 +77,7 @@ class ChatExecutor(
             val toolsEnabled = ProviderManager.isToolsEnabled(context)
 
             val registry = if (toolsEnabled) {
-                val r = buildToolRegistry()
+                val r = buildToolRegistry(client, config.model)
                 loadMcpTools(r)
                 r
             } else null
@@ -190,11 +190,12 @@ class ChatExecutor(
             withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
                 val partialText = chatStateManager.getPartialContent()
                 val logContent = chatStateManager.getLogContent()
+                val bufferedText = chatStateManager.getBufferedText()
                 if (partialText.isNotEmpty()) {
                     val convId = currentConversationId()
                     if (convId != null) {
                         val contentToSave = if (logContent.isNotBlank()) {
-                            logContent + BLOCK_TEXT_SEPARATOR + partialText
+                            logContent + BLOCK_TEXT_SEPARATOR + bufferedText
                         } else {
                             partialText
                         }
@@ -241,6 +242,7 @@ class ChatExecutor(
                 chatStateManager.cancelStream()
                 onUpdateButtonState(false)
             }
+            try { getTracing()?.close() } catch (_: Exception) {}
         }
     }
 

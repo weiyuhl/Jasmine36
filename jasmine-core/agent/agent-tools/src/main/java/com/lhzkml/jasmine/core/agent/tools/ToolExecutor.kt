@@ -68,7 +68,8 @@ class ToolExecutor(
     private val eventListener: AgentEventListener? = null,
     private val eventHandler: EventHandler? = null,
     private val tracing: Tracing? = null,
-    private val maxToolResultLength: Int = MAX_TOOL_RESULT_LENGTH
+    private val maxToolResultLength: Int = MAX_TOOL_RESULT_LENGTH,
+    val currentDepth: Int = 0
 ) {
     // ========== Prompt + LLMSession 方式 ==========
 
@@ -304,15 +305,8 @@ class ToolExecutor(
                 tools = session.tools.map { it.name }
             ))
 
-            val tracingOnChunk: suspend (String) -> Unit = { chunk ->
-                onChunk(chunk)
-                tracing?.emit(TraceEvent.LLMStreamFrame(
-                    eventId = tracing.newEventId(), runId = runId, chunk = chunk
-                ))
-            }
-
             val result = try {
-                session.requestLLMStream(tracingOnChunk, onThinking)
+                session.requestLLMStream(onChunk, onThinking)
             } catch (e: Exception) {
                 tracing?.emit(TraceEvent.LLMStreamFailed(
                     eventId = tracing.newEventId(), runId = runId,

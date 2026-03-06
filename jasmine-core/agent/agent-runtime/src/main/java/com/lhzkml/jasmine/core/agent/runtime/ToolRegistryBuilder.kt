@@ -2,6 +2,7 @@ package com.lhzkml.jasmine.core.agent.runtime
 
 import com.lhzkml.jasmine.core.agent.tools.*
 import com.lhzkml.jasmine.core.config.ConfigRepository
+import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 
 /**
  * 工具注册表构建器
@@ -45,6 +46,16 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
     var multiSelectHandler: (suspend (String, List<String>) -> List<String>)? = null
     var rankPrioritiesHandler: (suspend (String, List<String>) -> List<String>)? = null
     var askMultipleQuestionsHandler: (suspend (List<String>) -> List<String>)? = null
+
+    /**
+     * 子代理所需的 ChatClient 和 model 提供器（延迟绑定）
+     */
+    var subAgentClientProvider: (() -> ChatClient)? = null
+    var subAgentModelProvider: (() -> String)? = null
+    var subAgentEventListener: AgentEventListener? = null
+    var subAgentConfig: SubAgentConfig = SubAgentConfig()
+    var onSubAgentStart: (suspend (purpose: String, type: String) -> Unit)? = null
+    var onSubAgentResult: (suspend (purpose: String, result: String) -> Unit)? = null
 
     /**
      * 构建工具注册表
@@ -140,26 +151,36 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
 
             // 用户交互工具
             if (isEnabled("user_interaction")) {
-                // AskUser - 询问用户输入
                 if (askUserHandler != null) {
                     register(AskUserTool(askUserHandler!!))
                 }
-                // SingleSelect - 单选
                 if (singleSelectHandler != null) {
                     register(SingleSelectTool(singleSelectHandler!!))
                 }
-                // MultiSelect - 多选
                 if (multiSelectHandler != null) {
                     register(MultiSelectTool(multiSelectHandler!!))
                 }
-                // RankPriorities - 排序
                 if (rankPrioritiesHandler != null) {
                     register(RankPrioritiesTool(rankPrioritiesHandler!!))
                 }
-                // AskMultipleQuestions - 多问题
                 if (askMultipleQuestionsHandler != null) {
                     register(AskMultipleQuestionsTool(askMultipleQuestionsHandler!!))
                 }
+            }
+
+            // 子代理工具（需要 ChatClient，延迟绑定）
+            if (isEnabled("invoke_subagent") && subAgentClientProvider != null && subAgentModelProvider != null) {
+                val currentRegistry = this
+                register(SubAgentTool(
+                    clientProvider = subAgentClientProvider!!,
+                    modelProvider = subAgentModelProvider!!,
+                    parentRegistry = currentRegistry,
+                    config = subAgentConfig,
+                    currentDepth = 0,
+                    eventListener = subAgentEventListener,
+                    onSubAgentStart = onSubAgentStart,
+                    onSubAgentResult = onSubAgentResult
+                ))
             }
         }
     }

@@ -78,6 +78,18 @@ class ChatStateManager(
         }
     }
 
+    fun handleSubAgentStart(purpose: String, type: String) {
+        val proc = streamProcessor ?: return
+        val update = proc.onSubAgentStart(purpose, type)
+        scheduleStreamUpdate(update)
+    }
+
+    fun handleSubAgentResult(purpose: String, result: String) {
+        val proc = streamProcessor ?: return
+        val update = proc.onSubAgentResult(purpose, result)
+        scheduleStreamUpdate(update)
+    }
+
     fun handleError(message: String) {
         val proc = streamProcessor
         if (proc != null) {
@@ -131,6 +143,8 @@ class ChatStateManager(
     }
 
     fun getLogContent(): String = streamProcessor?.getLogContent() ?: ""
+
+    fun getBufferedText(): String = streamProcessor?.getBufferedText() ?: ""
 
     fun addHistoryAiMessage(blocks: List<ContentBlock>, usageLine: String, time: String) {
         items.add(ChatItem.AiMessage(blocks = blocks, usageLine = usageLine, time = time))

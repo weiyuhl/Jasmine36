@@ -25,6 +25,16 @@ class ToolRegistry {
 
     fun allTools(): List<Tool> = tools.values.toList()
 
+    /**
+     * 根据工具名筛选出子注册表（用于子代理工具子集）
+     */
+    fun subset(names: Set<String>): ToolRegistry {
+        val filtered = tools.filter { it.key in names }.values
+        return build {
+            filtered.forEach { register(it) }
+        }
+    }
+
     suspend fun execute(call: ToolCall): ToolResult {
         val tool = findTool(call.name)
             ?: return ToolResult(callId = call.id, name = call.name, content = "Error: Unknown tool '${call.name}'")
