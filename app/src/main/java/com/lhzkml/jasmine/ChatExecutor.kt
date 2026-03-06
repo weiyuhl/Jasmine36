@@ -290,6 +290,7 @@ class ChatExecutor(
             toolCount = registry.descriptors().size
         ))
 
+        var messagesWithPlan: List<ChatMessage>? = null
         if (ProviderManager.isPlannerEnabled(context)) {
             try {
                 val planPrompt = Prompt.build("planner") {
@@ -318,21 +319,42 @@ class ChatExecutor(
                 )
 
                 val maxIter = ProviderManager.getPlannerMaxIterations(context)
-                val planner = if (ProviderManager.isPlannerCriticEnabled(context)) {
-                    SimpleLLMWithCriticPlanner(maxIterations = maxIter)
+                val useCritic = ProviderManager.isPlannerCriticEnabled(context)
+
+                val plan: com.lhzkml.jasmine.core.agent.planner.SimplePlan
+                var criticInfo = ""
+
+                if (useCritic) {
+                    val criticPlanner = SimpleLLMWithCriticPlanner(
+                        maxIterations = maxIter, maxCriticRetries = 2
+                    )
+                    val (validatedPlan, evaluation) = criticPlanner.buildAndValidatePlan(
+                        planContext, message
+                    )
+                    plan = validatedPlan
+                    if (evaluation != null) {
+                        criticInfo = " (Critic: ${evaluation.score}/10)"
+                    }
                 } else {
-                    SimpleLLMPlanner(maxIterations = maxIter)
+                    val planner = SimpleLLMPlanner(maxIterations = maxIter)
+                    plan = planner.buildPlanPublic(planContext, message, null)
                 }
-                val plan = planner.buildPlanPublic(planContext, message, null)
+
                 planSession.close()
                 planReadSession.close()
 
                 withContext(Dispatchers.Main) {
                     chatStateManager.handlePlan(
-                        plan.goal,
-                        plan.steps.map { it.description }
+                        plan.goal + criticInfo,
+                        plan.steps.map { "[${it.type}] ${it.description}" }
                     )
                 }
+
+                val planPromptText = SimpleLLMPlanner.formatPlanForPrompt(plan)
+                val planSystemMsg = ChatMessage("system", planPromptText)
+                messagesWithPlan = listOf(trimmedMessages.first()) +
+                    listOf(planSystemMsg) +
+                    trimmedMessages.drop(1)
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     chatStateManager.handleSystemLog("[Plan] [规划跳过: ${e.message}]\n\n")
@@ -340,12 +362,13 @@ class ChatExecutor(
             }
         }
 
+        val effectiveMessages = messagesWithPlan ?: trimmedMessages
         val agentStrategy = ProviderManager.getAgentStrategy(context)
 
         when (agentStrategy) {
             com.lhzkml.jasmine.core.config.AgentStrategyType.SIMPLE_LOOP -> {
                 val agentPrompt = Prompt.build("agent") {
-                    for (msg in trimmedMessages) {
+                    for (msg in effectiveMessages) {
                         when (msg.role) {
                             "system" -> system(msg.content)
                             "user" -> user(msg.content)
@@ -381,7 +404,7 @@ class ChatExecutor(
 
             com.lhzkml.jasmine.core.config.AgentStrategyType.SINGLE_RUN_GRAPH -> {
                 val graphResult = executeGraphStrategy(
-                    message, client, config, registry, trimmedMessages,
+                    message, client, config, registry, effectiveMessages,
                     maxTokens, samplingParams, agentRunId
                 )
                 result = graphResult ?: ""
