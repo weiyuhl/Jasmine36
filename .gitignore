@@ -25,3 +25,6 @@ local.properties
 /.kiro/
 keystore.properties
 app/release.keystore
+
+# ObjectBox 模型备份（生成产物）
+**/objectbox-models/*.bak

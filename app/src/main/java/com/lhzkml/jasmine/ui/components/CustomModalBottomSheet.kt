@@ -148,12 +148,18 @@ fun CustomModalBottomSheet(
             val offsetYPx = slideOffsetPx.value + dragOffsetPx
             val scrollState = rememberScrollState()
 
+            val currentHeightRef = remember { mutableFloatStateOf(currentHeightPx) }
+            currentHeightRef.floatValue = currentHeightPx
+            val maxExpandRef = remember { mutableFloatStateOf(maxExpandPx) }
+            maxExpandRef.floatValue = maxExpandPx
+
             val contentNestedConnection = remember(dragFromContentArea) {
                 if (!dragFromContentArea) null
                 else object : NestedScrollConnection {
                     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                         if (scrollState.value == 0 && available.y > 0) {
-                            dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, currentHeightPx)
+                            val maxH = currentHeightRef.floatValue
+                            dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, maxH)
                             return Offset(0f, available.y)
                         }
                         return Offset.Zero
@@ -161,11 +167,13 @@ fun CustomModalBottomSheet(
                     override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                         if (available.y == 0f) return Offset.Zero
                         if (available.y < 0) {
-                            expandOffsetPx = (expandOffsetPx - available.y).coerceIn(0f, maxExpandPx)
+                            val maxExp = maxExpandRef.floatValue
+                            expandOffsetPx = (expandOffsetPx - available.y).coerceIn(0f, maxExp)
                             return Offset(0f, available.y)
                         }
                         if (scrollState.value >= scrollState.maxValue && available.y > 0) {
-                            dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, currentHeightPx)
+                            val maxH = currentHeightRef.floatValue
+                            dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, maxH)
                             return Offset(0f, available.y)
                         }
                         return Offset.Zero
