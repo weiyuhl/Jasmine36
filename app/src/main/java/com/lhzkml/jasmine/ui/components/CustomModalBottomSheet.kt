@@ -2,6 +2,8 @@ package com.lhzkml.jasmine.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -17,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -31,11 +34,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
@@ -43,7 +48,6 @@ import kotlin.math.roundToInt
 
 private const val ANIM_DURATION = 280
 private const val DISMISS_THRESHOLD = 0.4f
-private const val EXPAND_THRESHOLD_PX = 70f
 private const val COLLAPSE_THRESHOLD_PX = 60f
 
 /** 展开档位：1=最小, 2=半屏, 3=全屏 */
@@ -76,6 +80,7 @@ fun CustomModalBottomSheet(
     var expansionState by remember { mutableIntStateOf(STATE_PEEK) }
     val slideOffsetPx = remember { Animatable(0f) }
     var dragOffsetPx by remember { mutableFloatStateOf(0f) }
+    var expandOffsetPx by remember { mutableFloatStateOf(0f) }
     var dismissing by remember { mutableStateOf(false) }
 
     fun dismiss(animateToPx: Float = 1200f) {
@@ -99,11 +104,24 @@ fun CustomModalBottomSheet(
             dismissOnClickOutside = false
         )
     ) {
+        val view = LocalView.current
+        DisposableEffect(Unit) {
+            val window = (view.parent as? DialogWindowProvider)?.window
+            window?.setDimAmount(0f)
+            onDispose { }
+        }
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Transparent)
+            modifier = Modifier.fillMaxSize()
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Transparent)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { dismiss() }
+            )
             val maxHPx = with(density) { maxHeight.toPx() }
             val minHPx = with(density) { sheetMinHeight.toPx() }
             val maxSheetPx = with(density) {
@@ -119,45 +137,55 @@ fun CustomModalBottomSheet(
                 else -> minHPx
             }
 
+            val maxExpandPx = (maxSheetPx - targetHeightPx).coerceAtLeast(0f)
+            val currentHeightPx = targetHeightPx + expandOffsetPx.coerceIn(0f, maxExpandPx)
             val offsetYPx = slideOffsetPx.value + dragOffsetPx
+
+            fun snapToNearestState(currentH: Float) {
+                val distances = listOf(
+                    STATE_PEEK to kotlin.math.abs(currentH - minHPx),
+                    STATE_HALF to kotlin.math.abs(currentH - halfHPx),
+                    STATE_FULL to kotlin.math.abs(currentH - maxSheetPx)
+                )
+                expansionState = distances.minByOrNull { it.second }!!.first
+            }
 
             Column(
                 modifier = modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(with(density) { targetHeightPx.toDp() })
+                    .height(with(density) { currentHeightPx.toDp() })
                     .offset { IntOffset(0, offsetYPx.roundToInt()) }
                     .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     .background(sheetColor)
-                    .pointerInput(expansionState, targetHeightPx) {
-                        var totalDrag = 0f
+                    .pointerInput(expansionState, targetHeightPx, maxExpandPx) {
                         detectVerticalDragGestures(
                             onDragStart = { _ ->
                                 dragOffsetPx = 0f
-                                totalDrag = 0f
                             },
                             onVerticalDrag = { change, dragAmount ->
                                 change.consume()
-                                totalDrag += dragAmount
-                                if (totalDrag > 0) {
-                                    dragOffsetPx = totalDrag.coerceIn(0f, targetHeightPx)
-                                } else {
-                                    totalDrag = 0f
-                                    val moveUp = -dragAmount
-                                    if (moveUp > EXPAND_THRESHOLD_PX && expansionState < STATE_FULL) {
-                                        expansionState = when (expansionState) {
-                                            STATE_PEEK -> STATE_HALF
-                                            STATE_HALF -> STATE_FULL
-                                            else -> expansionState
+                                if (dragAmount > 0) {
+                                    if (expandOffsetPx > 0) {
+                                        val reduce = minOf(expandOffsetPx, dragAmount)
+                                        expandOffsetPx -= reduce
+                                        val leftover = dragAmount - reduce
+                                        if (leftover > 0f) {
+                                            dragOffsetPx = (dragOffsetPx + leftover).coerceIn(0f, currentHeightPx)
                                         }
+                                    } else {
+                                        dragOffsetPx = (dragOffsetPx + dragAmount).coerceIn(0f, currentHeightPx)
                                     }
+                                } else {
+                                    val expand = -dragAmount
+                                    expandOffsetPx = (expandOffsetPx + expand).coerceIn(0f, maxExpandPx)
                                 }
                             },
                             onDragEnd = {
                                 if (dragOffsetPx > COLLAPSE_THRESHOLD_PX) {
                                     when {
-                                        dragOffsetPx / targetHeightPx > DISMISS_THRESHOLD && expansionState == STATE_PEEK ->
-                                            dismiss(animateToPx = targetHeightPx + 100f)
+                                        dragOffsetPx / currentHeightPx > DISMISS_THRESHOLD && expansionState == STATE_PEEK ->
+                                            dismiss(animateToPx = currentHeightPx + 100f)
                                         expansionState > STATE_PEEK -> {
                                             expansionState = when (expansionState) {
                                                 STATE_FULL -> STATE_HALF
@@ -169,10 +197,16 @@ fun CustomModalBottomSheet(
                                         else -> dragOffsetPx = 0f
                                     }
                                 } else {
+                                    val snapH = targetHeightPx + expandOffsetPx.coerceIn(0f, maxExpandPx)
+                                    snapToNearestState(snapH)
+                                    expandOffsetPx = 0f
                                     dragOffsetPx = 0f
                                 }
                             },
-                            onDragCancel = { dragOffsetPx = 0f }
+                            onDragCancel = {
+                                dragOffsetPx = 0f
+                                expandOffsetPx = 0f
+                            }
                         )
                     }
                     .padding(horizontal = 16.dp)

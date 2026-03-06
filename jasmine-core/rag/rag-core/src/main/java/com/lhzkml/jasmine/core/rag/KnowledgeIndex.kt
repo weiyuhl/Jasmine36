@@ -41,7 +41,27 @@ interface KnowledgeIndex {
 
     /** 当前索引的 chunk 数量，可选按 libraryId 统计 */
     suspend fun count(libraryId: String? = null): Long
+
+    /**
+     * 按知识库列出所有来源（sourceId）及摘要
+     * 用于知识库内容管理：查看、删除、编辑
+     */
+    suspend fun listSources(libraryId: String): List<SourceSummary>
+
+    /**
+     * 按 sourceId 获取所有知识块（用于编辑时还原完整内容）
+     */
+    suspend fun getChunksBySourceId(sourceId: String): List<KnowledgeChunk>
 }
+
+/**
+ * 知识来源摘要（用于列表展示）
+ */
+data class SourceSummary(
+    val sourceId: String,
+    val chunkCount: Int,
+    val preview: String
+)
 
 /**
  * 知识块（接口层，不含 ObjectBox 注解）

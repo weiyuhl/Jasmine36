@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ProviderManager
 import com.lhzkml.jasmine.RagStore
 import com.lhzkml.jasmine.core.config.RagLibraryConfig
+import com.lhzkml.jasmine.rag.RagLibraryContentActivity
 import com.lhzkml.jasmine.core.rag.IndexDocument
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -249,6 +250,13 @@ fun RagConfigScreen(onBack: () -> Unit) {
                                 if (lib.description.isNotBlank()) {
                                     CustomText(text = lib.description, fontSize = 11.sp, color = TextSecondary)
                                 }
+                            }
+                            CustomTextButton(
+                                onClick = { RagLibraryContentActivity.start(context, lib.id, lib.name) },
+                                contentColor = Accent,
+                                contentPadding = PaddingValues(6.dp)
+                            ) {
+                                CustomText("查看", fontSize = 12.sp, color = Accent)
                             }
                             if (lib.id != "default") {
                                 CustomTextButton(

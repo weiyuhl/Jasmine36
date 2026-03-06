@@ -3,6 +3,7 @@ package com.lhzkml.jasmine.core.rag.objectbox
 import com.lhzkml.jasmine.core.rag.KnowledgeChunk
 import com.lhzkml.jasmine.core.rag.KnowledgeIndex
 import com.lhzkml.jasmine.core.rag.ScoredChunk
+import com.lhzkml.jasmine.core.rag.SourceSummary
 import io.objectbox.BoxStore
 import io.objectbox.kotlin.boxFor
 import kotlinx.coroutines.Dispatchers
@@ -59,5 +60,26 @@ class ObjectBoxKnowledgeIndex(private val store: BoxStore) : KnowledgeIndex {
     override suspend fun count(libraryId: String?): Long = withContext(Dispatchers.IO) {
         if (libraryId == null) box.count()
         else box.query(KnowledgeChunkEntity_.libraryId.equal(libraryId)).build().use { it.count() }
+    }
+
+    override suspend fun listSources(libraryId: String): List<SourceSummary> = withContext(Dispatchers.IO) {
+        val query = box.query(KnowledgeChunkEntity_.libraryId.equal(libraryId)).build()
+        val entities = query.find()
+        query.close()
+        entities
+            .groupBy { it.sourceId }
+            .map { (sourceId, chunks) ->
+                val sorted = chunks.sortedBy { it.id }
+                val preview = (sorted.firstOrNull()?.content ?: "").take(80).let { if (it.length >= 80) "$it…" else it }
+                SourceSummary(sourceId = sourceId, chunkCount = chunks.size, preview = preview)
+            }
+            .sortedBy { it.sourceId }
+    }
+
+    override suspend fun getChunksBySourceId(sourceId: String): List<KnowledgeChunk> = withContext(Dispatchers.IO) {
+        val query = box.query(KnowledgeChunkEntity_.sourceId.equal(sourceId)).build()
+        val entities = query.find().sortedBy { it.id }
+        query.close()
+        entities.map { it.toChunk() }
     }
 }

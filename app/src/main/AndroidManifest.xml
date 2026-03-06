@@ -103,6 +103,9 @@
             android:name=".rag.RagConfigActivity"
             android:exported="false" />
         <activity
+            android:name=".rag.RagLibraryContentActivity"
+            android:exported="false" />
+        <activity
             android:name=".RulesActivity"
             android:exported="false" />
         <activity

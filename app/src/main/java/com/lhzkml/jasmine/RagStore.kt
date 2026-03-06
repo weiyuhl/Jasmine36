@@ -31,6 +31,9 @@ object RagStore {
         knowledgeIndex = boxStore?.let { ObjectBoxKnowledgeIndex(it) }
     }
 
+    /** 获取知识索引（用于知识库内容管理：查看、删除、编辑） */
+    fun getKnowledgeIndex(): KnowledgeIndex? = knowledgeIndex
+
     /**
      * 构建 RagContextProvider，若 RAG 未启用或配置不完整则返回 null
      */
