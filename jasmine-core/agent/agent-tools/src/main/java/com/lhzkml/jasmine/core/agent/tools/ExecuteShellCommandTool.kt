@@ -4,6 +4,7 @@ import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
 import com.lhzkml.jasmine.core.prompt.model.ToolParameterDescriptor
 import com.lhzkml.jasmine.core.prompt.model.ToolParameterType
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -43,10 +44,6 @@ data class ShellPolicyConfig(
         )
     }
 
-    /**
-     * 判断命令是否需要确认
-     * @return true 表示需要弹确认框，false 表示自动执行
-     */
     fun needsConfirmation(command: String): Boolean {
         val cmdLower = command.lowercase(Locale.getDefault())
         return when (policy) {
@@ -66,8 +63,14 @@ data class ShellPolicyConfig(
 }
 
 /**
- * 参考 koog 的 ExecuteShellCommandTool
- * 执行 shell 命令，带策略化确认机制和超时控制
+ * Shell 命令执行工具（对标 Cursor Shell 工具）
+ *
+ * 功能增强：
+ * - 后台执行支持（block_until_ms）：超时后不杀进程，返回已收集的输出并标记为后台运行
+ * - purpose 参数：要求说明执行命令的目的
+ * - description 参数：命令的简短描述（5-10 词）
+ * - workingDirectory 参数：指定工作目录
+ * - 安全策略配置（MANUAL/BLACKLIST/WHITELIST）
  *
  * @param confirmationHandler 确认回调，返回 true 允许执行，false 拒绝
  * @param policyConfig Shell 命令执行策略配置，控制哪些命令需要确认
@@ -87,11 +90,13 @@ class ExecuteShellCommandTool(
             "You MUST provide a clear 'purpose' explaining WHY you are running this command.",
         requiredParameters = listOf(
             ToolParameterDescriptor("command", "The shell command to execute (e.g. 'git status', 'ls -la')", ToolParameterType.StringType),
-            ToolParameterDescriptor("purpose", "A brief explanation of why this command is being executed and what you expect to achieve (e.g. 'Check current git branch to determine deployment target')", ToolParameterType.StringType),
-            ToolParameterDescriptor("timeoutSeconds", "Maximum execution time in seconds. Commands exceeding this are terminated", ToolParameterType.IntegerType)
+            ToolParameterDescriptor("purpose", "A brief explanation of why this command is being executed and what you expect to achieve (e.g. 'Check current git branch to determine deployment target')", ToolParameterType.StringType)
         ),
         optionalParameters = listOf(
-            ToolParameterDescriptor("workingDirectory", "Absolute path where the command runs. Default: current directory", ToolParameterType.StringType)
+            ToolParameterDescriptor("description", "Clear, concise description of what this command does in 5-10 words", ToolParameterType.StringType),
+            ToolParameterDescriptor("timeoutSeconds", "Maximum time to wait for completion before returning partial output. Default 60. The command continues running in background if it exceeds this", ToolParameterType.IntegerType),
+            ToolParameterDescriptor("workingDirectory", "Absolute path where the command runs. Default: workspace root", ToolParameterType.StringType),
+            ToolParameterDescriptor("background", "If true, immediately returns without waiting for completion (for dev servers, watchers). Default false", ToolParameterType.BooleanType)
         )
     )
 
@@ -101,10 +106,11 @@ class ExecuteShellCommandTool(
             ?: return "Error: Missing parameter 'command'"
         val purpose = obj["purpose"]?.jsonPrimitive?.content
             ?: return "Error: Missing parameter 'purpose'. You must explain why you are running this command."
+        val description = obj["description"]?.jsonPrimitive?.content
         val timeoutSeconds = obj["timeoutSeconds"]?.jsonPrimitive?.int ?: 60
         val workingDirectory = obj["workingDirectory"]?.jsonPrimitive?.content
+        val background = obj["background"]?.jsonPrimitive?.boolean ?: false
 
-        // 根据策略判断是否需要确认
         if (policyConfig.needsConfirmation(command)) {
             val approved = confirmationHandler(command, purpose, workingDirectory)
             if (!approved) {
@@ -112,7 +118,6 @@ class ExecuteShellCommandTool(
             }
         }
 
-        // 验证工作目录
         val workDir = if (workingDirectory != null) {
             val dir = if (basePath != null && !File(workingDirectory).isAbsolute) {
                 File(basePath, workingDirectory)
@@ -146,18 +151,33 @@ class ExecuteShellCommandTool(
             workDir?.let { processBuilder.directory(it) }
 
             val process = processBuilder.start()
-            val output = process.inputStream.bufferedReader().readText()
+
+            if (background) {
+                val partialOutput = readPartialOutput(process, 1)
+                val pid = getProcessId(process)
+                return buildString {
+                    description?.let { appendLine("Description: $it") }
+                    appendLine("Purpose: $purpose")
+                    appendLine("Command: $command")
+                    appendLine("Status: Running in background (pid: $pid)")
+                    if (partialOutput.isNotEmpty()) appendLine(partialOutput)
+                }.trimEnd()
+            }
+
             val finished = process.waitFor(timeoutSeconds.toLong(), TimeUnit.SECONDS)
 
             if (!finished) {
-                process.destroyForcibly()
+                val partialOutput = readAvailableOutput(process)
+                val pid = getProcessId(process)
                 buildString {
                     appendLine("Purpose: $purpose")
                     appendLine("Command: $command")
-                    if (output.isNotEmpty()) appendLine(output)
-                    appendLine("Command timed out after ${timeoutSeconds}s")
+                    appendLine("Status: Moved to background after ${timeoutSeconds}s (pid: $pid)")
+                    appendLine("The command is still running. Partial output collected so far:")
+                    if (partialOutput.isNotEmpty()) appendLine(partialOutput) else appendLine("(no output yet)")
                 }.trimEnd()
             } else {
+                val output = process.inputStream.bufferedReader().readText()
                 buildString {
                     appendLine("Purpose: $purpose")
                     appendLine("Command: $command")
@@ -167,6 +187,44 @@ class ExecuteShellCommandTool(
             }
         } catch (e: Exception) {
             "Error: Failed to execute command: ${e.message}"
+        }
+    }
+
+    private fun getProcessId(process: Process): String {
+        return try {
+            val pidMethod = process.javaClass.getMethod("pid")
+            pidMethod.invoke(process)?.toString() ?: process.hashCode().toString()
+        } catch (_: Exception) {
+            try {
+                val field = process.javaClass.getDeclaredField("pid")
+                field.isAccessible = true
+                field.get(process)?.toString() ?: process.hashCode().toString()
+            } catch (_: Exception) {
+                process.hashCode().toString()
+            }
+        }
+    }
+
+    private fun readPartialOutput(process: Process, waitSeconds: Long): String {
+        return try {
+            Thread.sleep(waitSeconds * 1000)
+            readAvailableOutput(process)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun readAvailableOutput(process: Process): String {
+        return try {
+            val stream = process.inputStream
+            val available = stream.available()
+            if (available > 0) {
+                val buffer = ByteArray(available.coerceAtMost(64 * 1024))
+                val read = stream.read(buffer)
+                if (read > 0) String(buffer, 0, read) else ""
+            } else ""
+        } catch (_: Exception) {
+            ""
         }
     }
 }

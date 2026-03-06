@@ -165,6 +165,13 @@ interface ConfigRepository {
     fun getCompressionChunkSize(): Int
     fun setCompressionChunkSize(value: Int)
 
+    // ========== Rules 规则 ==========
+
+    fun getPersonalRules(): String
+    fun setPersonalRules(rules: String)
+    fun getProjectRules(workspacePath: String): String
+    fun setProjectRules(workspacePath: String, rules: String)
+
     // ========== Agent 模式 ==========
 
     fun isAgentMode(): Boolean

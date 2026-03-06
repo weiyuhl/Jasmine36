@@ -387,6 +387,38 @@ class AgentPromptContextProvider(
 }
 
 /**
+ * 个人 Rules — 用户定义的全局行为规则
+ *
+ * 在此处定义使用习惯，如模型输出语言、代码注释风格等。
+ * 切换项目后依然生效。
+ */
+class PersonalRulesContextProvider(private val rules: String) : SystemContextProvider {
+    override val name = "personal_rules"
+    override fun getContextSection(): String? {
+        if (rules.isBlank()) return null
+        return "<user_rules description=\"These are rules set by the user that you should follow if appropriate.\">\n" +
+            rules.trim().lines().joinToString("\n") { "<user_rule>$it</user_rule>" } +
+            "\n</user_rules>"
+    }
+}
+
+/**
+ * 项目 Rules — 针对特定项目/工作区的行为规则
+ *
+ * 在此处定义项目级别的使用习惯，如项目代码规范、技术栈偏好等。
+ * 仅在当前项目/工作区下生效。
+ */
+class ProjectRulesContextProvider(private val rules: String) : SystemContextProvider {
+    override val name = "project_rules"
+    override fun getContextSection(): String? {
+        if (rules.isBlank()) return null
+        return "<project_rules description=\"These are rules specific to the current project/workspace.\">\n" +
+            rules.trim().lines().joinToString("\n") { "<project_rule>$it</project_rule>" } +
+            "\n</project_rules>"
+    }
+}
+
+/**
  * 自定义上下文 — 用于注入任意自定义信息
  */
 class CustomContextProvider(

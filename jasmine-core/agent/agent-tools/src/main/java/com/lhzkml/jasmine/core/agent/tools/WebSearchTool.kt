@@ -67,9 +67,15 @@ class WebSearchTool(
     val search = object : Tool() {
         override val descriptor = ToolDescriptor(
             name = "web_search",
-            description = "Search for a query on Google. Returns a list of search results with title, link, and description.",
+            description = "Search the web for real-time information about any topic. Returns summarized information from search results and relevant URLs. " +
+                "Use this when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. " +
+                "This includes queries about libraries, frameworks, current events, or any informational queries. " +
+                "Be specific and include relevant keywords for better results.",
             requiredParameters = listOf(
-                ToolParameterDescriptor("query", "The search query", ToolParameterType.StringType)
+                ToolParameterDescriptor("query", "The search query. Be specific and include relevant keywords for better results. For technical queries, include version numbers or dates if relevant", ToolParameterType.StringType)
+            ),
+            optionalParameters = listOf(
+                ToolParameterDescriptor("explanation", "One sentence explanation of why this search is being performed and how it contributes to the goal", ToolParameterType.StringType)
             )
         )
         override suspend fun execute(arguments: String): String {
@@ -91,9 +97,11 @@ class WebSearchTool(
     val scrape = object : Tool() {
         override val descriptor = ToolDescriptor(
             name = "web_scrape",
-            description = "Scrape a web page and return its content as markdown text.",
+            description = "Scrape a web page and return its content as markdown text. " +
+                "Use this for reading web pages that may have anti-scraping protection (uses BrightData proxy). " +
+                "The URL must be a fully-formed, valid URL. This tool is read-only.",
             requiredParameters = listOf(
-                ToolParameterDescriptor("url", "The URL to scrape", ToolParameterType.StringType)
+                ToolParameterDescriptor("url", "The fully-formed URL to scrape", ToolParameterType.StringType)
             )
         )
         override suspend fun execute(arguments: String): String {

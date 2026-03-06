@@ -138,8 +138,95 @@ class SystemContextProviderTest {
         assertTrue(content!!.contains("TestAgent"))
         assertTrue(content.contains("<identity>"))
         assertTrue(content.contains("</identity>"))
-        assertTrue(content.contains("<rules>"))
-        assertTrue(content.contains("</rules>"))
+        assertTrue(content.contains("<tool_calling>"))
+        assertTrue(content.contains("</tool_calling>"))
+    }
+
+    // ========== PersonalRulesContextProvider ==========
+
+    @Test
+    fun `test PersonalRulesContextProvider with rules`() {
+        val provider = PersonalRulesContextProvider("Always respond in Chinese\nAdd code comments")
+
+        assertEquals("personal_rules", provider.name)
+
+        val content = provider.getContextSection()
+        assertNotNull(content)
+        assertTrue(content!!.contains("<user_rules"))
+        assertTrue(content.contains("</user_rules>"))
+        assertTrue(content.contains("<user_rule>Always respond in Chinese</user_rule>"))
+        assertTrue(content.contains("<user_rule>Add code comments</user_rule>"))
+    }
+
+    @Test
+    fun `test PersonalRulesContextProvider with blank rules`() {
+        val provider = PersonalRulesContextProvider("")
+        assertNull(provider.getContextSection())
+    }
+
+    @Test
+    fun `test PersonalRulesContextProvider with whitespace only`() {
+        val provider = PersonalRulesContextProvider("   \n  \n  ")
+        assertNull(provider.getContextSection())
+    }
+
+    @Test
+    fun `test PersonalRulesContextProvider with single rule`() {
+        val provider = PersonalRulesContextProvider("Use Kotlin")
+        val content = provider.getContextSection()
+        assertNotNull(content)
+        assertTrue(content!!.contains("<user_rule>Use Kotlin</user_rule>"))
+    }
+
+    // ========== ProjectRulesContextProvider ==========
+
+    @Test
+    fun `test ProjectRulesContextProvider with rules`() {
+        val provider = ProjectRulesContextProvider("Use MVVM architecture\nPrefer Coroutines over RxJava")
+
+        assertEquals("project_rules", provider.name)
+
+        val content = provider.getContextSection()
+        assertNotNull(content)
+        assertTrue(content!!.contains("<project_rules"))
+        assertTrue(content.contains("</project_rules>"))
+        assertTrue(content.contains("<project_rule>Use MVVM architecture</project_rule>"))
+        assertTrue(content.contains("<project_rule>Prefer Coroutines over RxJava</project_rule>"))
+    }
+
+    @Test
+    fun `test ProjectRulesContextProvider with blank rules`() {
+        val provider = ProjectRulesContextProvider("")
+        assertNull(provider.getContextSection())
+    }
+
+    @Test
+    fun `test ProjectRulesContextProvider with whitespace only`() {
+        val provider = ProjectRulesContextProvider("  \n  ")
+        assertNull(provider.getContextSection())
+    }
+
+    // ========== Rules integration ==========
+
+    @Test
+    fun `test personal and project rules injected into prompt`() {
+        collector.register(PersonalRulesContextProvider("Respond in Chinese"))
+        collector.register(ProjectRulesContextProvider("Use Kotlin"))
+
+        val result = collector.buildSystemPrompt("Base prompt")
+        assertTrue(result.contains("Respond in Chinese"))
+        assertTrue(result.contains("Use Kotlin"))
+        assertTrue(result.contains("<user_rules"))
+        assertTrue(result.contains("<project_rules"))
+    }
+
+    @Test
+    fun `test blank rules not injected into prompt`() {
+        collector.register(PersonalRulesContextProvider(""))
+        collector.register(ProjectRulesContextProvider(""))
+
+        val result = collector.buildSystemPrompt("Base prompt")
+        assertEquals("Base prompt", result)
     }
 
     @Test
