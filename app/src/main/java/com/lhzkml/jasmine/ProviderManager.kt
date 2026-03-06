@@ -250,6 +250,8 @@ object ProviderManager {
     fun setCompressionLastN(context: Context, value: Int) = configRepo.setCompressionLastN(value)
     fun getCompressionChunkSize(context: Context): Int = configRepo.getCompressionChunkSize()
     fun setCompressionChunkSize(context: Context, value: Int) = configRepo.setCompressionChunkSize(value)
+    fun getCompressionKeepRecentRounds(context: Context): Int = configRepo.getCompressionKeepRecentRounds()
+    fun setCompressionKeepRecentRounds(context: Context, value: Int) = configRepo.setCompressionKeepRecentRounds(value)
 
     // ========== Rules 规则 ==========
 

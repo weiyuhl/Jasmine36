@@ -250,6 +250,8 @@ private class FakeConfigRepository : ConfigRepository {
     override fun setCompressionLastN(value: Int) {}
     override fun getCompressionChunkSize() = 5
     override fun setCompressionChunkSize(value: Int) {}
+    override fun getCompressionKeepRecentRounds() = 4
+    override fun setCompressionKeepRecentRounds(value: Int) {}
     override fun getPersonalRules() = ""
     override fun setPersonalRules(rules: String) {}
     override fun getProjectRules(workspacePath: String) = ""

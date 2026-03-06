@@ -28,8 +28,9 @@ class HistoryCompressionStrategyTest {
             lastMessages = messages
             callCount++
             val lastMsg = messages.lastOrNull()
-            val content = if (lastMsg?.content?.contains("comprehensive") == true) {
-                "## Key Objectives\nUser asked about weather.\n## Current Status\nCompleted."
+            val content = if (lastMsg?.content?.contains("Summarize") == true ||
+                lastMsg?.content?.contains("summary") == true) {
+                "User asked about weather. Decision: bring umbrella. Status: completed."
             } else {
                 "Regular response"
             }
@@ -79,7 +80,7 @@ class HistoryCompressionStrategyTest {
         assertEquals("system", msgs[0].role)
         assertEquals("You are a helpful assistant.", msgs[0].content)
         assertTrue(msgs.any { it.role == "user" && it.content == "What's the weather?" })
-        assertTrue(msgs.any { it.content.contains("Key Objectives") })
+        assertTrue(msgs.any { it.content.contains("weather") })
     }
 
     @Test
@@ -100,7 +101,7 @@ class HistoryCompressionStrategyTest {
         val msgs = session.prompt.messages
         assertEquals("system", msgs[0].role)
         assertTrue(msgs.any { it.role == "user" && it.content == "Q1" })
-        assertTrue(msgs.any { it.content.contains("Key Objectives") })
+        assertTrue(msgs.any { it.content.contains("weather") })
     }
 
     @Test
@@ -129,7 +130,7 @@ class HistoryCompressionStrategyTest {
         assertEquals(2, systemMsgs.size)
         assertEquals("System prompt 1", systemMsgs[0].content)
         assertEquals("System prompt 2", systemMsgs[1].content)
-        assertTrue(msgs.any { it.content.contains("Key Objectives") })
+        assertTrue(msgs.any { it.content.contains("weather") })
         assertEquals(2, client.callCount)
     }
 
@@ -158,7 +159,7 @@ class HistoryCompressionStrategyTest {
         val msgs = session.prompt.messages
         assertTrue(msgs.size < originalSize)
         assertEquals("system", msgs[0].role)
-        assertTrue(msgs.any { it.content.contains("Key Objectives") })
+        assertTrue(msgs.any { it.content.contains("weather") })
     }
 
     @Test
@@ -171,7 +172,7 @@ class HistoryCompressionStrategyTest {
         val msgs = session.prompt.messages
         assertTrue(msgs.size < 9)
         assertEquals("system", msgs[0].role)
-        assertTrue(msgs.any { it.content.contains("Key Objectives") })
+        assertTrue(msgs.any { it.content.contains("weather") })
     }
 
     @Test
@@ -184,7 +185,7 @@ class HistoryCompressionStrategyTest {
         val msgs = session.prompt.messages
         assertTrue(msgs.size < 9)
         assertEquals("system", msgs[0].role)
-        val tldrCount = msgs.count { it.content.contains("Key Objectives") }
+        val tldrCount = msgs.count { it.content.contains("weather") }
         assertTrue("Should have multiple TLDR chunks, got $tldrCount", tldrCount >= 2)
     }
 
@@ -240,7 +241,7 @@ class HistoryCompressionStrategyTest {
         session.replaceHistoryWithTLDR()
 
         assertTrue(session.prompt.messages.size < 9)
-        assertTrue(session.prompt.messages.any { it.content.contains("Key Objectives") })
+        assertTrue(session.prompt.messages.any { it.content.contains("weather") })
     }
 
     @Test
@@ -288,14 +289,77 @@ class HistoryCompressionStrategyTest {
     }
 
     @Test
-    fun `SUMMARIZE_PROMPT contains required sections`() {
+    fun `SUMMARIZE_PROMPT contains required content`() {
         val prompt = HistoryCompressionStrategy.SUMMARIZE_PROMPT
-        assertTrue(prompt.contains("Key Objectives"))
-        assertTrue(prompt.contains("Tools Used"))
-        assertTrue(prompt.contains("Key Findings"))
-        assertTrue(prompt.contains("Current Status"))
-        assertTrue(prompt.contains("Next Steps"))
-        assertTrue(prompt.contains("comprehensive summary"))
+        assertTrue(prompt.contains("Summarize"))
+        assertTrue(prompt.contains("intent"))
+        assertTrue(prompt.contains("essential context"))
+    }
+
+    @Test
+    fun `Progressive shouldCompress returns false when under threshold`() {
+        val strategy = HistoryCompressionStrategy.Progressive(
+            keepRecentRounds = 2, maxTokens = 100000, threshold = 0.75
+        )
+        val shortMessages = listOf(ChatMessage.user("Hi"), ChatMessage.assistant("Hello"))
+        assertFalse(strategy.shouldCompress(shortMessages))
+    }
+
+    @Test
+    fun `Progressive shouldCompress returns true when over threshold`() {
+        val strategy = HistoryCompressionStrategy.Progressive(
+            keepRecentRounds = 2, maxTokens = 50, threshold = 0.3
+        )
+        val longMessages = (1..50).map { ChatMessage.user("Message number $it with content") }
+        assertTrue(strategy.shouldCompress(longMessages))
+    }
+
+    @Test
+    fun `Progressive skips compression when not over threshold`() = runTest {
+        val client = CompressionMockClient()
+        val strategy = HistoryCompressionStrategy.Progressive(
+            keepRecentRounds = 2, maxTokens = 100000, threshold = 0.75
+        )
+        val session = LLMWriteSession(client, "gpt-4", buildLongConversation())
+        val originalSize = session.prompt.messages.size
+
+        strategy.compress(session)
+
+        assertEquals(originalSize, session.prompt.messages.size)
+        assertEquals(0, client.callCount)
+    }
+
+    @Test
+    fun `Progressive compresses old history and keeps recent rounds`() = runTest {
+        val client = CompressionMockClient()
+        val strategy = HistoryCompressionStrategy.Progressive(
+            keepRecentRounds = 2, maxTokens = 30, threshold = 0.1
+        )
+        val session = LLMWriteSession(client, "gpt-4", buildLongConversation())
+
+        strategy.compress(session)
+
+        val msgs = session.prompt.messages
+        assertTrue("Should have fewer messages", msgs.size < 9)
+        assertEquals("system", msgs[0].role)
+        assertTrue("Should contain context restoration marker",
+            msgs.any { it.content.startsWith(HistoryCompressionStrategy.CONTEXT_RESTORATION_PREFIX) })
+        assertTrue("Should keep recent user messages",
+            msgs.any { it.role == "user" && it.content == "Thanks!" })
+    }
+
+    @Test
+    fun `Progressive keeps all rounds when not enough to compress`() = runTest {
+        val client = CompressionMockClient()
+        val strategy = HistoryCompressionStrategy.Progressive(
+            keepRecentRounds = 10, maxTokens = 30, threshold = 0.1
+        )
+        val session = LLMWriteSession(client, "gpt-4", buildLongConversation())
+        val originalSize = session.prompt.messages.size
+
+        strategy.compress(session)
+
+        assertEquals(originalSize, session.prompt.messages.size)
     }
 
     @Test

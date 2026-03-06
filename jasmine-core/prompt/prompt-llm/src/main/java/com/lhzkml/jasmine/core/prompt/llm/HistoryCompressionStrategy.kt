@@ -321,30 +321,175 @@ abstract class HistoryCompressionStrategy {
         }
     }
 
-    companion object {
+    /**
+     * 渐进式压缩策略（推荐）
+     *
+     * 核心思路：
+     * 1. 保留最近 N 轮对话原文不动（保持近期上下文完整）
+     * 2. 只对更早的历史做 TLDR 摘要
+     * 3. 已有的摘要会被复用，不重复压缩（增量式）
+     * 4. 工具调用和结果中的关键信息被提取保留
+     *
+     * 压缩后结构：[system + 旧摘要(如有) + 新增摘要 + 最近 N 轮原文]
+     *
+     * @param keepRecentRounds 保留最近多少轮对话（1轮 = 1 user + 1 assistant）
+     * @param maxTokens token 预算上限，超过时触发压缩
+     * @param threshold 触发阈值（0.0~1.0）
+     * @param tokenizer Token 计数器
+     */
+    data class Progressive(
+        val keepRecentRounds: Int = 4,
+        val maxTokens: Int = 128000,
+        val threshold: Double = 0.75,
+        val tokenizer: Tokenizer = TokenEstimator
+    ) : HistoryCompressionStrategy() {
+
+        fun shouldCompress(messages: List<ChatMessage>): Boolean {
+            val totalTokens = messages.sumOf { tokenizer.countMessageTokens(it.role, it.content) }
+            return totalTokens > (maxTokens * threshold).toInt()
+        }
+
+        override suspend fun compress(
+            session: LLMWriteSession,
+            listener: CompressionEventListener?,
+            memoryMessages: List<ChatMessage>
+        ) {
+            val messages = session.prompt.messages
+            if (!shouldCompress(messages)) return
+
+            listener?.onCompressionStart("Progressive(keep=$keepRecentRounds)", messages.size)
+
+            val systemMessages = messages.filter { it.role == "system" }
+            val nonSystemMessages = messages.filter { it.role != "system" }
+
+            // 按"轮"分割：一轮 = user 开头到下一个 user 之前
+            val rounds = splitIntoRounds(nonSystemMessages)
+
+            // 检查是否已经有旧摘要（CONTEXT_RESTORATION 标记）
+            val existingSummaryIndex = nonSystemMessages.indexOfFirst {
+                it.role == "assistant" && it.content.startsWith(CONTEXT_RESTORATION_PREFIX)
+            }
+
+            val keepCount = keepRecentRounds.coerceAtMost(rounds.size)
+            if (keepCount >= rounds.size) {
+                listener?.onCompressionDone(messages.size)
+                return
+            }
+
+            val roundsToCompress = rounds.subList(0, rounds.size - keepCount)
+            val roundsToKeep = rounds.subList(rounds.size - keepCount, rounds.size)
+
+            // 构建需要摘要的消息（排除已有摘要标记本身，但包含旧摘要内容作为上下文）
+            val messagesToSummarize = mutableListOf<ChatMessage>()
+            for (round in roundsToCompress) {
+                for (msg in round) {
+                    if (msg.role == "assistant" && msg.content.startsWith(CONTEXT_RESTORATION_PREFIX)) {
+                        continue
+                    }
+                    messagesToSummarize.add(msg)
+                }
+            }
+
+            if (messagesToSummarize.isEmpty()) {
+                listener?.onCompressionDone(messages.size)
+                return
+            }
+
+            // 提取旧摘要内容以实现增量压缩
+            val oldSummary = if (existingSummaryIndex >= 0) {
+                nonSystemMessages[existingSummaryIndex].content
+                    .removePrefix(CONTEXT_RESTORATION_PREFIX).trim()
+            } else null
+
+            // 构建摘要用的临时 prompt
+            val summaryPrompt = buildSummaryPrompt(systemMessages, messagesToSummarize, oldSummary)
+            session.rewritePrompt { summaryPrompt }
+
+            val tldrMessages = compressPromptIntoTLDR(session, listener)
+            val summaryContent = tldrMessages.firstOrNull()?.content ?: ""
+
+            // 重组消息：system + 摘要标记 + memory + 保留的近期轮次
+            val result = mutableListOf<ChatMessage>()
+            result.addAll(systemMessages)
+            if (summaryContent.isNotBlank()) {
+                result.add(ChatMessage.assistant("$CONTEXT_RESTORATION_PREFIX\n$summaryContent"))
+            }
+            result.addAll(memoryMessages)
+            for (round in roundsToKeep) {
+                result.addAll(round)
+            }
+
+            session.rewritePrompt { it.withMessages { result } }
+            listener?.onCompressionDone(result.size)
+        }
+
+        private fun buildSummaryPrompt(
+            systemMessages: List<ChatMessage>,
+            messagesToSummarize: List<ChatMessage>,
+            oldSummary: String?
+        ): Prompt {
+            val messages = mutableListOf<ChatMessage>()
+            messages.addAll(systemMessages)
+
+            if (oldSummary != null) {
+                messages.add(ChatMessage.assistant("Previous context summary:\n$oldSummary"))
+            }
+
+            messages.addAll(messagesToSummarize)
+            messages.add(ChatMessage.user(PROGRESSIVE_SUMMARIZE_PROMPT))
+
+            return Prompt(messages = messages, id = "compression")
+        }
+
         /**
-         * TLDR 摘要请求提示词
-         * 参考 koog 的 Prompts.summarizeInTLDR
+         * 将非 system 消息按 user 消息边界分割成"轮"
+         * 每轮以 user 消息开头，包含后续的 assistant/tool 消息
+         */
+        private fun splitIntoRounds(messages: List<ChatMessage>): List<List<ChatMessage>> {
+            val rounds = mutableListOf<MutableList<ChatMessage>>()
+            for (msg in messages) {
+                if (msg.role == "user" || rounds.isEmpty()) {
+                    rounds.add(mutableListOf(msg))
+                } else {
+                    rounds.last().add(msg)
+                }
+            }
+            return rounds
+        }
+    }
+
+    companion object {
+        /** 上下文恢复标记前缀，用于识别已压缩的摘要消息 */
+        const val CONTEXT_RESTORATION_PREFIX = "CONTEXT RESTORATION:"
+
+        /**
+         * 全量 TLDR 摘要请求提示词（用于 WholeHistory 等传统策略）
          */
         val SUMMARIZE_PROMPT = buildString {
-            appendLine("Create a comprehensive summary of this conversation.")
+            appendLine("Summarize this conversation concisely. Preserve:")
+            appendLine("- User's core intent and requirements")
+            appendLine("- Key decisions made and their rationale")
+            appendLine("- Important data: file paths, code snippets, config values, names")
+            appendLine("- Tool execution results that affect next steps")
+            appendLine("- Current progress and unresolved issues")
             appendLine()
-            appendLine("Include the following in your summary:")
-            appendLine("1. Key objectives and problems being addressed")
-            appendLine("2. All tools used along with their purpose and outcomes")
-            appendLine("3. Critical information discovered or generated")
-            appendLine("4. Current progress status and conclusions reached")
-            appendLine("5. Any pending questions or unresolved issues")
+            appendLine("Write a dense, factual summary. No headers or formatting. No filler.")
+            append("This summary replaces the conversation history — include ALL essential context to continue effectively.")
+        }
+
+        /**
+         * 渐进式压缩摘要提示词（用于 Progressive 策略）
+         * 只需要总结被压缩的旧历史部分，近期对话仍完整保留
+         */
+        val PROGRESSIVE_SUMMARIZE_PROMPT = buildString {
+            appendLine("Summarize the conversation above into a brief context note. Focus on:")
+            appendLine("- What the user wanted and what was accomplished")
+            appendLine("- Key facts: file paths, variable names, config values, decisions")
+            appendLine("- Tool results that produced important data")
+            appendLine("- Any unresolved issues or pending items")
             appendLine()
-            appendLine("FORMAT YOUR SUMMARY WITH CLEAR SECTIONS for easy reference, including:")
-            appendLine("- Key Objectives")
-            appendLine("- Tools Used & Results")
-            appendLine("- Key Findings")
-            appendLine("- Current Status")
-            appendLine("- Next Steps")
-            appendLine()
-            appendLine("This summary will be the ONLY context available for continuing this conversation, along with the system message.")
-            append("Ensure it contains ALL essential information needed to proceed effectively.")
+            appendLine("Be concise and factual. No headers, no bullet formatting, just dense prose.")
+            append("The recent conversation is still available — only summarize the older context shown above.")
         }
     }
 }

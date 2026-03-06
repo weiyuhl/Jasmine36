@@ -731,7 +731,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             tryOfferCheckpointRecovery = { e, msg ->
                 checkpointRecovery.tryOfferCheckpointRecovery(persistence, currentConversationId, e, msg)
             },
-            tryCompressHistory = { c, m -> tryCompressHistory(c, m) },
+            tryCompressHistory = { c, m ->
+                viewModelScope.launch(Dispatchers.IO) {
+                    try { tryCompressHistory(c, m) } catch (_: Exception) { }
+                }
+            },
             onUpdateButtonState = { isCompressing ->
                 if (!isCompressing) {
                     isGenerating = false
@@ -794,9 +798,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun tryCompressHistory(client: ChatClient, model: String) {
         val activity = _activity ?: return
         val strategy = CompressionStrategyBuilder.build(AppConfig.configRepo(), contextManager) ?: return
-        if (strategy is HistoryCompressionStrategy.TokenBudget) {
-            if (!strategy.shouldCompress(messageHistory)) return
+
+        // 有阈值检查的策略先判断是否需要压缩
+        when (strategy) {
+            is HistoryCompressionStrategy.TokenBudget -> {
+                if (!strategy.shouldCompress(messageHistory)) return
+            }
+            is HistoryCompressionStrategy.Progressive -> {
+                if (!strategy.shouldCompress(messageHistory)) return
+            }
+            else -> { }
         }
+
         val listener = object : CompressionEventListener {
             override suspend fun onCompressionStart(strategyName: String, originalMessageCount: Int) {
                 withContext(Dispatchers.Main) {
@@ -822,7 +835,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 when (msg.role) {
                     "system" -> system(msg.content)
                     "user" -> user(msg.content)
-                    "assistant" -> assistant(msg.content)
+                    "assistant" -> {
+                        if (msg.toolCalls != null) {
+                            assistantWithToolCalls(msg.toolCalls!!, msg.content)
+                        } else {
+                            assistant(msg.content)
+                        }
+                    }
+                    "tool" -> message(msg)
                 }
             }
         }
@@ -834,7 +854,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messageHistory.addAll(compressed)
         } catch (e: Exception) {
             withContext(Dispatchers.Main) {
-                chatStateManager.handleSystemLog("\n[WARN] 压缩失败: ${e.message}]\n\n")
+                chatStateManager.handleSystemLog("\n[WARN] 压缩失败: ${e.message}\n\n")
             }
         } finally {
             session.close()

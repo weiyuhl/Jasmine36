@@ -459,6 +459,11 @@ private fun getCompressionInfo(context: android.content.Context): String {
             val size = ProviderManager.getCompressionChunkSize(context)
             "分块压缩 · 每块 ${size} 条"
         }
+        com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.PROGRESSIVE -> {
+            val rounds = ProviderManager.getCompressionKeepRecentRounds(context)
+            val threshold = ProviderManager.getCompressionThreshold(context)
+            "渐进式 · 保留 ${rounds} 轮 · 阈值 ${threshold}%"
+        }
     }
 }
 

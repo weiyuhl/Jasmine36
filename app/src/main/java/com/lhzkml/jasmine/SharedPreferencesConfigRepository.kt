@@ -380,6 +380,8 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun setCompressionLastN(value: Int) { prefs().edit().putInt("compression_last_n", value).apply() }
     override fun getCompressionChunkSize(): Int = prefs().getInt("compression_chunk_size", 20)
     override fun setCompressionChunkSize(value: Int) { prefs().edit().putInt("compression_chunk_size", value).apply() }
+    override fun getCompressionKeepRecentRounds(): Int = prefs().getInt("compression_keep_recent_rounds", 4)
+    override fun setCompressionKeepRecentRounds(value: Int) { prefs().edit().putInt("compression_keep_recent_rounds", value).apply() }
 
     // ========== Rules 规则 ==========
 

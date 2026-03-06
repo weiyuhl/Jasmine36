@@ -43,6 +43,18 @@ object CompressionStrategyBuilder {
                 val size = configRepo.getCompressionChunkSize()
                 HistoryCompressionStrategy.Chunked(size)
             }
+            CompressionStrategyType.PROGRESSIVE -> {
+                val maxTokens = configRepo.getCompressionMaxTokens()
+                val effectiveMaxTokens = if (maxTokens > 0) maxTokens else (contextManager?.maxTokens ?: 128000)
+                val threshold = configRepo.getCompressionThreshold() / 100.0
+                val keepRounds = configRepo.getCompressionKeepRecentRounds()
+                HistoryCompressionStrategy.Progressive(
+                    keepRecentRounds = keepRounds.coerceAtLeast(1),
+                    maxTokens = effectiveMaxTokens,
+                    threshold = threshold,
+                    tokenizer = TokenEstimator
+                )
+            }
         }
     }
 }

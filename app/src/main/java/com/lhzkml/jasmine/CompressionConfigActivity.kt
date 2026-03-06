@@ -63,10 +63,10 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
     var threshold by remember { mutableStateOf(config.getCompressionThreshold().toString()) }
     var lastN by remember { mutableStateOf(config.getCompressionLastN().toString()) }
     var chunkSize by remember { mutableStateOf(config.getCompressionChunkSize().toString()) }
+    var keepRecentRounds by remember { mutableStateOf(config.getCompressionKeepRecentRounds().toString()) }
 
     DisposableEffect(Unit) {
         onDispose {
-            // 保存配置
             config.setCompressionEnabled(enabled)
             config.setCompressionStrategy(selectedStrategy)
             
@@ -85,7 +85,15 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     val size = (chunkSize.trim().toIntOrNull() ?: 20).coerceAtLeast(5)
                     config.setCompressionChunkSize(size)
                 }
-                CompressionStrategyType.WHOLE_HISTORY -> { /* 无参数 */ }
+                CompressionStrategyType.PROGRESSIVE -> {
+                    val maxTokensValue = maxTokens.trim().toIntOrNull() ?: 0
+                    val thresholdValue = (threshold.trim().toIntOrNull() ?: 75).coerceIn(1, 99)
+                    val rounds = (keepRecentRounds.trim().toIntOrNull() ?: 4).coerceAtLeast(1)
+                    config.setCompressionMaxTokens(maxTokensValue)
+                    config.setCompressionThreshold(thresholdValue)
+                    config.setCompressionKeepRecentRounds(rounds)
+                }
+                CompressionStrategyType.WHOLE_HISTORY -> { }
             }
         }
     }
@@ -180,10 +188,23 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
+                // Progressive 策略（推荐）
+                StrategyCard(
+                    title = "渐进式压缩（推荐）",
+                    description = "保留近期对话原文，仅摘要旧历史，增量式不重复",
+                    isSelected = selectedStrategy == CompressionStrategyType.PROGRESSIVE,
+                    onClick = {
+                        selectedStrategy = CompressionStrategyType.PROGRESSIVE
+                        config.setCompressionStrategy(CompressionStrategyType.PROGRESSIVE)
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 // Token Budget 策略
                 StrategyCard(
-                    title = "Token 预算（推荐）",
-                    description = "超过阈值自动压缩",
+                    title = "Token 预算",
+                    description = "超过阈值全量压缩",
                     isSelected = selectedStrategy == CompressionStrategyType.TOKEN_BUDGET,
                     onClick = { 
                         selectedStrategy = CompressionStrategyType.TOKEN_BUDGET
@@ -283,9 +304,39 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                             )
                         }
                     }
-                    CompressionStrategyType.WHOLE_HISTORY -> {
-                        // 无参数
+                    CompressionStrategyType.PROGRESSIVE -> {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        CustomHorizontalDivider(color = Color(0xFFE8E8E8), thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        ParamsSection(title = "渐进式压缩参数") {
+                            ParamInputField(
+                                label = "保留最近几轮对话（1轮=1问1答）",
+                                value = keepRecentRounds,
+                                onValueChange = { keepRecentRounds = it },
+                                placeholder = "4"
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            ParamInputField(
+                                label = "最大 Token 数（0 = 跟随模型上下文窗口）",
+                                value = maxTokens,
+                                onValueChange = { maxTokens = it },
+                                placeholder = "0"
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            ParamInputField(
+                                label = "触发阈值 %（1~99）",
+                                value = threshold,
+                                onValueChange = { threshold = it },
+                                placeholder = "75"
+                            )
+                        }
                     }
+                    CompressionStrategyType.WHOLE_HISTORY -> { }
                 }
             }
         }

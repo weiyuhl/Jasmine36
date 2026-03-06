@@ -126,6 +126,8 @@ class StubConfigRepository : ConfigRepository {
     override fun setCompressionLastN(value: Int) {}
     override fun getCompressionChunkSize(): Int = 3
     override fun setCompressionChunkSize(value: Int) {}
+    override fun getCompressionKeepRecentRounds(): Int = 4
+    override fun setCompressionKeepRecentRounds(value: Int) {}
     override fun isAgentMode(): Boolean = false
     override fun setAgentMode(enabled: Boolean) {}
     override fun getWorkspacePath(): String = ""

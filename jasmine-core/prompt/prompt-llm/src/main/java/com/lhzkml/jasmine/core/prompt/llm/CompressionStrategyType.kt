@@ -10,5 +10,5 @@ package com.lhzkml.jasmine.core.prompt.llm
  * - CHUNKED: 按固定大小分块压缩
  */
 enum class CompressionStrategyType {
-    TOKEN_BUDGET, WHOLE_HISTORY, LAST_N, CHUNKED
+    TOKEN_BUDGET, WHOLE_HISTORY, LAST_N, CHUNKED, PROGRESSIVE
 }

@@ -168,6 +168,8 @@ interface ConfigRepository {
     fun setCompressionLastN(value: Int)
     fun getCompressionChunkSize(): Int
     fun setCompressionChunkSize(value: Int)
+    fun getCompressionKeepRecentRounds(): Int
+    fun setCompressionKeepRecentRounds(value: Int)
 
     // ========== Rules 规则 ==========
 

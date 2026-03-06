@@ -182,7 +182,6 @@ class ChatExecutor(
             }
 
             if (ProviderManager.isCompressionEnabled(context)) {
-                onUpdateButtonState(true)
                 tryCompressHistory(client, config.model)
             }
         } catch (_: CancellationException) {
