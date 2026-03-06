@@ -194,6 +194,8 @@ interface ConfigRepository {
     fun setRagLibraries(libraries: List<RagLibraryConfig>)
     fun getRagActiveLibraryIds(): Set<String>
     fun setRagActiveLibraryIds(ids: Set<String>)
+    fun getRagIndexableExtensions(): Set<String>
+    fun setRagIndexableExtensions(extensions: Set<String>)
 
     // ========== Agent 模式 ==========
 

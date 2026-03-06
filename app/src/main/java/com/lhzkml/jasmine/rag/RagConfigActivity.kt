@@ -75,6 +75,9 @@ fun RagConfigScreen(onBack: () -> Unit) {
     var manualTitle by remember { mutableStateOf("") }
     var manualContent by remember { mutableStateOf("") }
     var workspaceTargetLib by remember { mutableStateOf(libraries.firstOrNull()?.id ?: "default") }
+    var indexableExtensions by remember { mutableStateOf(ProviderManager.getRagIndexableExtensions(context).toMutableList().sorted()) }
+    var showAddExtensionDialog by remember { mutableStateOf(false) }
+    var newExtension by remember { mutableStateOf("") }
 
     LaunchedEffect(libraries) {
         if (selectedLibForManual !in libraries.map { it.id }) selectedLibForManual = libraries.firstOrNull()?.id ?: "default"
@@ -84,6 +87,10 @@ fun RagConfigScreen(onBack: () -> Unit) {
     fun persistLibraries() {
         ProviderManager.setRagLibraries(context, libraries)
         ProviderManager.setRagActiveLibraryIds(context, activeIds)
+    }
+
+    fun persistExtensions() {
+        ProviderManager.setRagIndexableExtensions(context, indexableExtensions.toSet())
     }
 
     DisposableEffect(Unit) {
@@ -352,6 +359,55 @@ fun RagConfigScreen(onBack: () -> Unit) {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
+                    // 可索引扩展名
+                    CustomText(text = "可索引扩展名", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    CustomText(
+                        text = "工作区索引时仅扫描以下扩展名的文件，可添加或删除",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                    )
+                    indexableExtensions.sorted().chunked(6).forEach { rowExts ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            rowExts.forEach { ext ->
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(TextSecondary.copy(alpha = 0.15f))
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CustomText(text = ".$ext", fontSize = 12.sp, color = TextPrimary)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    CustomTextButton(
+                                        onClick = {
+                                            indexableExtensions = indexableExtensions - ext
+                                            persistExtensions()
+                                        },
+                                        contentColor = Color(0xFFE53935),
+                                        contentPadding = PaddingValues(2.dp)
+                                    ) {
+                                        CustomText("×", fontSize = 14.sp, color = Color(0xFFE53935))
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                    CustomTextButton(
+                        onClick = { showAddExtensionDialog = true },
+                        contentColor = Accent,
+                        contentPadding = PaddingValues(8.dp)
+                    ) {
+                        CustomText("+ 添加扩展名", fontSize = 14.sp, color = Accent)
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
                     // 工作区索引
                     CustomText(text = "工作区索引", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                     CustomText(
@@ -426,6 +482,50 @@ fun RagConfigScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (showAddExtensionDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddExtensionDialog = false; newExtension = "" },
+            title = { CustomText("添加扩展名", fontSize = 16.sp, color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    CustomText("扩展名（不含点号，如 kotlin 输入 kt）", fontSize = 14.sp, color = TextPrimary)
+                    RagTextField(
+                        value = newExtension,
+                        onValueChange = { newExtension = it.filter { c -> c.isLetterOrDigit() }.lowercase().take(16) },
+                        placeholder = "例如: kt"
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val ext = newExtension.trim().lowercase()
+                        if (ext.isBlank()) {
+                            Toast.makeText(context, "请输入扩展名", Toast.LENGTH_SHORT).show()
+                            return@TextButton
+                        }
+                        if (ext in indexableExtensions) {
+                            Toast.makeText(context, "已存在", Toast.LENGTH_SHORT).show()
+                            return@TextButton
+                        }
+                        indexableExtensions = (indexableExtensions + ext).distinct().sorted()
+                        persistExtensions()
+                        showAddExtensionDialog = false
+                        newExtension = ""
+                        Toast.makeText(context, "已添加 .$ext", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    CustomText("添加", fontSize = 14.sp, color = Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddExtensionDialog = false; newExtension = "" }) {
+                    CustomText("取消", fontSize = 14.sp, color = TextSecondary)
+                }
+            }
+        )
     }
 
     if (showAddLibraryDialog) {
@@ -514,10 +614,10 @@ private suspend fun runIndexing(
     val indexingService = RagStore.buildIndexingService(configProvider)
         ?: return "请先配置 Embedding API 地址和 Key"
     val root = File(workspacePath)
-    val extensions = setOf("kt", "java", "md", "txt", "py", "ts", "tsx", "js", "jsx", "json", "xml", "gradle", "kts")
+    val extensions = ProviderManager.getRagIndexableExtensions(context)
     val documents = mutableListOf<IndexDocument>()
     root.walkTopDown()
-        .maxDepth(4)
+        .maxDepth(12)
         .filter { it.isFile && it.extension.lowercase() in extensions }
         .forEach { file ->
             try {

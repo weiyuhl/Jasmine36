@@ -11,6 +11,17 @@ import com.lhzkml.jasmine.core.config.*
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
 
+/** RAG 工作区索引默认支持的文件扩展名 */
+private val DEFAULT_RAG_INDEXABLE_EXTENSIONS = setOf(
+    "kt", "kts", "java", "py", "ts", "tsx", "js", "jsx", "go", "rs", "rb", "php",
+    "c", "cpp", "cc", "cxx", "h", "hpp", "cs", "swift", "m", "mm", "scala", "groovy",
+    "clj", "cljs", "lua", "r", "sql", "sh", "bash", "zsh", "ps1", "bat", "cmd",
+    "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "gradle", "properties",
+    "md", "txt", "rst", "adoc", "tex", "rtf",
+    "html", "htm", "css", "scss", "sass", "less", "vue",
+    "proto", "graphql", "gql"
+)
+
 /**
  * 基于 SharedPreferences 的 ConfigRepository 实现
  *
@@ -439,6 +450,16 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     }
     override fun setRagActiveLibraryIds(ids: Set<String>) {
         prefs().edit().putString("rag_active_library_ids", ids.joinToString(",")).apply()
+    }
+    override fun getRagIndexableExtensions(): Set<String> {
+        val raw = prefs().getString("rag_indexable_extensions", null)
+        if (raw.isNullOrBlank()) return DEFAULT_RAG_INDEXABLE_EXTENSIONS
+        return raw.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+            .ifEmpty { DEFAULT_RAG_INDEXABLE_EXTENSIONS }
+    }
+    override fun setRagIndexableExtensions(extensions: Set<String>) {
+        val value = extensions.map { it.lowercase() }.filter { it.isNotBlank() }.distinct().joinToString(",")
+        prefs().edit().putString("rag_indexable_extensions", value).apply()
     }
 
     // ========== Agent 模式 ==========

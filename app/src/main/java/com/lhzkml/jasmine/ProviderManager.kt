@@ -276,6 +276,8 @@ object ProviderManager {
     fun setRagLibraries(context: Context, libraries: List<RagLibraryConfig>) = configRepo.setRagLibraries(libraries)
     fun getRagActiveLibraryIds(context: Context): Set<String> = configRepo.getRagActiveLibraryIds()
     fun setRagActiveLibraryIds(context: Context, ids: Set<String>) = configRepo.setRagActiveLibraryIds(ids)
+    fun getRagIndexableExtensions(context: Context): Set<String> = configRepo.getRagIndexableExtensions()
+    fun setRagIndexableExtensions(context: Context, extensions: Set<String>) = configRepo.setRagIndexableExtensions(extensions)
 
     // ========== Agent 模式 ==========
 
