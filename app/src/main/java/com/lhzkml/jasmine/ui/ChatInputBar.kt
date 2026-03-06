@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -37,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.R
 import com.lhzkml.jasmine.ui.components.CustomDropdownMenu
 import com.lhzkml.jasmine.ui.components.CustomDropdownMenuItem
+import com.lhzkml.jasmine.ui.components.CustomModalBottomSheet
 import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.theme.*
 
@@ -57,6 +57,7 @@ fun ChatInputBar(
 ) {
     var inputText by remember { mutableStateOf("") }
     var modelMenuExpanded by remember { mutableStateOf(false) }
+    var showSheet by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -159,7 +160,7 @@ fun ChatInputBar(
                 }
             }
 
-            // 底部：思考按钮 + 模型切换（固定底部）
+            // 底部：加号按钮（固定） + 模型切换（固定底部）
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -167,76 +168,111 @@ fun ChatInputBar(
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                    if (supportsThinkingMode && onThinkingModeChanged != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(18.dp))
-                            .border(
-                                width = 1.dp,
-                                color = if (isThinkingModeEnabled) Accent else TextSecondary.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(18.dp)
-                            )
-                            .background(
-                                if (isThinkingModeEnabled) Accent.copy(alpha = 0.15f)
-                                else Color.Transparent
-                            )
-                            .clickable(enabled = !isGenerating) {
-                                onThinkingModeChanged(!isThinkingModeEnabled)
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_think),
-                                contentDescription = "深度思考",
-                                modifier = Modifier.size(18.dp),
-                                tint = if (isThinkingModeEnabled) Accent else TextSecondary
-                            )
-                            CustomText(
-                                text = "Thinking",
-                                fontSize = 12.sp,
-                                color = if (isThinkingModeEnabled) Accent else TextSecondary,
-                                modifier = Modifier.padding(start = 4.dp)
-                            )
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(TextSecondary.copy(alpha = 0.3f))
+                        .clickable { showSheet = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    CustomText(text = "+", color = TextPrimary, fontSize = 20.sp)
+                }
+                Box(modifier = Modifier.padding(end = 2.dp, bottom = 2.dp)) {
+                    CustomText(
+                        text = currentModelDisplay,
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable {
+                            if (modelList.size > 1) modelMenuExpanded = true
                         }
-                    }
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                    Box(modifier = Modifier.padding(end = 2.dp, bottom = 2.dp)) {
-                        CustomText(
-                            text = currentModelDisplay,
-                            color = TextSecondary,
-                            fontSize = 12.sp,
-                            modifier = Modifier.clickable {
-                                if (modelList.size > 1) modelMenuExpanded = true
-                            }
-                        )
-                        CustomDropdownMenu(
-                            expanded = modelMenuExpanded,
-                            onDismissRequest = { modelMenuExpanded = false },
-                            alignment = Alignment.BottomEnd,
-                            alignAboveAnchor = true
-                        ) {
-                            modelList.forEach { model ->
-                                CustomDropdownMenuItem(
-                                    text = {
-                                        CustomText(
-                                            text = shortenModelName(model),
-                                            color = if (model == currentModel) Accent else TextPrimary,
-                                            fontSize = 14.sp
-                                        )
-                                    },
-                                    onClick = {
-                                        onModelSelected(model)
-                                        modelMenuExpanded = false
-                                    }
-                                )
-                            }
+                    )
+                    CustomDropdownMenu(
+                        expanded = modelMenuExpanded,
+                        onDismissRequest = { modelMenuExpanded = false },
+                        alignment = Alignment.BottomEnd,
+                        alignAboveAnchor = true
+                    ) {
+                        modelList.forEach { model ->
+                            CustomDropdownMenuItem(
+                                text = {
+                                    CustomText(
+                                        text = shortenModelName(model),
+                                        color = if (model == currentModel) Accent else TextPrimary,
+                                        fontSize = 14.sp
+                                    )
+                                },
+                                onClick = {
+                                    onModelSelected(model)
+                                    modelMenuExpanded = false
+                                }
+                            )
                         }
                     }
                 }
             }
         }
     }
+    ChatInputBarSheet(
+        showSheet = showSheet,
+        onDismissRequest = { showSheet = false },
+        supportsThinkingMode = supportsThinkingMode,
+        isThinkingModeEnabled = isThinkingModeEnabled,
+        isGenerating = isGenerating,
+        onThinkingModeChanged = onThinkingModeChanged
+    )
+}
+
+@Composable
+private fun ChatInputBarSheet(
+    showSheet: Boolean,
+    onDismissRequest: () -> Unit,
+    supportsThinkingMode: Boolean,
+    isThinkingModeEnabled: Boolean,
+    isGenerating: Boolean,
+    onThinkingModeChanged: ((Boolean) -> Unit)?
+) {
+    if (showSheet) {
+        CustomModalBottomSheet(
+            onDismissRequest = onDismissRequest,
+            sheetMaxHeight = 200.dp
+        ) {
+            if (supportsThinkingMode && onThinkingModeChanged != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(
+                            width = 1.dp,
+                            color = if (isThinkingModeEnabled) Accent else TextSecondary.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(18.dp)
+                        )
+                        .background(
+                            if (isThinkingModeEnabled) Accent.copy(alpha = 0.15f)
+                            else Color.Transparent
+                        )
+                        .clickable(enabled = !isGenerating) {
+                            onThinkingModeChanged(!isThinkingModeEnabled)
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_think),
+                            contentDescription = "深度思考",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (isThinkingModeEnabled) Accent else TextSecondary
+                        )
+                        CustomText(
+                            text = "Thinking",
+                            fontSize = 14.sp,
+                            color = if (isThinkingModeEnabled) Accent else TextSecondary,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
