@@ -195,6 +195,10 @@ object ProviderManager {
     fun setToolChoiceMode(context: Context, mode: ToolChoiceMode) = configRepo.setToolChoiceMode(mode)
     fun getToolChoiceNamedTool(context: Context): String = configRepo.getToolChoiceNamedTool()
     fun setToolChoiceNamedTool(context: Context, name: String) = configRepo.setToolChoiceNamedTool(name)
+    fun getAgentMaxIterations(context: Context): Int = configRepo.getAgentMaxIterations()
+    fun setAgentMaxIterations(context: Context, value: Int) = configRepo.setAgentMaxIterations(value)
+    fun getMaxToolResultLength(context: Context): Int = configRepo.getMaxToolResultLength()
+    fun setMaxToolResultLength(context: Context, value: Int) = configRepo.setMaxToolResultLength(value)
 
     // ========== 追踪设置 ==========
 

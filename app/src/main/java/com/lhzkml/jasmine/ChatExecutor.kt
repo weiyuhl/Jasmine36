@@ -278,9 +278,11 @@ class ChatExecutor(
         val eventHandler = buildEventHandler()
         val executor = ToolExecutor(
             client, registry,
+            maxIterations = ProviderManager.getAgentMaxIterations(context),
             eventListener = listener,
             eventHandler = eventHandler,
-            tracing = getTracing()
+            tracing = getTracing(),
+            maxToolResultLength = ProviderManager.getMaxToolResultLength(context)
         )
         val agentRunId = getTracing()?.newRunId() ?: java.util.UUID.randomUUID().toString()
         eventHandler?.fireAgentStarting(AgentStartingContext(
@@ -367,7 +369,7 @@ class ChatExecutor(
 
         when (agentStrategy) {
             com.lhzkml.jasmine.core.config.AgentStrategyType.SIMPLE_LOOP -> {
-                val agentPrompt = Prompt.build("agent") {
+                var agentPrompt = Prompt.build("agent") {
                     for (msg in effectiveMessages) {
                         when (msg.role) {
                             "system" -> system(msg.content)
@@ -376,6 +378,21 @@ class ChatExecutor(
                         }
                     }
                 }.copy(maxTokens = maxTokens, samplingParams = samplingParams)
+
+                val simpleToolChoice = when (ProviderManager.getToolChoiceMode(context)) {
+                    com.lhzkml.jasmine.core.config.ToolChoiceMode.DEFAULT -> null
+                    com.lhzkml.jasmine.core.config.ToolChoiceMode.AUTO -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Auto
+                    com.lhzkml.jasmine.core.config.ToolChoiceMode.REQUIRED -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Required
+                    com.lhzkml.jasmine.core.config.ToolChoiceMode.NONE -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.None
+                    com.lhzkml.jasmine.core.config.ToolChoiceMode.NAMED -> {
+                        val name = ProviderManager.getToolChoiceNamedTool(context)
+                        if (name.isNotEmpty()) com.lhzkml.jasmine.core.prompt.model.ToolChoice.Named(name) else null
+                    }
+                }
+                if (simpleToolChoice != null) {
+                    agentPrompt = agentPrompt.withToolChoice(simpleToolChoice)
+                }
+
                 val streamResult = executor.executeStream(
                     agentPrompt, config.model
                 ) { chunk ->

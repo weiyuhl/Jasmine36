@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Slider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import com.lhzkml.jasmine.core.config.AgentStrategyType
 import com.lhzkml.jasmine.core.config.GraphToolCallMode
 import com.lhzkml.jasmine.core.config.ToolSelectionStrategyType
 import com.lhzkml.jasmine.core.config.ToolChoiceMode
+import kotlin.math.roundToInt
 import com.lhzkml.jasmine.ui.theme.BgInput
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
@@ -57,24 +59,28 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
     var toolCallMode by remember { mutableStateOf(config.getGraphToolCallMode()) }
     var toolSelectionStrategy by remember { mutableStateOf(config.getToolSelectionStrategy()) }
     var toolChoiceMode by remember { mutableStateOf(config.getToolChoiceMode()) }
-    
+
+    var maxIterations by remember { mutableFloatStateOf(config.getAgentMaxIterations().toFloat()) }
+    var maxToolResultLength by remember { mutableFloatStateOf(config.getMaxToolResultLength().toFloat()) }
+
     var byNameTools by remember { mutableStateOf(config.getToolSelectionNames().joinToString(",")) }
     var autoTaskDesc by remember { mutableStateOf(config.getToolSelectionTaskDesc()) }
     var namedTool by remember { mutableStateOf(config.getToolChoiceNamedTool()) }
-    
-    DisposableEffect(Unit) {
-        onDispose {
-            // 保存配置
-            val byNameText = byNameTools.trim()
-            if (byNameText.isNotEmpty()) {
-                config.setToolSelectionNames(byNameText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet())
-            } else {
-                config.setToolSelectionNames(emptySet())
-            }
-            config.setToolSelectionTaskDesc(autoTaskDesc.trim())
-            config.setToolChoiceNamedTool(namedTool.trim())
+
+    fun saveTextFields() {
+        val byNameText = byNameTools.trim()
+        if (byNameText.isNotEmpty()) {
+            config.setToolSelectionNames(byNameText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet())
+        } else {
+            config.setToolSelectionNames(emptySet())
         }
+        config.setToolSelectionTaskDesc(autoTaskDesc.trim())
+        config.setToolChoiceNamedTool(namedTool.trim())
     }
+
+    LaunchedEffect(byNameTools) { saveTextFields() }
+    LaunchedEffect(autoTaskDesc) { saveTextFields() }
+    LaunchedEffect(namedTool) { saveTextFields() }
     
     Column(
         modifier = Modifier
@@ -122,7 +128,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
             StrategyCardWithDiagram(
                 icon = "[Loop]",
                 title = "简单循环",
-                subtitle = "ToolExecutor while 循环，简单高效",
+                subtitle = "轻量高效，适合大多数对话和编码任务",
                 isSelected = selectedStrategy == AgentStrategyType.SIMPLE_LOOP,
                 onClick = {
                     selectedStrategy = AgentStrategyType.SIMPLE_LOOP
@@ -140,7 +146,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
             StrategyCardWithDiagram(
                 icon = "[Graph]",
                 title = "图策略",
-                subtitle = "GraphAgent 节点图执行，参考 koog",
+                subtitle = "节点图执行，支持并行工具调用和工具筛选",
                 isSelected = selectedStrategy == AgentStrategyType.SINGLE_RUN_GRAPH,
                 onClick = {
                     selectedStrategy = AgentStrategyType.SINGLE_RUN_GRAPH
@@ -176,13 +182,11 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     
                     CustomText(
                         text = if (selectedStrategy == AgentStrategyType.SIMPLE_LOOP) {
-                            "简单循环模式使用 ToolExecutor 的 while 循环执行工具调用。\n\n" +
-                            "流程：发送消息 -> LLM 回复 -> 检查工具调用 -> 执行工具 -> 循环直到无工具调用。\n\n" +
-                            "适合简单场景，开销小，易于理解和调试。"
+                            "轻量高效，适合大多数对话和编码任务。\n\n" +
+                            "LLM 与工具交替执行直到完成，支持可配置的最大迭代次数、工具结果长度限制和 ToolChoice。"
                         } else {
-                            "图策略模式使用 GraphAgent 按节点图执行。\n\n" +
-                            "移植自 koog 的 singleRunStrategy，支持条件分支、子图嵌套、复杂工具调用流程。\n\n" +
-                            "可配置工具调用模式（Sequential/Parallel/Single）、工具选择策略（All/None/ByName/Auto）和 ToolChoice（Default/Auto/Required/None/Named）。"
+                            "节点图执行引擎，支持并行工具调用、工具筛选等高级配置。\n\n" +
+                            "适合复杂多步骤任务，可配置工具调用模式（顺序/并行/单次）、工具选择策略（全部/无/按名称/自动）和 ToolChoice。"
                         },
                         fontSize = 13.sp,
                         color = TextSecondary,
@@ -191,10 +195,77 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 }
             }
             
+            // SimpleLoop 子选项
+            if (selectedStrategy == AgentStrategyType.SIMPLE_LOOP) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                CustomText("最大迭代次数", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                CustomText(
+                    "LLM 与工具交替执行的最大轮数 (1-50)",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Slider(
+                        value = maxIterations,
+                        onValueChange = { maxIterations = it },
+                        onValueChangeFinished = {
+                            config.setAgentMaxIterations(maxIterations.roundToInt())
+                        },
+                        valueRange = 1f..50f,
+                        steps = 48,
+                        modifier = Modifier.weight(1f)
+                    )
+                    CustomText(
+                        text = "${maxIterations.roundToInt()}",
+                        fontSize = 14.sp,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.width(36.dp),
+                        textAlign = TextAlign.End
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                CustomText("工具结果最大长度", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                CustomText(
+                    "工具返回结果的截断阈值 (1000-30000 字符)",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Slider(
+                        value = maxToolResultLength,
+                        onValueChange = {
+                            maxToolResultLength = (it / 1000f).roundToInt() * 1000f
+                        },
+                        onValueChangeFinished = {
+                            config.setMaxToolResultLength(maxToolResultLength.roundToInt())
+                        },
+                        valueRange = 1000f..30000f,
+                        steps = 28,
+                        modifier = Modifier.weight(1f)
+                    )
+                    CustomText(
+                        text = "${maxToolResultLength.roundToInt()}",
+                        fontSize = 14.sp,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.width(52.dp),
+                        textAlign = TextAlign.End
+                    )
+                }
+            }
+
             // 图策略子选项
             if (selectedStrategy == AgentStrategyType.SINGLE_RUN_GRAPH) {
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 // 工具调用模式
                 CustomText("工具调用模式", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
@@ -374,109 +445,110 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     Spacer(modifier = Modifier.height(6.dp))
                 }
                 
-                CustomHorizontalDivider(
-                    color = Color(0xFFE0E0E0),
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
-                
-                // ToolChoice
-                CustomText("ToolChoice", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+            }
+
+            // ToolChoice (shared between both strategies)
+            CustomHorizontalDivider(
+                color = Color(0xFFE0E0E0),
+                thickness = 1.dp,
+                modifier = Modifier.padding(vertical = 12.dp)
+            )
+
+            CustomText("ToolChoice", fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            CustomText(
+                "控制 LLM 是否/如何调用工具",
+                fontSize = 12.sp,
+                color = TextSecondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OptionCard(
+                title = "DEFAULT",
+                subtitle = "不指定，由模型决定（默认）",
+                isSelected = toolChoiceMode == ToolChoiceMode.DEFAULT,
+                onClick = {
+                    toolChoiceMode = ToolChoiceMode.DEFAULT
+                    config.setToolChoiceMode(ToolChoiceMode.DEFAULT)
+                }
+            )
+
+            OptionCard(
+                title = "AUTO",
+                subtitle = "LLM 自动决定是否调用工具",
+                isSelected = toolChoiceMode == ToolChoiceMode.AUTO,
+                onClick = {
+                    toolChoiceMode = ToolChoiceMode.AUTO
+                    config.setToolChoiceMode(ToolChoiceMode.AUTO)
+                }
+            )
+
+            OptionCard(
+                title = "REQUIRED",
+                subtitle = "强制 LLM 调用工具",
+                isSelected = toolChoiceMode == ToolChoiceMode.REQUIRED,
+                onClick = {
+                    toolChoiceMode = ToolChoiceMode.REQUIRED
+                    config.setToolChoiceMode(ToolChoiceMode.REQUIRED)
+                }
+            )
+
+            OptionCard(
+                title = "NONE",
+                subtitle = "禁止 LLM 调用工具",
+                isSelected = toolChoiceMode == ToolChoiceMode.NONE,
+                onClick = {
+                    toolChoiceMode = ToolChoiceMode.NONE
+                    config.setToolChoiceMode(ToolChoiceMode.NONE)
+                }
+            )
+
+            OptionCard(
+                title = "NAMED",
+                subtitle = "强制使用指定工具",
+                isSelected = toolChoiceMode == ToolChoiceMode.NAMED,
+                onClick = {
+                    toolChoiceMode = ToolChoiceMode.NAMED
+                    config.setToolChoiceMode(ToolChoiceMode.NAMED)
+                }
+            )
+
+            if (toolChoiceMode == ToolChoiceMode.NAMED) {
                 Spacer(modifier = Modifier.height(4.dp))
-                CustomText(
-                    "移植自 koog ToolChoice，控制 LLM 是否/如何调用工具",
-                    fontSize = 12.sp,
-                    color = TextSecondary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OptionCard(
-                    title = "DEFAULT",
-                    subtitle = "不指定，由模型决定（默认）",
-                    isSelected = toolChoiceMode == ToolChoiceMode.DEFAULT,
-                    onClick = {
-                        toolChoiceMode = ToolChoiceMode.DEFAULT
-                        config.setToolChoiceMode(ToolChoiceMode.DEFAULT)
-                    }
-                )
-                
-                OptionCard(
-                    title = "AUTO",
-                    subtitle = "LLM 自动决定是否调用工具",
-                    isSelected = toolChoiceMode == ToolChoiceMode.AUTO,
-                    onClick = {
-                        toolChoiceMode = ToolChoiceMode.AUTO
-                        config.setToolChoiceMode(ToolChoiceMode.AUTO)
-                    }
-                )
-                
-                OptionCard(
-                    title = "REQUIRED",
-                    subtitle = "强制 LLM 调用工具",
-                    isSelected = toolChoiceMode == ToolChoiceMode.REQUIRED,
-                    onClick = {
-                        toolChoiceMode = ToolChoiceMode.REQUIRED
-                        config.setToolChoiceMode(ToolChoiceMode.REQUIRED)
-                    }
-                )
-                
-                OptionCard(
-                    title = "NONE",
-                    subtitle = "禁止 LLM 调用工具",
-                    isSelected = toolChoiceMode == ToolChoiceMode.NONE,
-                    onClick = {
-                        toolChoiceMode = ToolChoiceMode.NONE
-                        config.setToolChoiceMode(ToolChoiceMode.NONE)
-                    }
-                )
-                
-                OptionCard(
-                    title = "NAMED",
-                    subtitle = "强制使用指定工具",
-                    isSelected = toolChoiceMode == ToolChoiceMode.NAMED,
-                    onClick = {
-                        toolChoiceMode = ToolChoiceMode.NAMED
-                        config.setToolChoiceMode(ToolChoiceMode.NAMED)
-                    }
-                )
-                
-                if (toolChoiceMode == ToolChoiceMode.NAMED) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Column(modifier = Modifier.padding(horizontal = 8.dp)) {
-                        CustomText(
-                            "工具名称",
-                            fontSize = 12.sp,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(BgInput, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 12.dp, vertical = 12.dp)
-                        ) {
-                            BasicTextField(
-                                value = namedTool,
-                                onValueChange = { namedTool = it },
-                                singleLine = true,
-                                textStyle = TextStyle(
-                                    fontSize = 13.sp,
-                                    color = TextPrimary
-                                ),
-                                cursorBrush = SolidColor(TextPrimary),
-                                modifier = Modifier.fillMaxWidth(),
-                                decorationBox = { innerTextField ->
-                                    if (namedTool.isEmpty()) {
-                                        CustomText(
-                                            "calculator",
-                                            fontSize = 13.sp,
-                                            color = TextSecondary
-                                        )
-                                    }
-                                    innerTextField()
+                Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                    CustomText(
+                        "工具名称",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(BgInput, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                    ) {
+                        BasicTextField(
+                            value = namedTool,
+                            onValueChange = { namedTool = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontSize = 13.sp,
+                                color = TextPrimary
+                            ),
+                            cursorBrush = SolidColor(TextPrimary),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { innerTextField ->
+                                if (namedTool.isEmpty()) {
+                                    CustomText(
+                                        "calculator",
+                                        fontSize = 13.sp,
+                                        color = TextSecondary
+                                    )
                                 }
-                            )
-                        }
+                                innerTextField()
+                            }
+                        )
                     }
                 }
             }

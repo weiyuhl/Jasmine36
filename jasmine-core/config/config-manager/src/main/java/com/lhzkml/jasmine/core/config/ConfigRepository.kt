@@ -113,6 +113,10 @@ interface ConfigRepository {
     fun setToolChoiceMode(mode: ToolChoiceMode)
     fun getToolChoiceNamedTool(): String
     fun setToolChoiceNamedTool(name: String)
+    fun getAgentMaxIterations(): Int
+    fun setAgentMaxIterations(value: Int)
+    fun getMaxToolResultLength(): Int
+    fun setMaxToolResultLength(value: Int)
 
     // ========== 追踪设置 ==========
 

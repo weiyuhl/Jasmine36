@@ -210,6 +210,10 @@ private class FakeConfigRepository : ConfigRepository {
     override fun setToolChoiceMode(mode: ToolChoiceMode) {}
     override fun getToolChoiceNamedTool() = ""
     override fun setToolChoiceNamedTool(name: String) {}
+    override fun getAgentMaxIterations() = 10
+    override fun setAgentMaxIterations(value: Int) {}
+    override fun getMaxToolResultLength() = 8000
+    override fun setMaxToolResultLength(value: Int) {}
     override fun isTraceEnabled() = false
     override fun setTraceEnabled(enabled: Boolean) {}
     override fun isTraceFileEnabled() = false
@@ -246,6 +250,10 @@ private class FakeConfigRepository : ConfigRepository {
     override fun setCompressionLastN(value: Int) {}
     override fun getCompressionChunkSize() = 5
     override fun setCompressionChunkSize(value: Int) {}
+    override fun getPersonalRules() = ""
+    override fun setPersonalRules(rules: String) {}
+    override fun getProjectRules(workspacePath: String) = ""
+    override fun setProjectRules(workspacePath: String, rules: String) {}
     override fun isAgentMode() = false
     override fun setAgentMode(enabled: Boolean) {}
     override fun getWorkspacePath() = ""

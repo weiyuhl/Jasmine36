@@ -86,6 +86,10 @@ class StubConfigRepository : ConfigRepository {
     override fun setToolChoiceMode(mode: ToolChoiceMode) {}
     override fun getToolChoiceNamedTool(): String = ""
     override fun setToolChoiceNamedTool(name: String) {}
+    override fun getAgentMaxIterations(): Int = 10
+    override fun setAgentMaxIterations(value: Int) {}
+    override fun getMaxToolResultLength(): Int = 8000
+    override fun setMaxToolResultLength(value: Int) {}
     override fun isTraceEnabled(): Boolean = false
     override fun setTraceEnabled(enabled: Boolean) {}
     override fun isTraceFileEnabled(): Boolean = false

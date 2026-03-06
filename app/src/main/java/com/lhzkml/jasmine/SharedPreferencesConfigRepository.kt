@@ -295,6 +295,11 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun getToolChoiceNamedTool(): String = prefs().getString("tool_choice_named_tool", null) ?: ""
     override fun setToolChoiceNamedTool(name: String) { prefs().edit().putString("tool_choice_named_tool", name).apply() }
 
+    override fun getAgentMaxIterations(): Int = prefs().getInt("agent_max_iterations", 10)
+    override fun setAgentMaxIterations(value: Int) { prefs().edit().putInt("agent_max_iterations", value).apply() }
+    override fun getMaxToolResultLength(): Int = prefs().getInt("max_tool_result_length", 8000)
+    override fun setMaxToolResultLength(value: Int) { prefs().edit().putInt("max_tool_result_length", value).apply() }
+
     // ========== 追踪设置 ==========
 
     override fun isTraceEnabled(): Boolean = prefs().getBoolean("trace_enabled", false)
