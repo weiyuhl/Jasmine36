@@ -190,7 +190,14 @@ fun SettingsScreen(
                 )
 
                 // ─── Rules ───
-                RulesSettingsSection(context, onRulesChanged = { refreshTrigger++ })
+                SettingsItem(
+                    title = "Rules 规则",
+                    subtitle = "个人规则 · 项目规则",
+                    value = getRulesPreview(context),
+                    onClick = {
+                        context.startActivity(Intent(context, RulesActivity::class.java))
+                    }
+                )
             }
 
             // ─── 三、Agent 与工具 ───
@@ -566,142 +573,18 @@ private fun getSamplingParamsInfo(context: android.content.Context): String {
 private fun formatNumber(n: Int): String =
     com.lhzkml.jasmine.core.config.FormatUtils.formatTokensWithUnit(n)
 
-// ========== Rules Compose UI ==========
-
-@Composable
-fun RulesSettingsSection(context: android.content.Context, onRulesChanged: () -> Unit) {
-    var showPersonalDialog by remember { mutableStateOf(false) }
-    var showProjectDialog by remember { mutableStateOf(false) }
-    var showNoWorkspaceDialog by remember { mutableStateOf(false) }
-
-    val personalRules = ProviderManager.getPersonalRules(context)
-    val personalPreview = if (personalRules.isBlank()) "未设置"
-    else if (personalRules.length > 30) personalRules.substring(0, 30) + "..." else personalRules
-
+private fun getRulesPreview(context: android.content.Context): String {
+    val personal = ProviderManager.getPersonalRules(context)
     val wsPath = ProviderManager.getWorkspacePath(context)
-    val projectPreview = if (wsPath.isEmpty()) "未设置工作区"
-    else {
-        val rules = ProviderManager.getProjectRules(context, wsPath)
-        if (rules.isBlank()) "未设置" else if (rules.length > 30) rules.substring(0, 30) + "..." else rules
+    val project = if (wsPath.isNotBlank()) ProviderManager.getProjectRules(context, wsPath) else ""
+
+    val hasPersonal = personal.isNotBlank()
+    val hasProject = project.isNotBlank()
+
+    return when {
+        hasPersonal && hasProject -> "个人 · 项目已配置"
+        hasPersonal -> "个人已配置"
+        hasProject -> "项目已配置"
+        else -> "未设置"
     }
-
-    SettingsItem(
-        title = "个人 Rules",
-        subtitle = "全局行为规则，切换项目依然生效",
-        value = personalPreview,
-        onClick = { showPersonalDialog = true }
-    )
-    SettingsItem(
-        title = "项目 Rules",
-        subtitle = "当前项目专属规则，仅此工作区生效",
-        value = projectPreview,
-        onClick = {
-            if (wsPath.isEmpty()) showNoWorkspaceDialog = true
-            else showProjectDialog = true
-        }
-    )
-
-    if (showPersonalDialog) {
-        RulesEditorDialog(
-            title = "个人 Rules",
-            description = "定义全局行为规则，切换项目后依然生效。每行一条规则。",
-            placeholder = "每行一条规则，例如：\nAlways respond in Chinese\n代码生成时添加注释",
-            initialValue = personalRules,
-            onSave = { rules ->
-                ProviderManager.setPersonalRules(context, rules)
-                onRulesChanged()
-            },
-            onClear = {
-                ProviderManager.setPersonalRules(context, "")
-                onRulesChanged()
-            },
-            onDismiss = { showPersonalDialog = false }
-        )
-    }
-
-    if (showProjectDialog) {
-        val currentProjectRules = ProviderManager.getProjectRules(context, wsPath)
-        RulesEditorDialog(
-            title = "项目 Rules",
-            description = "当前项目: ${wsPath.substringAfterLast("/")}\n仅在此工作区下生效。每行一条规则。",
-            placeholder = "每行一条规则，例如：\n使用 Kotlin 协程而非 RxJava\n遵循 MVVM 架构模式",
-            initialValue = currentProjectRules,
-            onSave = { rules ->
-                ProviderManager.setProjectRules(context, wsPath, rules)
-                onRulesChanged()
-            },
-            onClear = {
-                ProviderManager.setProjectRules(context, wsPath, "")
-                onRulesChanged()
-            },
-            onDismiss = { showProjectDialog = false }
-        )
-    }
-
-    if (showNoWorkspaceDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showNoWorkspaceDialog = false },
-            title = { CustomText("项目 Rules", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
-            text = { CustomText("请先在 Agent 模式下设置工作区路径，然后才能配置项目 Rules。", fontSize = 14.sp) },
-            confirmButton = {
-                CustomTextButton(onClick = { showNoWorkspaceDialog = false }) {
-                    CustomText("确定", color = Accent)
-                }
-            }
-        )
-    }
-}
-
-@Composable
-fun RulesEditorDialog(
-    title: String,
-    description: String,
-    placeholder: String,
-    initialValue: String,
-    onSave: (String) -> Unit,
-    onClear: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    var text by remember { mutableStateOf(initialValue) }
-
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { CustomText(title, fontSize = 16.sp, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CustomText(description, fontSize = 13.sp, color = TextSecondary)
-                androidx.compose.material3.OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    placeholder = { CustomText(placeholder, fontSize = 13.sp, color = TextSecondary) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 150.dp),
-                    minLines = 5,
-                    maxLines = 12
-                )
-            }
-        },
-        confirmButton = {
-            CustomTextButton(onClick = {
-                onSave(text.trim())
-                onDismiss()
-            }) {
-                CustomText("保存", color = Accent)
-            }
-        },
-        dismissButton = {
-            Row {
-                CustomTextButton(onClick = {
-                    onClear()
-                    onDismiss()
-                }) {
-                    CustomText("清空", color = TextSecondary)
-                }
-                CustomTextButton(onClick = onDismiss) {
-                    CustomText("取消", color = TextSecondary)
-                }
-            }
-        }
-    )
 }
