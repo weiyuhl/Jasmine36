@@ -107,7 +107,7 @@ fun CustomModalBottomSheet(
         val view = LocalView.current
         DisposableEffect(Unit) {
             val window = (view.parent as? DialogWindowProvider)?.window
-            window?.setDimAmount(0f)
+            window?.setDimAmount(0.1f)
             onDispose { }
         }
         BoxWithConstraints(
