@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -235,10 +236,12 @@ private fun ChatInputBarSheet(
     if (showSheet) {
         CustomModalBottomSheet(
             onDismissRequest = onDismissRequest,
-            sheetMaxHeight = 200.dp
+            sheetMinHeight = 200.dp,
+            sheetMaxHeightFraction = 0.92f
         ) {
-            if (supportsThinkingMode && onThinkingModeChanged != null) {
-                Row(
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (supportsThinkingMode && onThinkingModeChanged != null) {
+                    Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(18.dp))
                         .border(
@@ -267,6 +270,15 @@ private fun ChatInputBarSheet(
                         fontSize = 14.sp,
                         color = if (isThinkingModeEnabled) Accent else TextSecondary,
                         modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
+                }
+                if (!supportsThinkingMode) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    CustomText(
+                        text = "更多功能即将推出",
+                        fontSize = 14.sp,
+                        color = TextSecondary
                     )
                 }
             }

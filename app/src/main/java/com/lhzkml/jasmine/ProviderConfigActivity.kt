@@ -578,13 +578,13 @@ fun ModelListTab(provider: ProviderConfig) {
             CustomButton(
                 onClick = {
                     config.setSelectedModels(provider.id, checkedModels.value.toList())
-                    if (currentModel !in checkedModels.value && checkedModels.value.isNotEmpty()) {
-                        val newModel = checkedModels.value.first()
+                    if (checkedModels.value.isNotEmpty()) {
+                        val modelToSave = if (currentModel in checkedModels.value) currentModel else checkedModels.value.first()
                         config.saveProviderCredentials(
                             provider.id,
                             config.getApiKey(provider.id) ?: "",
                             registry.getBaseUrl(provider.id),
-                            newModel
+                            modelToSave
                         )
                     }
                     Toast.makeText(context, "已保存 ${checkedModels.value.size} 个模型", Toast.LENGTH_SHORT).show()

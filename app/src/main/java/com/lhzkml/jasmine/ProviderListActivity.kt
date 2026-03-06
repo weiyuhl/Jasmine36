@@ -181,9 +181,10 @@ fun ProviderListScreen(
     if (showAddDialog) {
         AddCustomProviderDialog(
             onDismiss = { showAddDialog = false },
-            onAdd = { provider ->
+            onAdd = { provider, baseUrl, model ->
                 val success = registry.registerProviderPersistent(provider)
                 if (success) {
+                    config.saveProviderCredentials(provider.id, "", baseUrl, model)
                     Toast.makeText(context, "添加成功", Toast.LENGTH_SHORT).show()
                     refreshTrigger++
                     showAddDialog = false
@@ -279,7 +280,7 @@ fun ProviderItem(
 @Composable
 fun AddCustomProviderDialog(
     onDismiss: () -> Unit,
-    onAdd: (ProviderConfig) -> Unit
+    onAdd: (ProviderConfig, baseUrl: String, model: String) -> Unit
 ) {
     var selectedApiType by remember { mutableStateOf(ApiType.OPENAI) }
     var providerId by remember { mutableStateOf("") }
@@ -451,7 +452,7 @@ fun AddCustomProviderDialog(
                                 apiType = selectedApiType,
                                 isCustom = true
                             )
-                            onAdd(provider)
+                            onAdd(provider, baseUrl.trim(), model.trim())
                         }
                     }
                 },

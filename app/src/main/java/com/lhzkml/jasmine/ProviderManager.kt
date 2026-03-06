@@ -71,7 +71,7 @@ object ProviderManager {
 
     fun getModel(context: Context, providerId: String? = null): String {
         val id = providerId ?: configRepo.getActiveProviderId() ?: return ""
-        return configRepo.getModel(id)
+        return registry.getModel(id)
     }
 
     fun getSelectedModels(context: Context, providerId: String): List<String> =
