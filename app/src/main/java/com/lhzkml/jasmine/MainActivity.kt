@@ -35,12 +35,8 @@ import com.lhzkml.jasmine.core.prompt.llm.TokenEstimator
 import com.lhzkml.jasmine.core.prompt.llm.StreamResumeHelper
 import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
-import com.lhzkml.jasmine.core.prompt.llm.WorkspaceContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.SystemInfoContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.CurrentTimeContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.AgentPromptContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.PersonalRulesContextProvider
-import com.lhzkml.jasmine.core.prompt.llm.ProjectRulesContextProvider
+import com.lhzkml.jasmine.core.prompt.llm.ContextCollectorConfigurator
+import com.lhzkml.jasmine.core.config.ActiveProviderConfig
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
@@ -150,48 +146,21 @@ class MainActivity : AppCompatActivity() {
     /** 系统上下文收集器 — 自动拼接环境信息到 system prompt */
     private val contextCollector = SystemContextCollector()
 
+    private val contextConfigurator = ContextCollectorConfigurator()
+
     /**
      * 刷新系统上下文收集器
-     * 根据当前设置注册/注销上下文提供者，发送消息时自动拼接到 system prompt。
+     * 委托给框架层 ContextCollectorConfigurator 处理 Provider 注册逻辑。
      */
     private fun refreshContextCollector() {
-        contextCollector.clear()
-
-        val isAgent = ProviderManager.isAgentMode(this)
         val wsPath = ProviderManager.getWorkspacePath(this)
-
-        // Agent 模式：注入结构化行为指引提示词（工具通过 API tools 参数发送，不在提示词中列出）
-        if (isAgent) {
-            contextCollector.register(AgentPromptContextProvider(
-                agentName = "Jasmine",
-                workspacePath = wsPath
-            ))
-        }
-
-        // Agent 模式：注入工作区路径
-        if (isAgent && wsPath.isNotEmpty()) {
-            contextCollector.register(WorkspaceContextProvider(wsPath))
-        }
-
-        // 个人 Rules（全局生效，跨项目）
-        val personalRules = ProviderManager.getPersonalRules(this)
-        if (personalRules.isNotBlank()) {
-            contextCollector.register(PersonalRulesContextProvider(personalRules))
-        }
-
-        // 项目 Rules（仅当前工作区生效）
-        if (wsPath.isNotEmpty()) {
-            val projectRules = ProviderManager.getProjectRules(this, wsPath)
-            if (projectRules.isNotBlank()) {
-                contextCollector.register(ProjectRulesContextProvider(projectRules))
-            }
-        }
-
-        // 系统信息
-        contextCollector.register(SystemInfoContextProvider())
-
-        // 当前时间
-        contextCollector.register(CurrentTimeContextProvider())
+        val config = ContextCollectorConfigurator.Config(
+            isAgentMode = ProviderManager.isAgentMode(this),
+            workspacePath = wsPath,
+            personalRules = ProviderManager.getPersonalRules(this),
+            projectRules = if (wsPath.isNotEmpty()) ProviderManager.getProjectRules(this, wsPath) else ""
+        )
+        contextConfigurator.configure(contextCollector, config)
     }
 
     /**
@@ -1013,7 +982,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun getOrCreateClient(config: ProviderManager.ActiveConfig): ChatClient {
+    private fun getOrCreateClient(config: ActiveProviderConfig): ChatClient {
         // 如果 router 中已有该供应商的客户端，直接复用
         val existing = clientRouter.getClient(config.providerId)
         if (existing != null && currentProviderId == config.providerId) {
