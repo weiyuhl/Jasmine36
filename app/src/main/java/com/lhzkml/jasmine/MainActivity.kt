@@ -1170,7 +1170,7 @@ class MainActivity : AppCompatActivity() {
                 tracing = buildTracing()
 
                 // 上下文窗口裁剪，避免超出模型 token 限制
-                val trimmedMessages = contextManager.trimMessages(messageHistory.toList())
+                var trimmedMessages = contextManager.trimMessages(messageHistory.toList())
 
                 val maxTokensVal = ProviderManager.getMaxTokens(this@MainActivity)
                 val maxTokens = if (maxTokensVal > 0) maxTokensVal else 8192
@@ -1247,7 +1247,7 @@ class MainActivity : AppCompatActivity() {
                         toolCount = registry.descriptors().size
                     ))
 
-                    // 任务规划（Agent 模式下可选）— 使用 SimpleLLMPlanner 结构化输出
+                    // 任务规划（Agent 模式下可选）— 生成计划并注入 Agent 上下文
                     if (ProviderManager.isPlannerEnabled(this@MainActivity)) {
                         try {
                             val planPrompt = Prompt.build("planner") {
@@ -1276,22 +1276,38 @@ class MainActivity : AppCompatActivity() {
                             )
 
                             val maxIter = ProviderManager.getPlannerMaxIterations(this@MainActivity)
-                            val planner = if (ProviderManager.isPlannerCriticEnabled(this@MainActivity)) {
-                                SimpleLLMWithCriticPlanner(maxIterations = maxIter)
+                            val useCritic = ProviderManager.isPlannerCriticEnabled(this@MainActivity)
+
+                            val plan: com.lhzkml.jasmine.core.agent.tools.planner.SimplePlan
+                            var criticInfo = ""
+
+                            if (useCritic) {
+                                val criticPlanner = SimpleLLMWithCriticPlanner(
+                                    maxIterations = maxIter, maxCriticRetries = 2
+                                )
+                                val (validatedPlan, evaluation) = criticPlanner.buildAndValidatePlan(
+                                    planContext, message
+                                )
+                                plan = validatedPlan
+                                if (evaluation != null) {
+                                    criticInfo = " (Critic: ${evaluation.score}/10)"
+                                }
                             } else {
-                                SimpleLLMPlanner(maxIterations = maxIter)
+                                val planner = SimpleLLMPlanner(maxIterations = maxIter)
+                                plan = planner.buildPlanPublic(planContext, message, null)
                             }
-                            val plan = planner.buildPlanPublic(planContext, message, null)
+
                             planSession.close()
                             planReadSession.close()
 
+                            // 在 UI 显示计划
                             withContext(Dispatchers.Main) {
-                                appendRendered("[Plan] 任务规划:\n")
+                                appendRendered("[Plan] 任务规划$criticInfo:\n")
                                 appendRendered("[Goal] 目标: ${plan.goal}\n")
-                                agentLogBuilder.append("[Plan] 任务规划:\n")
+                                agentLogBuilder.append("[Plan] 任务规划$criticInfo:\n")
                                 agentLogBuilder.append("[Goal] 目标: ${plan.goal}\n")
                                 plan.steps.forEachIndexed { index, step ->
-                                    val stepLine = "  ${index + 1}. ${step.description}\n"
+                                    val stepLine = "  ${index + 1}. [${step.type}] ${step.description}\n"
                                     appendRendered(stepLine)
                                     agentLogBuilder.append(stepLine)
                                 }
@@ -1300,9 +1316,14 @@ class MainActivity : AppCompatActivity() {
                                 autoScrollToBottom()
                             }
 
-                            // 快照：规划完成后不再单独创建检查点，统一在对话轮次结束后创建
+                            // 将计划注入 Agent 的 system prompt，让 Agent 实际按计划执行
+                            val planPromptText = SimpleLLMPlanner.formatPlanForPrompt(plan)
+                            val planSystemMsg = ChatMessage("system", planPromptText)
+                            trimmedMessages = listOf(trimmedMessages.first()) +
+                                listOf(planSystemMsg) +
+                                trimmedMessages.drop(1)
+
                         } catch (e: Exception) {
-                            // 规划失败不影响正常执行
                             withContext(Dispatchers.Main) {
                                 val line = "[Plan] [规划跳过: ${e.message}]\n\n"
                                 appendRendered(line)

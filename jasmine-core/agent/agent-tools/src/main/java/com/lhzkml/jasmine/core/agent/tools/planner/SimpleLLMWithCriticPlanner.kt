@@ -1,33 +1,212 @@
 package com.lhzkml.jasmine.core.agent.tools.planner
 
 import com.lhzkml.jasmine.core.agent.tools.graph.AgentGraphContext
-import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.prompt
 import kotlinx.serialization.Serializable
 
 /**
  * 带 Critic 的 LLM 规划器
- * 完整移植 koog 的 SimpleLLMWithCriticPlanner。
  *
- * 在 SimpleLLMPlanner 基础上增加了计划评估步骤：
- * 每次执行步骤后，让 LLM 作为 Critic 评估当前计划是否仍然有效，
- * 如果无效则触发重新规划。
- *
- * 使用结构化 JSON 输出（requestLLMStructured）替代文本解析。
+ * 在 SimpleLLMPlanner 基础上增加计划质量验证：
+ * - 在执行前评估计划是否可行、完整、具体
+ * - 不通过则自动触发重新规划（最多 maxCriticRetries 次）
+ * - 评估维度：可行性、完整性、步骤具体性、依赖顺序、工具匹配
  */
 class SimpleLLMWithCriticPlanner(
-    maxIterations: Int = 20
+    maxIterations: Int = 20,
+    private val maxCriticRetries: Int = 2
 ) : SimpleLLMPlanner(maxIterations) {
 
-    /**
-     * 计划评估结构化输出
-     * 参考 koog 的 PlanEvaluation
-     */
     @Serializable
-    private data class PlanEvaluation(
-        val shouldContinue: Boolean,
-        val reason: String
+    data class PlanEvaluation(
+        val score: Int,
+        val isAcceptable: Boolean,
+        val issues: List<String>,
+        val suggestions: List<String>
     )
+
+    /**
+     * 公开的计划验证方法。
+     * 生成计划后调用此方法评估质量，不通过则重新生成。
+     *
+     * @return Pair<最终计划, 评估结果（最后一次）>
+     */
+    suspend fun buildAndValidatePlan(
+        context: AgentGraphContext,
+        state: String
+    ): Pair<SimplePlan, PlanEvaluation?> {
+        var plan = buildPlanPublic(context, state, null)
+        var lastEvaluation: PlanEvaluation? = null
+
+        repeat(maxCriticRetries) { attempt ->
+            val evaluation = evaluatePlan(context, state, plan)
+            lastEvaluation = evaluation
+
+            if (evaluation.isAcceptable) return Pair(plan, evaluation)
+
+            plan = buildPlanPublic(
+                context, state,
+                SimplePlan(
+                    goal = plan.goal,
+                    steps = plan.steps.toMutableList()
+                ).also {
+                    // 触发 Replan 路径
+                }
+            )
+
+            // 使用 Critic 反馈触发 Replan
+            val reason = buildString {
+                appendLine("Critic score: ${evaluation.score}/10")
+                if (evaluation.issues.isNotEmpty()) {
+                    appendLine("Issues:")
+                    evaluation.issues.forEach { appendLine("- $it") }
+                }
+                if (evaluation.suggestions.isNotEmpty()) {
+                    appendLine("Suggestions:")
+                    evaluation.suggestions.forEach { appendLine("- $it") }
+                }
+            }
+            plan = rebuildWithFeedback(context, state, plan, reason)
+        }
+
+        return Pair(plan, lastEvaluation)
+    }
+
+    private suspend fun rebuildWithFeedback(
+        context: AgentGraphContext,
+        state: String,
+        currentPlan: SimplePlan,
+        criticFeedback: String
+    ): SimplePlan {
+        val toolNames = context.toolRegistry.descriptors().map { it.name }
+
+        context.session.rewritePrompt { _ ->
+            prompt("planner-revision") {
+                system(buildString {
+                    appendLine("# Plan Revision")
+                    appendLine("Your previous plan was evaluated by a critic and needs improvement.")
+                    appendLine()
+
+                    if (toolNames.isNotEmpty()) {
+                        appendLine("## Available Tools")
+                        appendLine(toolNames.joinToString(", "))
+                        appendLine()
+                    }
+
+                    appendLine("## Previous Plan")
+                    appendLine("Goal: ${currentPlan.goal}")
+                    currentPlan.steps.forEachIndexed { i, step ->
+                        appendLine("${i + 1}. [${step.type}] ${step.description}")
+                    }
+                    appendLine()
+
+                    appendLine("## Critic Feedback")
+                    appendLine(criticFeedback)
+                    appendLine()
+
+                    appendLine("## Instructions")
+                    appendLine("Create an improved plan that addresses all the issues above.")
+                    appendLine("Keep what works, fix what doesn't. Be more specific and actionable.")
+                    appendLine()
+                    appendLine("## User Request")
+                    appendLine(state)
+                })
+            }
+        }
+
+        val result = context.session.requestLLMStructured(
+            serializer = SimplePlan.serializer(),
+            examples = listOf(
+                SimplePlan(
+                    goal = "Improved goal based on feedback",
+                    steps = mutableListOf(
+                        PlanStep("Specific research step with file paths", "research"),
+                        PlanStep("Concrete action with tool references", "action"),
+                        PlanStep("Verification step with expected outcome", "verify")
+                    )
+                )
+            )
+        ).getOrThrow()
+
+        return SimplePlan(
+            goal = result.data.goal,
+            steps = result.data.steps.toMutableList()
+        )
+    }
+
+    private suspend fun evaluatePlan(
+        context: AgentGraphContext,
+        state: String,
+        plan: SimplePlan
+    ): PlanEvaluation {
+        val oldPrompt = context.session.prompt.copy()
+        val toolNames = context.toolRegistry.descriptors().map { it.name }
+
+        context.session.rewritePrompt { _ ->
+            prompt("critic") {
+                system(buildString {
+                    appendLine("# Plan Quality Evaluation")
+                    appendLine("You are a critical evaluator. Assess the plan below on a 1-10 scale.")
+                    appendLine()
+                    appendLine("## Evaluation Criteria")
+                    appendLine("1. **Completeness** — Does the plan cover all aspects of the task?")
+                    appendLine("2. **Specificity** — Are steps concrete and actionable (not vague)?")
+                    appendLine("3. **Ordering** — Are steps in the right dependency order?")
+                    appendLine("4. **Feasibility** — Can the available tools execute each step?")
+                    appendLine("5. **Verification** — Does the plan include validation/testing steps?")
+                    appendLine()
+
+                    if (toolNames.isNotEmpty()) {
+                        appendLine("## Available Tools")
+                        appendLine(toolNames.joinToString(", "))
+                        appendLine()
+                    }
+
+                    appendLine("## User Request")
+                    appendLine(state)
+                    appendLine()
+                    appendLine("## Plan to Evaluate")
+                    appendLine("Goal: ${plan.goal}")
+                    plan.steps.forEachIndexed { i, step ->
+                        appendLine("${i + 1}. [${step.type}] ${step.description}")
+                    }
+                    appendLine()
+                    appendLine("## Scoring")
+                    appendLine("- score 8-10: Acceptable, proceed to execution")
+                    appendLine("- score 5-7: Marginal, has issues but workable")
+                    appendLine("- score 1-4: Unacceptable, must be revised")
+                    appendLine("- Set isAcceptable=true if score >= 7")
+                })
+            }
+        }
+
+        val result = context.session.requestLLMStructured(
+            serializer = PlanEvaluation.serializer(),
+            examples = listOf(
+                PlanEvaluation(
+                    score = 8,
+                    isAcceptable = true,
+                    issues = emptyList(),
+                    suggestions = listOf("Consider adding a test step at the end")
+                ),
+                PlanEvaluation(
+                    score = 4,
+                    isAcceptable = false,
+                    issues = listOf(
+                        "Step 2 is too vague — 'implement feature' doesn't specify what to change",
+                        "Missing research step — should read existing code first"
+                    ),
+                    suggestions = listOf(
+                        "Add a step to read the relevant source files before making changes",
+                        "Break step 2 into specific file edits"
+                    )
+                )
+            )
+        ).getOrThrow()
+
+        context.session.rewritePrompt { oldPrompt }
+        return result.data
+    }
 
     override suspend fun assessPlan(
         context: AgentGraphContext,
@@ -36,78 +215,15 @@ class SimpleLLMWithCriticPlanner(
     ): PlanAssessment<SimplePlan> {
         if (plan == null) return PlanAssessment.NoPlan()
 
-        // 参考 koog：保存原始 prompt，评估后恢复
-        val oldPrompt = context.session.prompt.copy()
-
-        // 参考 koog：使用 rewritePrompt 构建 Critic prompt
-        context.session.rewritePrompt { _ ->
-            prompt("critic") {
-                system(buildString {
-                    appendLine("# Plan Evaluation Task")
-                    appendLine("You are a critical evaluator of plans. Your job is to assess whether the current plan is still valid and should be continued, or if it needs to be replanned.")
-                    appendLine()
-                    appendLine("## Current Plan")
-                    appendLine("Goal: ${plan.goal}")
-                    appendLine()
-                    appendLine("### Steps:")
-                    plan.steps.forEachIndexed { index, step ->
-                        if (step.isCompleted) {
-                            appendLine("${index + 1}. [COMPLETED] ${step.description}")
-                        } else {
-                            appendLine("${index + 1}. ${step.description}")
-                        }
-                    }
-                    appendLine()
-                    appendLine("## Current State")
-                    appendLine("Current state value: $state")
-                    appendLine()
-                    appendLine("## Evaluation Instructions")
-                    appendLine("Please evaluate this plan carefully. Consider:")
-                    appendLine("- Is the plan still aligned with the goal?")
-                    appendLine("- Are the remaining steps sufficient to achieve the goal?")
-                    appendLine("- Has any new information emerged that makes the plan obsolete?")
-                    appendLine("- Are there any logical flaws or inefficiencies in the plan?")
-                    appendLine("- Are there any steps that might be impossible to execute?")
-                    appendLine()
-                    appendLine("Provide a structured response with your decision and reasoning.")
-                })
-
-                // 参考 koog：保留非 system 消息作为上下文
-                oldPrompt.messages
-                    .filter { it.role != "system" }
-                    .forEach { message(it) }
-            }
-        }
-
-        // 参考 koog：使用 requestLLMStructured 获取结构化评估
-        val evaluationResult = context.session.requestLLMStructured(
-            serializer = PlanEvaluation.serializer(),
-            examples = listOf(
-                PlanEvaluation(
-                    shouldContinue = true,
-                    reason = "The plan is well-structured and all steps are logical and achievable. " +
-                        "The completed steps have made good progress toward the goal and nothing prevents " +
-                        "the plan from continuing. " +
-                        "Newly discovered observations do not invalidate the plan."
-                ),
-                PlanEvaluation(
-                    shouldContinue = false,
-                    reason = "The plan needs to be revised because step 3 is no longer feasible " +
-                        "given the new information in the current state.\n" +
-                        "Specific information is: ........\n"
-                )
-            )
-        ).getOrThrow()
-
-        // 参考 koog：恢复原始 prompt
-        context.session.rewritePrompt { oldPrompt }
-
-        val evaluation = evaluationResult.data
-
-        return if (evaluation.shouldContinue) {
+        val evaluation = evaluatePlan(context, state, plan)
+        return if (evaluation.isAcceptable) {
             PlanAssessment.Continue(plan)
         } else {
-            PlanAssessment.Replan(plan, reason = evaluation.reason)
+            val reason = buildString {
+                appendLine("Score: ${evaluation.score}/10")
+                evaluation.issues.forEach { appendLine("- $it") }
+            }
+            PlanAssessment.Replan(plan, reason)
         }
     }
 }
