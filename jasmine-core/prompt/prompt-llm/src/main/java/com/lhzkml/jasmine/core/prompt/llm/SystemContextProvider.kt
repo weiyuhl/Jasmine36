@@ -8,6 +8,8 @@ package com.lhzkml.jasmine.core.prompt.llm
  *
  * 每个 Provider 负责提供一段上下文信息（如工作区路径、系统信息、当前时间等），
  * 由 SystemContextCollector 统一收集并拼接到 system prompt 末尾。
+ *
+ * @param query 当前用户消息（可选），用于 RAG 等需要根据用户输入检索的 Provider；同步 Provider 可忽略
  */
 interface SystemContextProvider {
     /** 上下文段落的标识名，用于去重和调试 */
@@ -15,9 +17,10 @@ interface SystemContextProvider {
 
     /**
      * 返回要注入到 system prompt 的上下文内容。
-     * 返回 null 表示当前条件下不需要注入。
+     * @param query 当前用户消息，RAG 等场景下用于语义检索；大多数 Provider 可忽略
+     * @return 要注入的内容，null 表示不需要注入
      */
-    fun getContextSection(): String?
+    suspend fun getContextSection(query: String?): String?
 }
 
 /**
@@ -48,10 +51,10 @@ class SystemContextCollector {
 
     /**
      * 收集所有上下文并拼接到基础 system prompt 后面。
-     * 如果没有任何上下文，返回原始 prompt 不变。
+     * @param currentUserMessage 当前用户消息，用于 RAG 等需要 query 的 Provider
      */
-    fun buildSystemPrompt(basePrompt: String): String {
-        val sections = providers.mapNotNull { it.getContextSection() }
+    suspend fun buildSystemPrompt(basePrompt: String, currentUserMessage: String? = null): String {
+        val sections = providers.mapNotNull { it.getContextSection(currentUserMessage) }
         if (sections.isEmpty()) return basePrompt
         return basePrompt + "\n\n" + sections.joinToString("\n\n")
     }
@@ -67,7 +70,7 @@ class SystemContextCollector {
  */
 class WorkspaceContextProvider(private val workspacePath: String) : SystemContextProvider {
     override val name = "workspace"
-    override fun getContextSection(): String {
+    override suspend fun getContextSection(query: String?): String {
         if (workspacePath.isBlank()) return ""
         return "<workspace>\n" +
             "当前工作区路径: $workspacePath\n" +
@@ -82,7 +85,7 @@ class WorkspaceContextProvider(private val workspacePath: String) : SystemContex
  */
 class SystemInfoContextProvider : SystemContextProvider {
     override val name = "system_info"
-    override fun getContextSection(): String {
+    override suspend fun getContextSection(query: String?): String {
         val os = System.getProperty("os.name") ?: "Unknown"
         val arch = System.getProperty("os.arch") ?: "Unknown"
         val sdkInt = try {
@@ -99,7 +102,7 @@ class SystemInfoContextProvider : SystemContextProvider {
  */
 class CurrentTimeContextProvider : SystemContextProvider {
     override val name = "current_time"
-    override fun getContextSection(): String {
+    override suspend fun getContextSection(query: String?): String {
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm (EEEE)", java.util.Locale.getDefault())
         return "<current_date_and_time>\n${sdf.format(java.util.Date())}\n</current_date_and_time>"
     }
@@ -128,7 +131,7 @@ class AgentPromptContextProvider(
 ) : SystemContextProvider {
 
     override val name = "agent_prompt"
-    override fun getContextSection(): String = buildString {
+    override suspend fun getContextSection(query: String?): String = buildString {
         // ==================== 1. Identity ====================
         appendLine("<identity>")
         appendLine("You are $agentName, an AI coding assistant running on Android.")
@@ -396,7 +399,7 @@ class AgentPromptContextProvider(
  */
 class PersonalRulesContextProvider(private val rules: String) : SystemContextProvider {
     override val name = "personal_rules"
-    override fun getContextSection(): String? {
+    override suspend fun getContextSection(query: String?): String? {
         if (rules.isBlank()) return null
         return "<user_rules description=\"These are rules set by the user that you should follow if appropriate.\">\n" +
             rules.trim().lines().joinToString("\n") { "<user_rule>$it</user_rule>" } +
@@ -412,7 +415,7 @@ class PersonalRulesContextProvider(private val rules: String) : SystemContextPro
  */
 class ProjectRulesContextProvider(private val rules: String) : SystemContextProvider {
     override val name = "project_rules"
-    override fun getContextSection(): String? {
+    override suspend fun getContextSection(query: String?): String? {
         if (rules.isBlank()) return null
         return "<project_rules description=\"These are rules specific to the current project/workspace.\">\n" +
             rules.trim().lines().joinToString("\n") { "<project_rule>$it</project_rule>" } +
@@ -427,7 +430,7 @@ class CustomContextProvider(
     override val name: String,
     private val content: String
 ) : SystemContextProvider {
-    override fun getContextSection(): String? {
+    override suspend fun getContextSection(query: String?): String? {
         return content.ifBlank { null }
     }
 }

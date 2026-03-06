@@ -178,6 +178,19 @@ interface ConfigRepository {
     fun getProjectRules(workspacePath: String): String
     fun setProjectRules(workspacePath: String, rules: String)
 
+    // ========== RAG 知识库 ==========
+
+    fun isRagEnabled(): Boolean
+    fun setRagEnabled(enabled: Boolean)
+    fun getRagTopK(): Int
+    fun setRagTopK(value: Int)
+    fun getRagEmbeddingBaseUrl(): String
+    fun setRagEmbeddingBaseUrl(url: String)
+    fun getRagEmbeddingApiKey(): String
+    fun setRagEmbeddingApiKey(key: String)
+    fun getRagEmbeddingModel(): String
+    fun setRagEmbeddingModel(model: String)
+
     // ========== Agent 模式 ==========
 
     fun isAgentMode(): Boolean

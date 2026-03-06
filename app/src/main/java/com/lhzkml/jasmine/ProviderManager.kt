@@ -260,6 +260,19 @@ object ProviderManager {
     fun getProjectRules(context: Context, workspacePath: String): String = configRepo.getProjectRules(workspacePath)
     fun setProjectRules(context: Context, workspacePath: String, rules: String) = configRepo.setProjectRules(workspacePath, rules)
 
+    // ========== RAG 知识库 ==========
+
+    fun isRagEnabled(context: Context): Boolean = configRepo.isRagEnabled()
+    fun setRagEnabled(context: Context, enabled: Boolean) = configRepo.setRagEnabled(enabled)
+    fun getRagTopK(context: Context): Int = configRepo.getRagTopK()
+    fun setRagTopK(context: Context, value: Int) = configRepo.setRagTopK(value)
+    fun getRagEmbeddingBaseUrl(context: Context): String = configRepo.getRagEmbeddingBaseUrl()
+    fun setRagEmbeddingBaseUrl(context: Context, url: String) = configRepo.setRagEmbeddingBaseUrl(url)
+    fun getRagEmbeddingApiKey(context: Context): String = configRepo.getRagEmbeddingApiKey()
+    fun setRagEmbeddingApiKey(context: Context, key: String) = configRepo.setRagEmbeddingApiKey(key)
+    fun getRagEmbeddingModel(context: Context): String = configRepo.getRagEmbeddingModel()
+    fun setRagEmbeddingModel(context: Context, model: String) = configRepo.setRagEmbeddingModel(model)
+
     // ========== Agent 模式 ==========
 
     fun isAgentMode(context: Context): Boolean = configRepo.isAgentMode()

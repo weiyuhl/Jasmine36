@@ -404,6 +404,19 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
         prefs().edit().putString(key, rules).apply()
     }
 
+    // ========== RAG 知识库 ==========
+
+    override fun isRagEnabled(): Boolean = prefs().getBoolean("rag_enabled", false)
+    override fun setRagEnabled(enabled: Boolean) { prefs().edit().putBoolean("rag_enabled", enabled).apply() }
+    override fun getRagTopK(): Int = prefs().getInt("rag_top_k", 5).coerceIn(1, 32)
+    override fun setRagTopK(value: Int) { prefs().edit().putInt("rag_top_k", value.coerceIn(1, 32)).apply() }
+    override fun getRagEmbeddingBaseUrl(): String = prefs().getString("rag_embedding_base_url", null) ?: ""
+    override fun setRagEmbeddingBaseUrl(url: String) { prefs().edit().putString("rag_embedding_base_url", url).apply() }
+    override fun getRagEmbeddingApiKey(): String = prefs().getString("rag_embedding_api_key", null) ?: ""
+    override fun setRagEmbeddingApiKey(key: String) { prefs().edit().putString("rag_embedding_api_key", key).apply() }
+    override fun getRagEmbeddingModel(): String = prefs().getString("rag_embedding_model", null) ?: "text-embedding-3-small"
+    override fun setRagEmbeddingModel(model: String) { prefs().edit().putString("rag_embedding_model", model).apply() }
+
     // ========== Agent 模式 ==========
 
     override fun isAgentMode(): Boolean = prefs().getBoolean("agent_mode", false)

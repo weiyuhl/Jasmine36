@@ -4,6 +4,9 @@ pluginManagement {
             if (requested.id.id == "com.google.android.gms.oss-licenses-plugin") {
                 useModule("com.google.android.gms:oss-licenses-plugin:0.10.10")
             }
+            if (requested.id.id == "io.objectbox") {
+                useModule("io.objectbox:objectbox-gradle-plugin:${requested.version}")
+            }
         }
     }
     repositories {
@@ -41,3 +44,6 @@ include(":jasmine-core:agent:agent-mcp")
 include(":jasmine-core:agent:agent-a2a")
 include(":jasmine-core:agent:agent-runtime")
 include(":jasmine-core:config:config-manager")
+include(":jasmine-core:rag:rag-core")
+include(":jasmine-core:rag:rag-objectbox")
+include(":jasmine-core:rag:rag-embedding-api")

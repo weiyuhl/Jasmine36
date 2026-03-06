@@ -1,9 +1,9 @@
 package com.lhzkml.jasmine.core.agent.graph.graph
 
 /**
- * ??? DSL ????
+ * 图策略 DSL 构建器。
  *
- * ??:
+ * 用法:
  * ```kotlin
  * val strategy = graphStrategy<String, String>("myStrategy") {
  *     val upper = node<String, String>("upper") { it.uppercase() }

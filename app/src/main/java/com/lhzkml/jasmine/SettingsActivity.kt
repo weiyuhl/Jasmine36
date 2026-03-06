@@ -188,6 +188,14 @@ fun SettingsScreen(
                         context.startActivity(Intent(context, SystemPromptConfigActivity::class.java))
                     }
                 )
+                SettingsItem(
+                    title = "RAG 知识库",
+                    subtitle = "向量检索增强上下文",
+                    value = getRagInfo(context),
+                    onClick = {
+                        context.startActivity(Intent(context, com.lhzkml.jasmine.rag.RagConfigActivity::class.java))
+                    }
+                )
 
                 // ─── Rules ───
                 SettingsItem(
@@ -404,6 +412,14 @@ fun SettingsSwitchItem(
 }
 
 // 辅助函数
+private fun getRagInfo(context: android.content.Context): String {
+    if (!ProviderManager.isRagEnabled(context)) return "已关闭"
+    val topK = ProviderManager.getRagTopK(context)
+    val url = ProviderManager.getRagEmbeddingBaseUrl(context)
+    val hasConfig = url.isNotBlank() && ProviderManager.getRagEmbeddingApiKey(context).isNotBlank()
+    return if (hasConfig) "TopK $topK · 已配置" else "未配置 API"
+}
+
 private fun getProviderStatus(context: android.content.Context): String {
     val config = ProviderManager.getActiveConfig()
     return if (config != null) {

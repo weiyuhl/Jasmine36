@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -23,7 +24,7 @@ class ContextCollectorConfiguratorTest {
         // system_info + current_time = 2
         assertEquals(2, collector.size)
 
-        val prompt = collector.buildSystemPrompt("Hello")
+        val prompt = runBlocking { collector.buildSystemPrompt("Hello") }
         assertTrue(prompt.contains("Hello"))
         assertTrue(prompt.contains("<system_information>"))
         assertTrue(prompt.contains("<current_date_and_time>"))
@@ -42,7 +43,7 @@ class ContextCollectorConfiguratorTest {
         // agent_prompt + workspace + system_info + current_time = 4
         assertEquals(4, collector.size)
 
-        val prompt = collector.buildSystemPrompt("Base")
+        val prompt = runBlocking { collector.buildSystemPrompt("Base") }
         assertTrue(prompt.contains("<identity>"))
         assertTrue(prompt.contains("Jasmine"))
         assertTrue(prompt.contains("<workspace>"))
@@ -60,7 +61,7 @@ class ContextCollectorConfiguratorTest {
         // agent_prompt + system_info + current_time = 3 (no workspace)
         assertEquals(3, collector.size)
 
-        val prompt = collector.buildSystemPrompt("Base")
+        val prompt = runBlocking { collector.buildSystemPrompt("Base") }
         assertTrue(prompt.contains("<identity>"))
         assertFalse(prompt.contains("<workspace>"))
     }
@@ -76,7 +77,7 @@ class ContextCollectorConfiguratorTest {
         // personal_rules + system_info + current_time = 3
         assertEquals(3, collector.size)
 
-        val prompt = collector.buildSystemPrompt("Base")
+        val prompt = runBlocking { collector.buildSystemPrompt("Base") }
         assertTrue(prompt.contains("<user_rules"))
         assertTrue(prompt.contains("Always respond in Chinese"))
     }
@@ -103,7 +104,7 @@ class ContextCollectorConfiguratorTest {
 
         // project rules skipped because workspacePath is empty
         assertEquals(2, collector.size)
-        val prompt = collector.buildSystemPrompt("Base")
+        val prompt = runBlocking { collector.buildSystemPrompt("Base") }
         assertFalse(prompt.contains("<project_rules"))
     }
 
@@ -119,7 +120,7 @@ class ContextCollectorConfiguratorTest {
         // project_rules + system_info + current_time = 3
         assertEquals(3, collector.size)
 
-        val prompt = collector.buildSystemPrompt("Base")
+        val prompt = runBlocking { collector.buildSystemPrompt("Base") }
         assertTrue(prompt.contains("<project_rules"))
         assertTrue(prompt.contains("Use MVVM"))
         assertTrue(prompt.contains("Prefer Coroutines"))
@@ -139,7 +140,7 @@ class ContextCollectorConfiguratorTest {
         // agent_prompt + workspace + personal_rules + project_rules + system_info + current_time = 6
         assertEquals(6, collector.size)
 
-        val prompt = collector.buildSystemPrompt("Base")
+        val prompt = runBlocking { collector.buildSystemPrompt("Base") }
         assertTrue(prompt.contains("TestBot"))
         assertTrue(prompt.contains("/home/user/project"))
         assertTrue(prompt.contains("Respond in Chinese"))
@@ -166,7 +167,7 @@ class ContextCollectorConfiguratorTest {
         configurator.configure(collector, config2)
         assertEquals(2, collector.size)
 
-        val prompt = collector.buildSystemPrompt("Base")
+        val prompt = runBlocking { collector.buildSystemPrompt("Base") }
         assertFalse(prompt.contains("<identity>"))
         assertFalse(prompt.contains("Rule1"))
     }
@@ -179,7 +180,7 @@ class ContextCollectorConfiguratorTest {
         )
         configurator.configure(collector, config)
 
-        val prompt = collector.buildSystemPrompt("Base")
+        val prompt = runBlocking { collector.buildSystemPrompt("Base") }
         assertTrue(prompt.contains("MyAssistant"))
         assertFalse(prompt.contains("Jasmine"))
     }

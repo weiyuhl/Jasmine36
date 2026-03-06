@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine.core.prompt.llm
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -20,7 +21,7 @@ class SystemContextProviderTest {
         
         assertEquals(1, collector.size)
         
-        val result = collector.buildSystemPrompt("Base prompt")
+        val result = runBlocking { collector.buildSystemPrompt("Base prompt") }
         assertTrue(result.contains("Base prompt"))
         assertTrue(result.contains("Test content"))
     }
@@ -30,7 +31,7 @@ class SystemContextProviderTest {
         val provider = CustomContextProvider("test", "Test content")
         collector.register(provider)
         
-        val result = collector.buildSystemPrompt("")
+        val result = runBlocking { collector.buildSystemPrompt("") }
         assertTrue(result.contains("Test content"))
     }
 
@@ -39,7 +40,7 @@ class SystemContextProviderTest {
         val provider = CustomContextProvider("test", "")
         collector.register(provider)
         
-        val result = collector.buildSystemPrompt("Base prompt")
+        val result = runBlocking { collector.buildSystemPrompt("Base prompt") }
         assertEquals("Base prompt", result)
     }
 
@@ -50,7 +51,7 @@ class SystemContextProviderTest {
         
         assertEquals(1, collector.size)
         
-        val result = collector.buildSystemPrompt("Base")
+        val result = runBlocking { collector.buildSystemPrompt("Base") }
         assertTrue(result.contains("Second"))
         assertFalse(result.contains("First"))
     }
@@ -65,7 +66,7 @@ class SystemContextProviderTest {
         collector.unregister("test1")
         assertEquals(1, collector.size)
         
-        val result = collector.buildSystemPrompt("Base")
+        val result = runBlocking { collector.buildSystemPrompt("Base") }
         assertFalse(result.contains("Content1"))
         assertTrue(result.contains("Content2"))
     }
@@ -78,7 +79,7 @@ class SystemContextProviderTest {
         collector.clear()
         assertEquals(0, collector.size)
         
-        val result = collector.buildSystemPrompt("Base")
+        val result = runBlocking { collector.buildSystemPrompt("Base") }
         assertEquals("Base", result)
     }
 
@@ -88,7 +89,7 @@ class SystemContextProviderTest {
         collector.register(CustomContextProvider("test2", "Content2"))
         collector.register(CustomContextProvider("test3", "Content3"))
         
-        val result = collector.buildSystemPrompt("Base")
+        val result = runBlocking { collector.buildSystemPrompt("Base") }
         assertTrue(result.contains("Base"))
         assertTrue(result.contains("Content1"))
         assertTrue(result.contains("Content2"))
@@ -101,7 +102,7 @@ class SystemContextProviderTest {
         
         assertEquals("workspace", provider.name)
         
-        val content = provider.getContextSection()
+        val content = runBlocking { provider.getContextSection(null) }
         assertNotNull(content)
         assertTrue(content!!.contains("/test/workspace"))
         assertTrue(content.contains("<workspace>"))
@@ -111,7 +112,7 @@ class SystemContextProviderTest {
     @Test
     fun `test WorkspaceContextProvider with blank path`() {
         val provider = WorkspaceContextProvider("")
-        val content = provider.getContextSection()
+        val content = runBlocking { provider.getContextSection(null) }
         assertEquals("", content)
     }
 
@@ -121,7 +122,7 @@ class SystemContextProviderTest {
         
         assertEquals("current_time", provider.name)
         
-        val content = provider.getContextSection()
+        val content = runBlocking { provider.getContextSection(null) }
         assertNotNull(content)
         assertTrue(content!!.contains("<current_date_and_time>"))
         assertTrue(content.contains("</current_date_and_time>"))
@@ -133,7 +134,7 @@ class SystemContextProviderTest {
         
         assertEquals("agent_prompt", provider.name)
         
-        val content = provider.getContextSection()
+        val content = runBlocking { provider.getContextSection(null) }
         assertNotNull(content)
         assertTrue(content!!.contains("TestAgent"))
         assertTrue(content.contains("<identity>"))
@@ -150,7 +151,7 @@ class SystemContextProviderTest {
 
         assertEquals("personal_rules", provider.name)
 
-        val content = provider.getContextSection()
+        val content = runBlocking { provider.getContextSection(null) }
         assertNotNull(content)
         assertTrue(content!!.contains("<user_rules"))
         assertTrue(content.contains("</user_rules>"))
@@ -161,19 +162,19 @@ class SystemContextProviderTest {
     @Test
     fun `test PersonalRulesContextProvider with blank rules`() {
         val provider = PersonalRulesContextProvider("")
-        assertNull(provider.getContextSection())
+        assertNull(runBlocking { provider.getContextSection(null) })
     }
 
     @Test
     fun `test PersonalRulesContextProvider with whitespace only`() {
         val provider = PersonalRulesContextProvider("   \n  \n  ")
-        assertNull(provider.getContextSection())
+        assertNull(runBlocking { provider.getContextSection(null) })
     }
 
     @Test
     fun `test PersonalRulesContextProvider with single rule`() {
         val provider = PersonalRulesContextProvider("Use Kotlin")
-        val content = provider.getContextSection()
+        val content = runBlocking { provider.getContextSection(null) }
         assertNotNull(content)
         assertTrue(content!!.contains("<user_rule>Use Kotlin</user_rule>"))
     }
@@ -186,7 +187,7 @@ class SystemContextProviderTest {
 
         assertEquals("project_rules", provider.name)
 
-        val content = provider.getContextSection()
+        val content = runBlocking { provider.getContextSection(null) }
         assertNotNull(content)
         assertTrue(content!!.contains("<project_rules"))
         assertTrue(content.contains("</project_rules>"))
@@ -197,13 +198,13 @@ class SystemContextProviderTest {
     @Test
     fun `test ProjectRulesContextProvider with blank rules`() {
         val provider = ProjectRulesContextProvider("")
-        assertNull(provider.getContextSection())
+        assertNull(runBlocking { provider.getContextSection(null) })
     }
 
     @Test
     fun `test ProjectRulesContextProvider with whitespace only`() {
         val provider = ProjectRulesContextProvider("  \n  ")
-        assertNull(provider.getContextSection())
+        assertNull(runBlocking { provider.getContextSection(null) })
     }
 
     // ========== Rules integration ==========
@@ -213,7 +214,7 @@ class SystemContextProviderTest {
         collector.register(PersonalRulesContextProvider("Respond in Chinese"))
         collector.register(ProjectRulesContextProvider("Use Kotlin"))
 
-        val result = collector.buildSystemPrompt("Base prompt")
+        val result = runBlocking { collector.buildSystemPrompt("Base prompt") }
         assertTrue(result.contains("Respond in Chinese"))
         assertTrue(result.contains("Use Kotlin"))
         assertTrue(result.contains("<user_rules"))
@@ -225,14 +226,14 @@ class SystemContextProviderTest {
         collector.register(PersonalRulesContextProvider(""))
         collector.register(ProjectRulesContextProvider(""))
 
-        val result = collector.buildSystemPrompt("Base prompt")
+        val result = runBlocking { collector.buildSystemPrompt("Base prompt") }
         assertEquals("Base prompt", result)
     }
 
     @Test
     fun `test CustomContextProvider with blank content`() {
         val provider = CustomContextProvider("test", "   ")
-        val content = provider.getContextSection()
+        val content = runBlocking { provider.getContextSection(null) }
         assertNull(content)
     }
 
@@ -244,7 +245,7 @@ class SystemContextProviderTest {
         collector.register(AgentPromptContextProvider("Jasmine", "/home/user/project"))
         
         val basePrompt = "You are an AI assistant."
-        val fullPrompt = collector.buildSystemPrompt(basePrompt)
+        val fullPrompt = runBlocking { collector.buildSystemPrompt(basePrompt) }
         
         assertTrue(fullPrompt.contains("You are an AI assistant."))
         assertTrue(fullPrompt.contains("/home/user/project"))

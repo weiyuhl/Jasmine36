@@ -87,7 +87,7 @@ class ChatExecutor(
             if (currentConversationId() == null) {
                 val title = if (message.length > 20) message.substring(0, 20) + "..." else message
                 val basePrompt = ProviderManager.getDefaultSystemPrompt(context)
-                val systemPrompt = contextCollector().buildSystemPrompt(basePrompt)
+                val systemPrompt = contextCollector().buildSystemPrompt(basePrompt, currentUserMessage = message)
                 val convId = conversationRepo.createConversation(
                     title = title,
                     providerId = config.providerId,
@@ -102,7 +102,7 @@ class ChatExecutor(
                 conversationRepo.addMessage(convId, systemMsg)
             } else {
                 val basePrompt = ProviderManager.getDefaultSystemPrompt(context)
-                val updatedSystemPrompt = contextCollector().buildSystemPrompt(basePrompt)
+                val updatedSystemPrompt = contextCollector().buildSystemPrompt(basePrompt, currentUserMessage = message)
                 if (messageHistory.isNotEmpty() && messageHistory[0].role == "system") {
                     messageHistory[0] = ChatMessage.system(updatedSystemPrompt)
                 }

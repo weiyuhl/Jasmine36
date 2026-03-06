@@ -7,5 +7,6 @@ class JasmineApplication : Application() {
         super.onCreate()
         AppConfig.initialize(this)
         ProviderManager.initialize(this)
+        RagStore.initialize(this)
     }
 }

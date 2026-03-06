@@ -13,6 +13,7 @@ import com.lhzkml.jasmine.core.config.SnapshotStorageType
 import com.lhzkml.jasmine.core.prompt.llm.AgentPromptContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.CurrentTimeContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
+import com.lhzkml.jasmine.core.prompt.llm.SystemContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.SystemInfoContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.WorkspaceContextProvider
 import java.io.File
@@ -152,6 +153,7 @@ class AgentRuntimeBuilder(private val configRepo: ConfigRepository) {
      * @param agentName Agent 名称
      * @param modelName 当前使用的模型名称
      * @param modelDescription 模型描述（可选）
+     * @param additionalProviders 额外 Provider（如 RagContextProvider），由 app 层在 RAG 启用时传入
      * @return 配置好的 SystemContextCollector
      */
     fun buildSystemContext(
@@ -159,7 +161,8 @@ class AgentRuntimeBuilder(private val configRepo: ConfigRepository) {
         workspacePath: String = "",
         agentName: String = "Jasmine",
         modelName: String = "",
-        modelDescription: String = ""
+        modelDescription: String = "",
+        additionalProviders: List<SystemContextProvider> = emptyList()
     ): SystemContextCollector {
         val collector = SystemContextCollector()
 
@@ -183,6 +186,8 @@ class AgentRuntimeBuilder(private val configRepo: ConfigRepository) {
             collector.register(SystemInfoContextProvider())
             collector.register(CurrentTimeContextProvider())
         }
+
+        additionalProviders.forEach { collector.register(it) }
 
         return collector
     }

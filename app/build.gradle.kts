@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.objectbox)
     id("com.google.android.gms.oss-licenses-plugin")
 }
 
@@ -96,7 +97,9 @@ dependencies {
     implementation(project(":jasmine-core:agent:agent-mcp"))
     implementation(project(":jasmine-core:agent:agent-runtime"))
     implementation(project(":jasmine-core:config:config-manager"))
-
+    implementation(project(":jasmine-core:rag:rag-core"))
+    implementation(project(":jasmine-core:rag:rag-objectbox"))
+    implementation(project(":jasmine-core:rag:rag-embedding-api"))
 
     // Markdown 渲染（底层使用 CommonMark，与 Claude App 相同解析引擎）
     implementation("io.noties.markwon:core:4.6.2")
