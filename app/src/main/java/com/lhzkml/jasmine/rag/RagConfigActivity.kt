@@ -76,8 +76,6 @@ fun RagConfigScreen(onBack: () -> Unit) {
     var manualContent by remember { mutableStateOf("") }
     var workspaceTargetLib by remember { mutableStateOf(libraries.firstOrNull()?.id ?: "default") }
     var indexableExtensions by remember { mutableStateOf(ProviderManager.getRagIndexableExtensions(context).toMutableList().sorted()) }
-    var showAddExtensionDialog by remember { mutableStateOf(false) }
-    var newExtension by remember { mutableStateOf("") }
 
     LaunchedEffect(libraries) {
         if (selectedLibForManual !in libraries.map { it.id }) selectedLibForManual = libraries.firstOrNull()?.id ?: "default"
@@ -367,44 +365,43 @@ fun RagConfigScreen(onBack: () -> Unit) {
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                     )
-                    indexableExtensions.sorted().chunked(6).forEach { rowExts ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            rowExts.forEach { ext ->
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(TextSecondary.copy(alpha = 0.15f))
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CustomText(text = ".$ext", fontSize = 12.sp, color = TextPrimary)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    CustomTextButton(
-                                        onClick = {
-                                            indexableExtensions = indexableExtensions - ext
-                                            persistExtensions()
-                                        },
-                                        contentColor = Color(0xFFE53935),
-                                        contentPadding = PaddingValues(2.dp)
-                                    ) {
-                                        CustomText("×", fontSize = 14.sp, color = Color(0xFFE53935))
+                    var extensionsText by remember { mutableStateOf(indexableExtensions.sorted().joinToString(", ")) }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 80.dp, max = 120.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White)
+                            .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        BasicTextField(
+                            value = extensionsText,
+                            onValueChange = { text ->
+                                extensionsText = text
+                                val parsed = text.split(",", " ", "\n")
+                                    .map { it.trim().lowercase().filter { c -> c.isLetterOrDigit() } }
+                                    .filter { it.isNotBlank() }
+                                    .distinct()
+                                if (parsed.toSet() != indexableExtensions.toSet()) {
+                                    indexableExtensions = parsed
+                                    persistExtensions()
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                            textStyle = TextStyle(fontSize = 13.sp, color = TextPrimary),
+                            cursorBrush = SolidColor(TextPrimary),
+                            decorationBox = { inner ->
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    if (extensionsText.isEmpty()) {
+                                        CustomText("kt, java, md, py, ...", fontSize = 13.sp, color = TextSecondary)
                                     }
+                                    inner()
                                 }
                             }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
+                        )
                     }
-                    CustomTextButton(
-                        onClick = { showAddExtensionDialog = true },
-                        contentColor = Accent,
-                        contentPadding = PaddingValues(8.dp)
-                    ) {
-                        CustomText("+ 添加扩展名", fontSize = 14.sp, color = Accent)
-                    }
+                    CustomText(text = "逗号、空格或换行分隔，修改后自动保存", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(top = 4.dp))
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -482,50 +479,6 @@ fun RagConfigScreen(onBack: () -> Unit) {
                 }
             }
         }
-    }
-
-    if (showAddExtensionDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddExtensionDialog = false; newExtension = "" },
-            title = { CustomText("添加扩展名", fontSize = 16.sp, color = TextPrimary, fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    CustomText("扩展名（不含点号，如 kotlin 输入 kt）", fontSize = 14.sp, color = TextPrimary)
-                    RagTextField(
-                        value = newExtension,
-                        onValueChange = { newExtension = it.filter { c -> c.isLetterOrDigit() }.lowercase().take(16) },
-                        placeholder = "例如: kt"
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val ext = newExtension.trim().lowercase()
-                        if (ext.isBlank()) {
-                            Toast.makeText(context, "请输入扩展名", Toast.LENGTH_SHORT).show()
-                            return@TextButton
-                        }
-                        if (ext in indexableExtensions) {
-                            Toast.makeText(context, "已存在", Toast.LENGTH_SHORT).show()
-                            return@TextButton
-                        }
-                        indexableExtensions = (indexableExtensions + ext).distinct().sorted()
-                        persistExtensions()
-                        showAddExtensionDialog = false
-                        newExtension = ""
-                        Toast.makeText(context, "已添加 .$ext", Toast.LENGTH_SHORT).show()
-                    }
-                ) {
-                    CustomText("添加", fontSize = 14.sp, color = Accent)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddExtensionDialog = false; newExtension = "" }) {
-                    CustomText("取消", fontSize = 14.sp, color = TextSecondary)
-                }
-            }
-        )
     }
 
     if (showAddLibraryDialog) {
