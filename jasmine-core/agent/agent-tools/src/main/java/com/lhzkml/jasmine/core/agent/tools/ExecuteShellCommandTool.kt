@@ -74,7 +74,7 @@ data class ShellPolicyConfig(
  * @param basePath 工作目录限制（安全沙箱），null 表示不限制
  */
 class ExecuteShellCommandTool(
-    private val confirmationHandler: suspend (command: String, workingDirectory: String?) -> Boolean = { _, _ -> true },
+    private val confirmationHandler: suspend (command: String, purpose: String, workingDirectory: String?) -> Boolean = { _, _, _ -> true },
     private val policyConfig: ShellPolicyConfig = ShellPolicyConfig(),
     private val basePath: String? = null
 ) : Tool() {
@@ -83,9 +83,11 @@ class ExecuteShellCommandTool(
         name = "execute_shell_command",
         description = "Executes a shell command with optional working directory and timeout. " +
             "Returns command output and exit code. Each call runs in a new isolated shell, " +
-            "so directory changes (cd) do NOT persist. Use workingDirectory parameter instead.",
+            "so directory changes (cd) do NOT persist. Use workingDirectory parameter instead. " +
+            "You MUST provide a clear 'purpose' explaining WHY you are running this command.",
         requiredParameters = listOf(
             ToolParameterDescriptor("command", "The shell command to execute (e.g. 'git status', 'ls -la')", ToolParameterType.StringType),
+            ToolParameterDescriptor("purpose", "A brief explanation of why this command is being executed and what you expect to achieve (e.g. 'Check current git branch to determine deployment target')", ToolParameterType.StringType),
             ToolParameterDescriptor("timeoutSeconds", "Maximum execution time in seconds. Commands exceeding this are terminated", ToolParameterType.IntegerType)
         ),
         optionalParameters = listOf(
@@ -97,14 +99,16 @@ class ExecuteShellCommandTool(
         val obj = Json.parseToJsonElement(arguments).jsonObject
         val command = obj["command"]?.jsonPrimitive?.content
             ?: return "Error: Missing parameter 'command'"
+        val purpose = obj["purpose"]?.jsonPrimitive?.content
+            ?: return "Error: Missing parameter 'purpose'. You must explain why you are running this command."
         val timeoutSeconds = obj["timeoutSeconds"]?.jsonPrimitive?.int ?: 60
         val workingDirectory = obj["workingDirectory"]?.jsonPrimitive?.content
 
         // 根据策略判断是否需要确认
         if (policyConfig.needsConfirmation(command)) {
-            val approved = confirmationHandler(command, workingDirectory)
+            val approved = confirmationHandler(command, purpose, workingDirectory)
             if (!approved) {
-                return "Command execution denied: $command"
+                return "Command execution denied: $command\nPurpose: $purpose"
             }
         }
 
@@ -148,12 +152,14 @@ class ExecuteShellCommandTool(
             if (!finished) {
                 process.destroyForcibly()
                 buildString {
+                    appendLine("Purpose: $purpose")
                     appendLine("Command: $command")
                     if (output.isNotEmpty()) appendLine(output)
                     appendLine("Command timed out after ${timeoutSeconds}s")
                 }.trimEnd()
             } else {
                 buildString {
+                    appendLine("Purpose: $purpose")
                     appendLine("Command: $command")
                     if (output.isNotEmpty()) appendLine(output) else appendLine("(no output)")
                     appendLine("Exit code: ${process.exitValue()}")

@@ -18,7 +18,7 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
      * Shell 命令确认处理器
      * 由 app 层提供实现（如弹出 AlertDialog）
      */
-    var shellConfirmationHandler: (suspend (command: String, workingDir: String?) -> Boolean)? = null
+    var shellConfirmationHandler: (suspend (command: String, purpose: String, workingDir: String?) -> Boolean)? = null
 
     /**
      * 工作区路径（Agent 模式下由用户选择）
@@ -111,7 +111,7 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
                 )
 
                 register(ExecuteShellCommandTool(
-                    confirmationHandler = shellConfirmationHandler ?: { _, _ -> true },
+                    confirmationHandler = shellConfirmationHandler ?: { _, _, _ -> true },
                     policyConfig = policyConfig,
                     basePath = basePath
                 ))

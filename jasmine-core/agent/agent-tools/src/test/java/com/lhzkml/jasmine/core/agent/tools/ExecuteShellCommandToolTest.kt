@@ -13,22 +13,31 @@ class ExecuteShellCommandToolTest {
 
     @Test
     fun `denied command`() = runBlocking {
-        val tool = ExecuteShellCommandTool(confirmationHandler = { _, _ -> false })
-        val result = tool.execute("""{"command": "echo hi", "timeoutSeconds": 5}""")
+        val tool = ExecuteShellCommandTool(confirmationHandler = { _, _, _ -> false })
+        val result = tool.execute("""{"command": "echo hi", "purpose": "Test denied command", "timeoutSeconds": 5}""")
         assertTrue(result.contains("denied"))
     }
 
     @Test
     fun `execute echo command`() = runBlocking {
         val tool = ExecuteShellCommandTool()
-        val result = tool.execute("""{"command": "echo hello", "timeoutSeconds": 10}""")
+        val result = tool.execute("""{"command": "echo hello", "purpose": "Verify echo output", "timeoutSeconds": 10}""")
         assertTrue(result.contains("hello"))
         assertTrue(result.contains("Exit code: 0"))
+        assertTrue(result.contains("Purpose:"))
     }
 
     @Test
     fun `missing command param`() = runBlocking {
         val tool = ExecuteShellCommandTool()
         assertTrue(tool.execute("{}").contains("Error"))
+    }
+
+    @Test
+    fun `missing purpose param`() = runBlocking {
+        val tool = ExecuteShellCommandTool()
+        val result = tool.execute("""{"command": "echo hi", "timeoutSeconds": 5}""")
+        assertTrue(result.contains("Error"))
+        assertTrue(result.contains("purpose"))
     }
 }

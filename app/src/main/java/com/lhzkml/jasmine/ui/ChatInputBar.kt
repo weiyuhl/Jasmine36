@@ -238,9 +238,8 @@ private fun ChatInputBarSheet(
             sheetMaxHeight = 200.dp
         ) {
             if (supportsThinkingMode && onThinkingModeChanged != null) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
                         .border(
                             width = 1.dp,
@@ -254,23 +253,21 @@ private fun ChatInputBarSheet(
                         .clickable(enabled = !isGenerating) {
                             onThinkingModeChanged(!isThinkingModeEnabled)
                         }
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    contentAlignment = Alignment.CenterStart
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_think),
-                            contentDescription = "深度思考",
-                            modifier = Modifier.size(18.dp),
-                            tint = if (isThinkingModeEnabled) Accent else TextSecondary
-                        )
-                        CustomText(
-                            text = "Thinking",
-                            fontSize = 14.sp,
-                            color = if (isThinkingModeEnabled) Accent else TextSecondary,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
+                    Icon(
+                        painter = painterResource(R.drawable.ic_think),
+                        contentDescription = "深度思考",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (isThinkingModeEnabled) Accent else TextSecondary
+                    )
+                    CustomText(
+                        text = "Thinking",
+                        fontSize = 14.sp,
+                        color = if (isThinkingModeEnabled) Accent else TextSecondary,
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
                 }
             }
         }

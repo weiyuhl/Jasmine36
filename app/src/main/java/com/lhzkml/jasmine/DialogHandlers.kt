@@ -18,12 +18,12 @@ import kotlinx.coroutines.withContext
 object DialogHandlers {
 
     fun register(activity: Activity, builder: ToolRegistryBuilder) {
-        builder.shellConfirmationHandler = { command, _ ->
+        builder.shellConfirmationHandler = { command, purpose, _ ->
             val deferred = CompletableDeferred<Boolean>()
             withContext(Dispatchers.Main) {
                 AlertDialog.Builder(activity)
                     .setTitle("执行命令确认")
-                    .setMessage("AI 请求执行以下命令：\n\n$command\n\n是否允许？")
+                    .setMessage("目的：$purpose\n\n命令：$command\n\n是否允许执行？")
                     .setPositiveButton("允许") { _, _ -> deferred.complete(true) }
                     .setNegativeButton("拒绝") { _, _ -> deferred.complete(false) }
                     .setCancelable(false)
