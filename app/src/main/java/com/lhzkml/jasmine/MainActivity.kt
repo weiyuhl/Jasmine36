@@ -39,6 +39,8 @@ import com.lhzkml.jasmine.core.prompt.llm.WorkspaceContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.SystemInfoContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.CurrentTimeContextProvider
 import com.lhzkml.jasmine.core.prompt.llm.AgentPromptContextProvider
+import com.lhzkml.jasmine.core.prompt.llm.PersonalRulesContextProvider
+import com.lhzkml.jasmine.core.prompt.llm.ProjectRulesContextProvider
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
@@ -169,6 +171,20 @@ class MainActivity : AppCompatActivity() {
         // Agent 模式：注入工作区路径
         if (isAgent && wsPath.isNotEmpty()) {
             contextCollector.register(WorkspaceContextProvider(wsPath))
+        }
+
+        // 个人 Rules（全局生效，跨项目）
+        val personalRules = ProviderManager.getPersonalRules(this)
+        if (personalRules.isNotBlank()) {
+            contextCollector.register(PersonalRulesContextProvider(personalRules))
+        }
+
+        // 项目 Rules（仅当前工作区生效）
+        if (wsPath.isNotEmpty()) {
+            val projectRules = ProviderManager.getProjectRules(this, wsPath)
+            if (projectRules.isNotBlank()) {
+                contextCollector.register(ProjectRulesContextProvider(projectRules))
+            }
         }
 
         // 系统信息

@@ -396,6 +396,27 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun getCompressionChunkSize(): Int = prefs().getInt("compression_chunk_size", 20)
     override fun setCompressionChunkSize(value: Int) { prefs().edit().putInt("compression_chunk_size", value).apply() }
 
+    // ========== Rules 规则 ==========
+
+    override fun getPersonalRules(): String =
+        prefs().getString("personal_rules", null) ?: ""
+
+    override fun setPersonalRules(rules: String) {
+        prefs().edit().putString("personal_rules", rules).apply()
+    }
+
+    override fun getProjectRules(workspacePath: String): String {
+        if (workspacePath.isBlank()) return ""
+        val key = "project_rules_$workspacePath"
+        return prefs().getString(key, null) ?: ""
+    }
+
+    override fun setProjectRules(workspacePath: String, rules: String) {
+        if (workspacePath.isBlank()) return
+        val key = "project_rules_$workspacePath"
+        prefs().edit().putString(key, rules).apply()
+    }
+
     // ========== Agent 模式 ==========
 
     override fun isAgentMode(): Boolean = prefs().getBoolean("agent_mode", false)

@@ -35,6 +35,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvTimeoutInfo: TextView
     private lateinit var tvMaxTokens: TextView
     private lateinit var tvSystemPrompt: TextView
+    private lateinit var tvPersonalRules: TextView
+    private lateinit var tvProjectRules: TextView
     private lateinit var tvPromptTokens: TextView
     private lateinit var tvCompletionTokens: TextView
     private lateinit var tvTotalTokens: TextView
@@ -137,6 +139,18 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, EventHandlerConfigActivity::class.java))
         }
 
+        // 个人 Rules
+        tvPersonalRules = findViewById(R.id.tvPersonalRules)
+        findViewById<LinearLayout>(R.id.layoutPersonalRules).setOnClickListener {
+            showPersonalRulesDialog()
+        }
+
+        // 项目 Rules
+        tvProjectRules = findViewById(R.id.tvProjectRules)
+        findViewById<LinearLayout>(R.id.layoutProjectRules).setOnClickListener {
+            showProjectRulesDialog()
+        }
+
         // 系统提示词编辑
         findViewById<LinearLayout>(R.id.layoutSystemPrompt).setOnClickListener {
             showSystemPromptDialog()
@@ -168,6 +182,8 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         refreshProviderStatus()
         refreshSystemPrompt()
+        refreshPersonalRules()
+        refreshProjectRules()
         refreshMaxTokens()
         refreshUsageStats()
         refreshTopKVisibility()
@@ -492,6 +508,95 @@ class SettingsActivity : AppCompatActivity() {
         val timeoutStr = if (parts.isEmpty()) "默认" else parts.joinToString(" · ")
         val resumeStr = if (resumeEnabled) "续传开启" else "续传关闭"
         tvTimeoutInfo.text = "$timeoutStr · $resumeStr"
+    }
+
+    // ========== Rules ==========
+
+    private fun refreshPersonalRules() {
+        val rules = ProviderManager.getPersonalRules(this)
+        tvPersonalRules.text = if (rules.isBlank()) "定义模型输出语言、代码风格等全局规则"
+        else if (rules.length > 40) rules.substring(0, 40) + "..." else rules
+    }
+
+    private fun refreshProjectRules() {
+        val wsPath = ProviderManager.getWorkspacePath(this)
+        if (wsPath.isEmpty()) {
+            tvProjectRules.text = "未设置工作区，无法配置项目规则"
+            return
+        }
+        val rules = ProviderManager.getProjectRules(this, wsPath)
+        tvProjectRules.text = if (rules.isBlank()) "定义当前项目的代码规范、技术栈偏好等"
+        else if (rules.length > 40) rules.substring(0, 40) + "..." else rules
+    }
+
+    private fun showPersonalRulesDialog() {
+        val current = ProviderManager.getPersonalRules(this)
+
+        val editText = EditText(this).apply {
+            setText(current)
+            if (current.isNotEmpty()) setSelection(current.length)
+            hint = "每行一条规则，例如：\nAlways respond in Chinese\n代码生成时添加注释"
+            minLines = 5
+            maxLines = 12
+            setPadding(48, 32, 48, 32)
+            gravity = android.view.Gravity.TOP
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("个人 Rules")
+            .setMessage("定义全局行为规则，切换项目后依然生效。每行一条规则。")
+            .setView(editText)
+            .setPositiveButton("保存") { _, _ ->
+                val rules = editText.text.toString().trim()
+                ProviderManager.setPersonalRules(this, rules)
+                refreshPersonalRules()
+            }
+            .setNeutralButton("清空") { _, _ ->
+                ProviderManager.setPersonalRules(this, "")
+                refreshPersonalRules()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showProjectRulesDialog() {
+        val wsPath = ProviderManager.getWorkspacePath(this)
+        if (wsPath.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("项目 Rules")
+                .setMessage("请先在 Agent 模式下设置工作区路径，然后才能配置项目 Rules。")
+                .setPositiveButton("确定", null)
+                .show()
+            return
+        }
+
+        val current = ProviderManager.getProjectRules(this, wsPath)
+
+        val editText = EditText(this).apply {
+            setText(current)
+            if (current.isNotEmpty()) setSelection(current.length)
+            hint = "每行一条规则，例如：\n使用 Kotlin 协程而非 RxJava\n遵循 MVVM 架构模式"
+            minLines = 5
+            maxLines = 12
+            setPadding(48, 32, 48, 32)
+            gravity = android.view.Gravity.TOP
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("项目 Rules")
+            .setMessage("当前项目: ${wsPath.substringAfterLast("/")}\n仅在此工作区下生效。每行一条规则。")
+            .setView(editText)
+            .setPositiveButton("保存") { _, _ ->
+                val rules = editText.text.toString().trim()
+                ProviderManager.setProjectRules(this, wsPath, rules)
+                refreshProjectRules()
+            }
+            .setNeutralButton("清空") { _, _ ->
+                ProviderManager.setProjectRules(this, wsPath, "")
+                refreshProjectRules()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun formatNumber(n: Int): String {

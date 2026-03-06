@@ -259,6 +259,13 @@ object ProviderManager {
     fun getCompressionChunkSize(context: Context): Int = configRepo.getCompressionChunkSize()
     fun setCompressionChunkSize(context: Context, value: Int) = configRepo.setCompressionChunkSize(value)
 
+    // ========== Rules 规则 ==========
+
+    fun getPersonalRules(context: Context): String = configRepo.getPersonalRules()
+    fun setPersonalRules(context: Context, rules: String) = configRepo.setPersonalRules(rules)
+    fun getProjectRules(context: Context, workspacePath: String): String = configRepo.getProjectRules(workspacePath)
+    fun setProjectRules(context: Context, workspacePath: String, rules: String) = configRepo.setProjectRules(workspacePath, rules)
+
     // ========== Agent 模式 ==========
 
     fun isAgentMode(context: Context): Boolean = configRepo.isAgentMode()
