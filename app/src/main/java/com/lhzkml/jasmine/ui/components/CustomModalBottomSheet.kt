@@ -31,7 +31,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -62,6 +66,7 @@ private const val STATE_FULL = 3
  * - 上滑展开至半屏或全屏
  * - 下滑折叠或关闭（最小档下滑即关闭）
  * - 内容可滚动
+ * @param dragFromContentArea 为 true 时，支持通过拖动内容区（非仅小横条）来展开/收起 Sheet
  */
 @Composable
 fun CustomModalBottomSheet(
@@ -72,6 +77,7 @@ fun CustomModalBottomSheet(
     sheetMaxHeightFraction: Float = 0.92f,
     showDragHandle: Boolean = true,
     sheetColor: Color = BgPrimary,
+    dragFromContentArea: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -140,6 +146,32 @@ fun CustomModalBottomSheet(
             val maxExpandPx = (maxSheetPx - targetHeightPx).coerceAtLeast(0f)
             val currentHeightPx = targetHeightPx + expandOffsetPx.coerceIn(0f, maxExpandPx)
             val offsetYPx = slideOffsetPx.value + dragOffsetPx
+            val scrollState = rememberScrollState()
+
+            val contentNestedConnection = remember(dragFromContentArea) {
+                if (!dragFromContentArea) null
+                else object : NestedScrollConnection {
+                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        if (scrollState.value == 0 && available.y > 0) {
+                            dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, currentHeightPx)
+                            return Offset(0f, available.y)
+                        }
+                        return Offset.Zero
+                    }
+                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                        if (available.y == 0f) return Offset.Zero
+                        if (available.y < 0) {
+                            expandOffsetPx = (expandOffsetPx - available.y).coerceIn(0f, maxExpandPx)
+                            return Offset(0f, available.y)
+                        }
+                        if (scrollState.value >= scrollState.maxValue && available.y > 0) {
+                            dragOffsetPx = (dragOffsetPx + available.y).coerceIn(0f, currentHeightPx)
+                            return Offset(0f, available.y)
+                        }
+                        return Offset.Zero
+                    }
+                }
+            }
 
             fun snapToNearestState(currentH: Float) {
                 val distances = listOf(
@@ -150,8 +182,13 @@ fun CustomModalBottomSheet(
                 expansionState = distances.minByOrNull { it.second }!!.first
             }
 
+            val sheetModifier = if (contentNestedConnection != null) {
+                Modifier.nestedScroll(contentNestedConnection)
+            } else Modifier
+
             Column(
-                modifier = modifier
+                modifier = sheetModifier
+                    .then(modifier)
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(with(density) { currentHeightPx.toDp() })
@@ -231,7 +268,7 @@ fun CustomModalBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(scrollState)
                         .padding(bottom = 16.dp)
                 ) {
                     content()

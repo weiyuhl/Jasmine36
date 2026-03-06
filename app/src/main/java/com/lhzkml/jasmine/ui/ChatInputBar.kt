@@ -237,7 +237,8 @@ private fun ChatInputBarSheet(
         CustomModalBottomSheet(
             onDismissRequest = onDismissRequest,
             sheetMinHeight = 200.dp,
-            sheetMaxHeightFraction = 0.92f
+            sheetMaxHeightFraction = 0.92f,
+            dragFromContentArea = true
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 if (supportsThinkingMode && onThinkingModeChanged != null) {
