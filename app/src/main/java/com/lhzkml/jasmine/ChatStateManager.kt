@@ -114,6 +114,22 @@ class ChatStateManager(
         streamProcessor = null
     }
 
+    /**
+     * 获取当前流式回复中已生成的文本内容（用于停止时保存部分回复）。
+     * 仅提取 Text 和 Thinking 块的内容。
+     */
+    fun getPartialContent(): String {
+        val proc = streamProcessor ?: return ""
+        val blocks = proc.currentBlocks()
+        return blocks.mapNotNull { block ->
+            when (block) {
+                is ContentBlock.Text -> block.content
+                is ContentBlock.Thinking -> block.content
+                else -> null
+            }
+        }.joinToString("\n").trim()
+    }
+
     fun getLogContent(): String = streamProcessor?.getLogContent() ?: ""
 
     fun addHistoryAiMessage(blocks: List<ContentBlock>, usageLine: String, time: String) {

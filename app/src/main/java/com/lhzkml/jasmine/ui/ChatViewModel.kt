@@ -185,6 +185,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onPause() {
         val activity = _activity ?: return
+        savePartialIfGenerating()
         ProviderManager.setLastConversationId(activity, currentConversationId ?: "")
     }
 
@@ -399,12 +400,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startNewConversation() {
+        savePartialIfGenerating()
         currentConversationId = null
         messageHistory.clear()
         chatStateManager.clearAll()
     }
 
     fun loadConversation(conversationId: String) {
+        savePartialIfGenerating()
         viewModelScope.launch(Dispatchers.IO) {
             val info = conversationRepo.getConversation(conversationId)
             val timedMessages = conversationRepo.getTimedMessages(conversationId)
@@ -679,6 +682,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         ChatStopSignal.requestStop()
         currentJob?.cancel()
         isGenerating = false
+    }
+
+    /**
+     * 如果当前正在生成回复，保存已生成的部分内容到数据库。
+     * 用于切换对话、新建对话、App 进后台等场景。
+     */
+    private fun savePartialIfGenerating() {
+        if (!isGenerating) return
+        val convId = currentConversationId ?: return
+        val partialText = chatStateManager.getPartialContent()
+        val logContent = chatStateManager.getLogContent()
+        if (partialText.isEmpty()) return
+
+        stopGenerating()
+
+        val contentToSave = if (logContent.isNotBlank()) {
+            logContent + ChatExecutor.BLOCK_TEXT_SEPARATOR + partialText
+        } else {
+            partialText
+        }
+        messageHistory.add(ChatMessage.assistant(partialText))
+        viewModelScope.launch(Dispatchers.IO) {
+            conversationRepo.addMessage(convId, ChatMessage.assistant(contentToSave))
+        }
     }
 
     private suspend fun tryOfferStartupRecovery(conversationId: String) {

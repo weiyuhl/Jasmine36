@@ -186,7 +186,25 @@ class ChatExecutor(
                 tryCompressHistory(client, config.model)
             }
         } catch (_: CancellationException) {
-            // 用户主动停止
+            // 用户主动停止 — 保存已生成的部分内容
+            withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
+                val partialText = chatStateManager.getPartialContent()
+                val logContent = chatStateManager.getLogContent()
+                if (partialText.isNotEmpty()) {
+                    val convId = currentConversationId()
+                    if (convId != null) {
+                        val contentToSave = if (logContent.isNotBlank()) {
+                            logContent + BLOCK_TEXT_SEPARATOR + partialText
+                        } else {
+                            partialText
+                        }
+                        withContext(Dispatchers.IO) {
+                            conversationRepo.addMessage(convId, ChatMessage.assistant(contentToSave))
+                        }
+                        messageHistory.add(ChatMessage.assistant(partialText))
+                    }
+                }
+            }
         } catch (e: ChatClientException) {
             val errorMsg = when (e.errorType) {
                 ErrorType.NETWORK -> "网络错误: ${e.message}\n请检查网络连接后重试"
