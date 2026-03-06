@@ -175,13 +175,8 @@ class ModelListFragment : Fragment() {
         onModelsConfirmed?.invoke()
     }
 
-    private fun formatTokenCount(tokens: Int): String {
-        return when {
-            tokens >= 1_000_000 -> "${tokens / 1_000_000}M"
-            tokens >= 1_000 -> "${tokens / 1_000}K"
-            else -> tokens.toString()
-        }
-    }
+    private fun formatTokenCount(tokens: Int): String =
+        com.lhzkml.jasmine.core.config.FormatUtils.formatTokenCount(tokens)
 
     inner class ModelAdapter : RecyclerView.Adapter<ModelAdapter.VH>() {
         override fun getItemCount() = models.size

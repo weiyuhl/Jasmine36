@@ -599,11 +599,6 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun formatNumber(n: Int): String {
-        return when {
-            n >= 1_000_000 -> String.format("%.1fM tokens", n / 1_000_000.0)
-            n >= 1_000 -> String.format("%.1fK tokens", n / 1_000.0)
-            else -> "$n tokens"
-        }
-    }
+    private fun formatNumber(n: Int): String =
+        com.lhzkml.jasmine.core.config.FormatUtils.formatTokensWithUnit(n)
 }

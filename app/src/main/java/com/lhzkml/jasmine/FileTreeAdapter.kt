@@ -131,31 +131,8 @@ class FileTreeAdapter : RecyclerView.Adapter<FileTreeAdapter.VH>() {
         }
     }
 
-    /**
-     * 根据文件扩展名返回简单文本图标
-     */
-    private fun getFileIcon(name: String): String {
-        val ext = name.substringAfterLast('.', "").lowercase()
-        return when (ext) {
-            "kt", "kts" -> "K"
-            "java" -> "J"
-            "xml" -> "X"
-            "json" -> "{}"
-            "md" -> "M"
-            "txt" -> "T"
-            "gradle" -> "G"
-            "py" -> "Py"
-            "js", "ts" -> "JS"
-            "html" -> "H"
-            "css" -> "C"
-            "yaml", "yml" -> "Y"
-            "sh", "bat" -> "$"
-            "png", "jpg", "jpeg", "gif", "webp", "svg" -> "Img"
-            "properties" -> "P"
-            "toml" -> "T"
-            else -> "."
-        }
-    }
+    private fun getFileIcon(name: String): String =
+        com.lhzkml.jasmine.core.config.FormatUtils.getFileIcon(name)
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
         val tvIndicator: TextView = view.findViewById(R.id.tvIndicator)
