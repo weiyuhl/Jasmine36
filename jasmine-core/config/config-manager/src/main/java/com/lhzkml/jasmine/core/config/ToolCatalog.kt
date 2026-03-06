@@ -22,6 +22,6 @@ object ToolCatalog {
         ToolMeta("fetch_url", "URL 抓取（HTML/纯文本/JSON/Markdown 四种格式）"),
         ToolMeta("attempt_completion", "显式完成任务（Agent 模式）"),
         ToolMeta("invoke_subagent", "子代理（启动独立 Agent 处理子任务，支持模型选择）"),
-        ToolMeta("user_interaction", "用户交互（提问/单选/多选/排序/批量问题）")
+        ToolMeta("user_interaction", "用户交互（Agent 主动提问/主动通知消息）")
     )
 }

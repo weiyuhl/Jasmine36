@@ -269,6 +269,36 @@ class MainActivity : AppCompatActivity() {
 
             // Agent 显式完成工具
             if (isEnabled("attempt_completion")) register(AttemptCompletionTool)
+
+            // 用户交互工具
+            if (isEnabled("user_interaction")) {
+                register(AskUserTool(onAsk = { message ->
+                    val deferred = CompletableDeferred<String>()
+                    withContext(Dispatchers.Main) {
+                        val input = android.widget.EditText(this@MainActivity)
+                        input.hint = "输入回复..."
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("Agent 提问")
+                            .setMessage(message)
+                            .setView(input)
+                            .setPositiveButton("发送") { _, _ ->
+                                deferred.complete(input.text.toString().ifEmpty { "(无回复)" })
+                            }
+                            .setNegativeButton("跳过") { _, _ ->
+                                deferred.complete("(用户跳过了此问题)")
+                            }
+                            .setCancelable(false)
+                            .show()
+                    }
+                    deferred.await()
+                }))
+                register(SayToUserTool(onMessage = { message ->
+                    runOnUiThread {
+                        appendRendered("\n[Agent] $message\n")
+                        autoScrollToBottom()
+                    }
+                }))
+            }
         }
     }
 

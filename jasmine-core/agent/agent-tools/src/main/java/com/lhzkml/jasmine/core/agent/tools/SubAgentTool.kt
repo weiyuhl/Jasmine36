@@ -177,26 +177,34 @@ class SubAgentTool(
     }
 
     private fun buildChildRegistry(type: String, readonly: Boolean): ToolRegistry {
-        val allowedNames = when (type) {
-            SubAgentType.EXPLORE -> SubAgentType.EXPLORE_TOOLS
-            SubAgentType.SHELL -> SubAgentType.SHELL_TOOLS
-            SubAgentType.WEB -> SubAgentType.WEB_TOOLS
+        if (readonly) {
+            return parentRegistry.subset(SubAgentType.EXPLORE_TOOLS)
+        }
+
+        return when (type) {
+            SubAgentType.EXPLORE -> parentRegistry.subset(SubAgentType.EXPLORE_TOOLS)
+            SubAgentType.SHELL -> parentRegistry.subset(SubAgentType.SHELL_TOOLS)
+            SubAgentType.WEB -> parentRegistry.subset(SubAgentType.WEB_TOOLS)
             SubAgentType.GENERAL -> {
-                val names = parentRegistry.allTools().map { it.name }.toMutableSet()
-                if (currentDepth + 1 >= config.maxDepth) {
-                    names.remove(TOOL_NAME)
+                val nextDepth = currentDepth + 1
+                val base = parentRegistry.subset(
+                    parentRegistry.allTools().map { it.name }.toSet() - TOOL_NAME
+                )
+                if (nextDepth < config.maxDepth) {
+                    base.register(SubAgentTool(
+                        clientProvider = clientProvider,
+                        modelProvider = modelProvider,
+                        parentRegistry = base,
+                        config = config,
+                        currentDepth = nextDepth,
+                        eventListener = eventListener,
+                        onSubAgentStart = onSubAgentStart,
+                        onSubAgentResult = onSubAgentResult
+                    ))
                 }
-                names
+                base
             }
-            else -> return ToolRegistry.build {}
+            else -> ToolRegistry.build {}
         }
-
-        val filteredNames = if (readonly) {
-            allowedNames.intersect(SubAgentType.EXPLORE_TOOLS)
-        } else {
-            allowedNames
-        }
-
-        return parentRegistry.subset(filteredNames)
     }
 }
