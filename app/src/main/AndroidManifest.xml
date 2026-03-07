@@ -40,6 +40,10 @@
             android:name=".ProviderListActivity"
             android:exported="false" />
         <activity
+            android:name=".AddCustomProviderActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".ProviderConfigActivity"
             android:exported="false" />
         <activity

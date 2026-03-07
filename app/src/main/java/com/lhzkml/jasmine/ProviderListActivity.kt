@@ -1,9 +1,12 @@
 package com.lhzkml.jasmine
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,8 +60,15 @@ fun ProviderListScreen(
     val registry = AppConfig.providerRegistry()
     
     var refreshTrigger by remember { mutableStateOf(0) }
-    var showAddDialog by remember { mutableStateOf(false) }
     var providerToDelete by remember { mutableStateOf<ProviderConfig?>(null) }
+
+    val addProviderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            refreshTrigger++
+        }
+    }
     
     val providers by remember(refreshTrigger) {
         mutableStateOf(registry.providers)
@@ -188,7 +197,9 @@ fun ProviderListScreen(
                 .background(Color.White)
         ) {
             CustomButton(
-                onClick = { showAddDialog = true },
+                onClick = {
+                    addProviderLauncher.launch(Intent(context, AddCustomProviderActivity::class.java))
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
@@ -203,25 +214,7 @@ fun ProviderListScreen(
             }
         }
     }
-    
-    // 添加自定义供应商对话框
-    if (showAddDialog) {
-        AddCustomProviderDialog(
-            onDismiss = { showAddDialog = false },
-            onAdd = { provider, baseUrl, model ->
-                val success = registry.registerProviderPersistent(provider)
-                if (success) {
-                    config.saveProviderCredentials(provider.id, "", baseUrl, model)
-                    Toast.makeText(context, "添加成功", Toast.LENGTH_SHORT).show()
-                    refreshTrigger++
-                    showAddDialog = false
-                } else {
-                    Toast.makeText(context, "供应商 ID 已存在", Toast.LENGTH_SHORT).show()
-                }
-            }
-        )
-    }
-    
+
     // 删除供应商确认对话框
     providerToDelete?.let { provider ->
         DeleteProviderDialog(
@@ -305,203 +298,6 @@ fun ProviderItem(
             }
         }
     }
-}
-
-@Composable
-fun AddCustomProviderDialog(
-    onDismiss: () -> Unit,
-    onAdd: (ProviderConfig, baseUrl: String, model: String) -> Unit
-) {
-    var selectedApiType by remember { mutableStateOf(ApiType.OPENAI) }
-    var providerId by remember { mutableStateOf("") }
-    var providerName by remember { mutableStateOf("") }
-    var baseUrl by remember { mutableStateOf("") }
-    var model by remember { mutableStateOf("") }
-    
-    val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
-
-    CustomAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color.White,
-        titleContentColor = TextPrimary,
-        title = { CustomText("添加自定义供应商", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // API 渠道类型
-                Column {
-                    CustomText("API 渠道类型", fontSize = 14.sp, color = TextSecondary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    var expanded by remember { mutableStateOf(false) }
-                    val apiTypes = listOf(
-                        "OpenAI 兼容" to ApiType.OPENAI,
-                        "Claude" to ApiType.CLAUDE,
-                        "Gemini" to ApiType.GEMINI,
-                    )
-                    
-                    Box {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { expanded = true }
-                                .background(Color.Transparent, RoundedCornerShape(4.dp))
-                                .then(
-                                    Modifier.padding(1.dp)
-                                )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CustomText(
-                                    text = apiTypes.find { it.second == selectedApiType }?.first ?: "OpenAI 兼容",
-                                    color = TextPrimary,
-                                    fontSize = 14.sp
-                                )
-                                CustomText(
-                                    text = "▼",
-                                    fontSize = 12.sp,
-                                    color = TextPrimary
-                                )
-                            }
-                        }
-                        
-                        CustomDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            apiTypes.forEach { (label, type) ->
-                                CustomDropdownMenuItem(
-                                    text = { CustomText(label, fontSize = 14.sp, color = TextPrimary) },
-                                    onClick = {
-                                        selectedApiType = type
-                                        if (baseUrl.isEmpty()) {
-                                            baseUrl = when (type) {
-                                                ApiType.OPENAI -> ""
-                                                ApiType.CLAUDE -> "https://api.anthropic.com"
-                                                ApiType.GEMINI -> "https://generativelanguage.googleapis.com"
-                                                else -> ""
-                                            }
-                                        }
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                
-                // 供应商 ID
-                Column {
-                    CustomText("供应商 ID", fontSize = 14.sp, color = TextSecondary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    CustomOutlinedTextField(
-                        value = providerId,
-                        onValueChange = { providerId = it },
-                        placeholder = { CustomText("例如: openai", color = TextSecondary, fontSize = 14.sp) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        focusedBorderColor = TextPrimary,
-                        unfocusedBorderColor = TextSecondary
-                    )
-                }
-                
-                // 供应商名称
-                Column {
-                    CustomText("供应商名称", fontSize = 14.sp, color = TextSecondary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    CustomOutlinedTextField(
-                        value = providerName,
-                        onValueChange = { providerName = it },
-                        placeholder = { CustomText("例如: OpenAI", color = TextSecondary, fontSize = 14.sp) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        focusedBorderColor = TextPrimary,
-                        unfocusedBorderColor = TextSecondary
-                    )
-                }
-                
-                // API 地址
-                Column {
-                    CustomText("API 地址", fontSize = 14.sp, color = TextSecondary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    CustomOutlinedTextField(
-                        value = baseUrl,
-                        onValueChange = { baseUrl = it },
-                        placeholder = { CustomText("例如: https://api.openai.com", color = TextSecondary, fontSize = 14.sp) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        focusedBorderColor = TextPrimary,
-                        unfocusedBorderColor = TextSecondary
-                    )
-                }
-                
-                // 默认模型
-                Column {
-                    CustomText("默认模型", fontSize = 14.sp, color = TextSecondary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    CustomOutlinedTextField(
-                        value = model,
-                        onValueChange = { model = it },
-                        placeholder = { CustomText("例如: gpt-4", color = TextSecondary, fontSize = 14.sp) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        focusedBorderColor = TextPrimary,
-                        unfocusedBorderColor = TextSecondary
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            CustomTextButton(
-                onClick = {
-                    focusManager.clearFocus()
-                    when {
-                        providerId.isEmpty() -> {
-                            Toast.makeText(context, "请输入供应商 ID", Toast.LENGTH_SHORT).show()
-                        }
-                        providerName.isEmpty() -> {
-                            Toast.makeText(context, "请输入供应商名称", Toast.LENGTH_SHORT).show()
-                        }
-                        baseUrl.isEmpty() -> {
-                            Toast.makeText(context, "请输入 API 地址", Toast.LENGTH_SHORT).show()
-                        }
-                        model.isEmpty() -> {
-                            Toast.makeText(context, "请输入默认模型", Toast.LENGTH_SHORT).show()
-                        }
-                        else -> {
-                            val provider = ProviderConfig(
-                                id = providerId.trim(),
-                                name = providerName.trim(),
-                                defaultBaseUrl = baseUrl.trim(),
-                                defaultModel = model.trim(),
-                                apiType = selectedApiType,
-                                isCustom = true
-                            )
-                            onAdd(provider, baseUrl.trim(), model.trim())
-                        }
-                    }
-                },
-                colors = CustomButtonDefaults.textButtonColors(contentColor = TextPrimary)
-            ) {
-                CustomText("添加", fontSize = 14.sp)
-            }
-        },
-        dismissButton = {
-            CustomTextButton(
-                onClick = onDismiss,
-                colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
-            ) {
-                CustomText("取消", fontSize = 14.sp)
-            }
-        }
-    )
 }
 
 @Composable
