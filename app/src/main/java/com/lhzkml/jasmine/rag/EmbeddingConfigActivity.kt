@@ -104,6 +104,8 @@ fun EmbeddingConfigScreen(onBack: () -> Unit) {
         ProviderManager.setRagEmbeddingApiKey(context, apiKey)
         ProviderManager.setRagEmbeddingModel(context, model.trim().ifBlank { "text-embedding-3-small" })
         ProviderManager.setRagEmbeddingModelPath(context, modelPath.trim())
+        apiModels = emptyList()
+        apiModelsStatus = null
         Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
     }
 
