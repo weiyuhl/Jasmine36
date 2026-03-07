@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -318,7 +319,8 @@ fun AddCustomProviderDialog(
     var model by remember { mutableStateOf("") }
     
     val context = LocalContext.current
-    
+    val focusManager = LocalFocusManager.current
+
     CustomAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
@@ -459,6 +461,7 @@ fun AddCustomProviderDialog(
         confirmButton = {
             CustomTextButton(
                 onClick = {
+                    focusManager.clearFocus()
                     when {
                         providerId.isEmpty() -> {
                             Toast.makeText(context, "请输入供应商 ID", Toast.LENGTH_SHORT).show()

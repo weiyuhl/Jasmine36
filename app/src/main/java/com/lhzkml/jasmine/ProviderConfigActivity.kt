@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -147,6 +148,7 @@ fun ProviderConfigScreen(
 @Composable
 fun ProviderConfigTab(provider: ProviderConfig) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val config = AppConfig.configRepo()
     val registry = AppConfig.providerRegistry()
     val scope = rememberCoroutineScope()
@@ -318,6 +320,7 @@ fun ProviderConfigTab(provider: ProviderConfig) {
             Spacer(modifier = Modifier.height(20.dp))
             CustomButton(
                 onClick = {
+                    focusManager.clearFocus()
                     if (vertexEnabled) {
                         when {
                             vertexProjectId.isBlank() -> {
@@ -438,6 +441,7 @@ fun ProviderConfigTab(provider: ProviderConfig) {
 @Composable
 fun ModelListTab(provider: ProviderConfig) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val config = AppConfig.configRepo()
     val registry = AppConfig.providerRegistry()
     val scope = rememberCoroutineScope()
@@ -577,6 +581,7 @@ fun ModelListTab(provider: ProviderConfig) {
         ) {
             CustomButton(
                 onClick = {
+                    focusManager.clearFocus()
                     config.setSelectedModels(provider.id, checkedModels.value.toList())
                     if (checkedModels.value.isNotEmpty()) {
                         val modelToSave = if (currentModel in checkedModels.value) currentModel else checkedModels.value.first()

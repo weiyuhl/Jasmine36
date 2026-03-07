@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -46,12 +47,14 @@ class EmbeddingConfigActivity : ComponentActivity() {
 @Composable
 fun EmbeddingConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     var baseUrl by remember { mutableStateOf(ProviderManager.getRagEmbeddingBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ProviderManager.getRagEmbeddingApiKey(context)) }
     var model by remember { mutableStateOf(ProviderManager.getRagEmbeddingModel(context)) }
 
     fun save() {
+        focusManager.clearFocus()
         ProviderManager.setRagEmbeddingBaseUrl(context, baseUrl.trim())
         ProviderManager.setRagEmbeddingApiKey(context, apiKey)
         ProviderManager.setRagEmbeddingModel(context, model.trim().ifBlank { "text-embedding-3-small" })
