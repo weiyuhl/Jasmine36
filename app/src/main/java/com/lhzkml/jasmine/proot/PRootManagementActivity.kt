@@ -130,6 +130,10 @@ fun PRootManagementScreen(onBack: () -> Unit) {
     var apkUpdating by remember { mutableStateOf(false) }
     var apkUpdateOutput by remember { mutableStateOf("") }
 
+    var commandInput by remember { mutableStateOf("") }
+    var commandRunning by remember { mutableStateOf(false) }
+    var commandOutput by remember { mutableStateOf("") }
+
     var packageInstallOutput by remember { mutableStateOf("") }
     var installingToolApk by remember { mutableStateOf<String?>(null) }
     var uninstallingToolApk by remember { mutableStateOf<String?>(null) }
@@ -1116,6 +1120,187 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                     )
                                 }
                             }
+                        }
+                    }
+
+                    CustomHorizontalDivider(
+                        color = Color(0xFFE8E8E8),
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+
+                    CustomText(
+                        text = "终端",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    CustomText(
+                        text = "输入命令执行，如 ls、pwd、python3 --version 等",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(BgInput)
+                                .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            BasicTextField(
+                                value = commandInput,
+                                onValueChange = { commandInput = it },
+                                singleLine = true,
+                                textStyle = TextStyle(fontSize = 14.sp, color = TextPrimary, fontFamily = FontFamily.Monospace),
+                                cursorBrush = SolidColor(TextPrimary),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = {
+                                    focusManager.clearFocus()
+                                    val cmd = commandInput.trim()
+                                    if (cmd.isNotBlank()) {
+                                        commandRunning = true
+                                        commandOutput = "$\u0020$cmd\n"
+                                        scope.launch {
+                                            try {
+                                                val result = withContext(Dispatchers.IO) {
+                                                    prootEnv.executeCommand(cmd, timeoutSeconds = 120)
+                                                }
+                                                commandOutput += result.output
+                                                commandOutput += "\n[exit: ${result.exitCode}]"
+                                                if (result.exitCode == 0) {
+                                                    Toast.makeText(context, "执行完成", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "退出码: ${result.exitCode}", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } catch (e: Exception) {
+                                                commandOutput += "\n\n✗ 执行失败: ${e.message}"
+                                                Toast.makeText(context, "执行失败: ${e.message?.take(80)}", Toast.LENGTH_LONG).show()
+                                            }
+                                            commandRunning = false
+                                        }
+                                    }
+                                }),
+                                modifier = Modifier.fillMaxWidth(),
+                                decorationBox = { inner ->
+                                    if (commandInput.isEmpty()) {
+                                        CustomText("输入命令，如 ls -la", fontSize = 14.sp, color = TextSecondary)
+                                    }
+                                    inner()
+                                }
+                            )
+                        }
+                        CustomButton(
+                            onClick = {
+                                if (commandInput.isBlank()) return@CustomButton
+                                focusManager.clearFocus()
+                                val cmd = commandInput.trim()
+                                commandRunning = true
+                                commandOutput = "$\u0020$cmd\n"
+                                scope.launch {
+                                    try {
+                                        val result = withContext(Dispatchers.IO) {
+                                            prootEnv.executeCommand(cmd, timeoutSeconds = 120)
+                                        }
+                                        commandOutput += result.output
+                                        commandOutput += "\n[exit: ${result.exitCode}]"
+                                        if (result.exitCode == 0) {
+                                            Toast.makeText(context, "执行完成", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "退出码: ${result.exitCode}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        commandOutput += "\n\n✗ 执行失败: ${e.message}"
+                                        Toast.makeText(context, "执行失败: ${e.message?.take(80)}", Toast.LENGTH_LONG).show()
+                                    }
+                                    commandRunning = false
+                                }
+                            },
+                            enabled = !commandRunning && commandInput.isNotBlank(),
+                            modifier = Modifier.height(44.dp),
+                            colors = CustomButtonDefaults.buttonColors(
+                                containerColor = Accent,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            CustomText(
+                                if (commandRunning) "执行中..." else "执行",
+                                fontSize = 13.sp,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    if (commandOutput.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                                .background(Color(0xFFF8F8F8), RoundedCornerShape(16.dp))
+                                .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CustomText(
+                                    text = "命令输出",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                CustomTextButton(
+                                    onClick = {
+                                        val clip = android.content.ClipData.newPlainText("proot_command", commandOutput)
+                                        (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(clip)
+                                        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                    },
+                                    contentColor = Accent,
+                                    contentPadding = PaddingValues(4.dp)
+                                ) {
+                                    CustomText("复制", fontSize = 12.sp, color = Accent)
+                                }
+                                CustomTextButton(
+                                    onClick = { commandOutput = "" },
+                                    contentColor = TextSecondary,
+                                    contentPadding = PaddingValues(4.dp)
+                                ) {
+                                    CustomText("清空", fontSize = 12.sp, color = TextSecondary)
+                                }
+                            }
+                            if (commandRunning) {
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                                    color = Accent,
+                                    trackColor = Color(0xFF333333)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+                            val cmdVScroll = rememberScrollState()
+                            val cmdHScroll = rememberScrollState()
+                            Text(
+                                text = commandOutput,
+                                fontSize = 11.sp,
+                                color = Color(0xFFD4D4D4),
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp)
+                                    .verticalScroll(cmdVScroll)
+                                    .horizontalScroll(cmdHScroll)
+                            )
                         }
                     }
                 }
