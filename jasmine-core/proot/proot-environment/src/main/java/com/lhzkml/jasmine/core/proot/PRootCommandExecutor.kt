@@ -147,7 +147,7 @@ object PRootCommandExecutor {
         args.add("-b"); args.add("/sys")
 
         // Fake /proc entries (matching Termux proot-distro setup_fake_sysdata)
-        val fakeProc = File(paths.rootfsDir, "proc")
+        val fakeProc = File(paths.baseDir, "fake_proc")
         val fakeProcBinds = mapOf(
             ".loadavg" to "/proc/loadavg",
             ".stat" to "/proc/stat",
@@ -165,7 +165,7 @@ object PRootCommandExecutor {
         }
 
         // Hide SELinux
-        val emptyDir = File(paths.rootfsDir, "sys/.empty")
+        val emptyDir = File(paths.baseDir, "fake_sys_empty")
         if (emptyDir.exists()) {
             args.add("-b"); args.add("${emptyDir.absolutePath}:/sys/fs/selinux")
         }

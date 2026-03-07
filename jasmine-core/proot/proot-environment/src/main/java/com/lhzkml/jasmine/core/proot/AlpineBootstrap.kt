@@ -637,12 +637,12 @@ object AlpineBootstrap {
     }
 
     private fun setupFakeProcSysData(paths: PRootPaths) {
-        val procDir = File(paths.rootfsDir, "proc")
-        procDir.mkdirs()
+        val fakeDir = File(paths.baseDir, "fake_proc")
+        fakeDir.mkdirs()
 
-        File(procDir, ".loadavg").writeText("0.12 0.07 0.02 2/165 765\n")
+        File(fakeDir, ".loadavg").writeText("0.12 0.07 0.02 2/165 765\n")
 
-        File(procDir, ".stat").writeText(buildString {
+        File(fakeDir, ".stat").writeText(buildString {
             appendLine("cpu  1050008 127632 898432 43586190 175486 462292 205338 0 0 0")
             for (i in 0..7) {
                 appendLine("cpu$i  131251 15954 112304 5448274 21936 57787 25667 0 0 0")
@@ -656,13 +656,13 @@ object AlpineBootstrap {
             appendLine("softirq 12739328 23 5765792 39 1439 1231 0 88 3292182 0 3679534")
         })
 
-        File(procDir, ".uptime").writeText("124689.08 993073.57\n")
+        File(fakeDir, ".uptime").writeText("124689.08 993073.57\n")
 
-        File(procDir, ".version").writeText(
+        File(fakeDir, ".version").writeText(
             "Linux version 6.17.0-PRoot-Distro (proot@termux) (gcc (GCC) 13.3.0, GNU ld (GNU Binutils) 2.42) #1 SMP PREEMPT_DYNAMIC Fri, 10 Oct 2025 00:00:00 +0000\n"
         )
 
-        File(procDir, ".vmstat").writeText(buildString {
+        File(fakeDir, ".vmstat").writeText(buildString {
             appendLine("nr_free_pages 146031")
             appendLine("nr_zone_inactive_anon 196744")
             appendLine("nr_zone_active_anon 301503")
@@ -676,13 +676,13 @@ object AlpineBootstrap {
             appendLine("pgpgout 18250656")
         })
 
-        File(procDir, ".sysctl_entry_cap_last_cap").writeText("40\n")
-        File(procDir, ".sysctl_inotify_max_user_watches").writeText("524288\n")
+        File(fakeDir, ".sysctl_entry_cap_last_cap").writeText("40\n")
+        File(fakeDir, ".sysctl_inotify_max_user_watches").writeText("524288\n")
 
-        val sysDir = File(paths.rootfsDir, "sys/.empty")
-        sysDir.mkdirs()
+        val sysEmptyDir = File(paths.baseDir, "fake_sys_empty")
+        sysEmptyDir.mkdirs()
 
-        log("Fake /proc and /sys data created")
+        log("Fake /proc and /sys data created at ${fakeDir.absolutePath}")
     }
 }
 
