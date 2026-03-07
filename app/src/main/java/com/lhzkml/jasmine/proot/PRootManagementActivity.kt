@@ -1,8 +1,13 @@
 package com.lhzkml.jasmine.proot
 
+import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -47,14 +52,48 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val TAG = "PRootMgmt"
+
+private fun logToFile(context: Context, level: String, msg: String, e: Throwable? = null) {
+    try {
+        val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "proot/logs")
+        dir.mkdirs()
+        val ts = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        val file = File(dir, "proot_mgmt_debug_${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.log")
+        val line = "[$ts] [$level] $msg" + (e?.let { "\n${it.stackTraceToString()}" } ?: "") + "\n"
+        file.appendText(line)
+    } catch (_: Exception) {}
+}
+
+private fun logDebug(context: Context, level: String, msg: String, e: Throwable? = null) {
+    when (level) {
+        "D" -> Log.d(TAG, msg)
+        "W" -> Log.w(TAG, msg)
+        "E" -> if (e != null) Log.e(TAG, msg, e) else Log.e(TAG, msg)
+    }
+    logToFile(context, level, msg, e)
+}
+
 class PRootManagementActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        logDebug(this, "D", "onCreate")
+        val appCtx = applicationContext
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            logDebug(appCtx, "E", "UncaughtException thread=${t.name}", e)
+            defaultHandler?.uncaughtException(t, e)
+        }
         setContent {
             JasmineTheme {
                 PRootManagementScreen(onBack = { finish() })
             }
         }
+    }
+
+    override fun onDestroy() {
+        logDebug(this, "D", "onDestroy isFinishing=$isFinishing")
+        super.onDestroy()
     }
 }
 
@@ -121,34 +160,54 @@ fun PRootManagementScreen(onBack: () -> Unit) {
     var logContent by remember { mutableStateOf("") }
 
     fun refreshInfo() {
+        logDebug(context, "D", "refreshInfo start isInstalled=$isInstalled")
         isInstalled = prootEnv.isInstalled
         if (isInstalled) {
             scope.launch {
                 try {
                     alpineVersion = withContext(Dispatchers.IO) {
-                        try { prootEnv.getAlpineVersion() } catch (_: Exception) { "获取失败" }
+                        try { prootEnv.getAlpineVersion() } catch (e: Exception) {
+                            logDebug(context, "E", "refreshInfo getAlpineVersion", e)
+                            "获取失败"
+                        }
                     }
                     prootVersion = withContext(Dispatchers.IO) {
-                        try { prootEnv.getPRootVersion() } catch (_: Exception) { "获取失败" }
+                        try { prootEnv.getPRootVersion() } catch (e: Exception) {
+                            logDebug(context, "E", "refreshInfo getPRootVersion", e)
+                            "获取失败"
+                        }
                     }
                     diskUsage = withContext(Dispatchers.IO) {
-                        try { prootEnv.formatDiskUsage() } catch (_: Exception) { "计算失败" }
+                        try { prootEnv.formatDiskUsage() } catch (e: Exception) {
+                            logDebug(context, "E", "refreshInfo formatDiskUsage", e)
+                            "计算失败"
+                        }
                     }
-                } catch (_: Exception) { /* prevent crash */ }
+                    logDebug(context, "D", "refreshInfo done alpine=$alpineVersion")
+                } catch (e: Exception) {
+                    logDebug(context, "E", "refreshInfo crash", e)
+                }
             }
         }
     }
 
     fun loadPackages() {
         if (!isInstalled) return
+        logDebug(context, "D", "loadPackages start")
         packagesLoading = true
         scope.launch {
             try {
                 val pkgs = withContext(Dispatchers.IO) {
-                    try { prootEnv.listInstalledPackages() } catch (_: Exception) { emptyList() }
+                    try { prootEnv.listInstalledPackages() } catch (e: Exception) {
+                        logDebug(context, "E", "loadPackages listInstalledPackages", e)
+                        emptyList()
+                    }
                 }
                 installedPackages = pkgs
-            } catch (_: Exception) { /* prevent crash */ }
+                logDebug(context, "D", "loadPackages done count=${pkgs.size}")
+            } catch (e: Exception) {
+                logDebug(context, "E", "loadPackages crash", e)
+            }
             packagesLoading = false
         }
     }
@@ -325,14 +384,23 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                     }
                                     installing = false
                                     isInstalled = prootEnv.isInstalled
+                                    logDebug(context, "D", "install DONE isInstalled=$isInstalled actDestroyed=${act?.isDestroyed}")
                                     if (isInstalled) {
+                                        logDebug(context, "D", "install SUCCESS")
                                         Toast.makeText(context, "Alpine Linux 安装完成", Toast.LENGTH_SHORT).show()
-                                        // 延迟执行 refreshInfo/loadPackages，避免安装刚完成时文件系统未完全同步导致异常
                                         scope.launch {
                                             kotlinx.coroutines.delay(500)
+                                            logDebug(context, "D", "install delay done actDestroyed=${act?.isDestroyed}")
                                             if (act?.isDestroyed != true) {
-                                                refreshInfo()
-                                                loadPackages()
+                                                try {
+                                                    refreshInfo()
+                                                    loadPackages()
+                                                    logDebug(context, "D", "install post-delay refreshInfo+loadPackages OK")
+                                                } catch (e: Exception) {
+                                                    logDebug(context, "E", "install post-delay refreshInfo/loadPackages FAIL", e)
+                                                }
+                                            } else {
+                                                logDebug(context, "W", "install post-delay SKIP Activity already destroyed")
                                             }
                                         }
                                     } else {
@@ -340,6 +408,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                         Toast.makeText(context, "安装异常，请卸载后重试", Toast.LENGTH_LONG).show()
                                     }
                                 } catch (e: Exception) {
+                                    logDebug(context, "E", "install FAILED", e)
                                     installing = false
                                     isInstalled = false
                                     statusMessage = "安装失败: ${e.message}"
@@ -415,7 +484,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         }
                     }
                     CustomText(
-                        text = "日志目录: ${prootEnv.paths.logDir.absolutePath}",
+                        text = "日志: ${prootEnv.paths.logDir.absolutePath}",
                         fontSize = 10.sp,
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 4.dp)
@@ -432,7 +501,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         .padding(16.dp)
                 ) {
                     CustomText(
-                        "确定卸载 Alpine Linux 环境？所有已安装的包和数据将被删除。",
+                        "确定要卸载 Alpine Linux 环境吗？所有数据将丢失。",
                         fontSize = 13.sp,
                         color = TextPrimary,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -447,7 +516,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             ),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            CustomText("取消", fontSize = 13.sp, color = TextPrimary)
+                            CustomText("??", fontSize = 13.sp, color = TextPrimary)
                         }
                         CustomButton(
                             onClick = {
@@ -459,7 +528,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                     alpineVersion = ""
                                     prootVersion = ""
                                     diskUsage = ""
-                                    Toast.makeText(context, "已卸载", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "???", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier.weight(1f).height(40.dp),
@@ -469,7 +538,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             ),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            CustomText("确定卸载", fontSize = 13.sp, color = Color.White)
+                            CustomText("????", fontSize = 13.sp, color = Color.White)
                         }
                     }
                 }
@@ -489,7 +558,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CustomText(
-                            text = "安装日志",
+                            text = "????",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
@@ -500,7 +569,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             contentColor = TextSecondary,
                             contentPadding = PaddingValues(4.dp)
                         ) {
-                            CustomText("收起", fontSize = 12.sp, color = TextSecondary)
+                            CustomText("??", fontSize = 12.sp, color = TextSecondary)
                         }
                     }
                     Box(
@@ -536,7 +605,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         .padding(16.dp)
                 ) {
                     CustomText(
-                        text = "包管理",
+                        text = "???",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary,
@@ -544,7 +613,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                     )
 
                     CustomText(
-                        text = "常用工具",
+                        text = "????",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = TextPrimary,
@@ -555,7 +624,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         CustomTextButton(
                             onClick = {
                                 uninstallingAllTools = true
-                                packageInstallOutput = "正在一键卸载全部常用工具...\n"
+                                packageInstallOutput = "????????????...\n"
                                 scope.launch {
                                     var successCount = 0
                                     for ((apkName, displayName) in installedTools) {
@@ -563,17 +632,17 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                             val result = withContext(Dispatchers.IO) {
                                                 prootEnv.removePackage(apkName)
                                             }
-                                            packageInstallOutput += "卸载 $displayName: ${if (result.exitCode == 0) "成功" else "失败"}\n"
+                                            packageInstallOutput += "?? $displayName: ${if (result.exitCode == 0) "??" else "??"}\n"
                                             if (result.exitCode == 0) successCount++
                                         } catch (e: Exception) {
-                                            packageInstallOutput += "卸载 $displayName 异常: ${e.message}\n"
+                                            packageInstallOutput += "?? $displayName ??: ${e.message}\n"
                                         }
                                     }
                                     uninstallingAllTools = false
-                                    packageInstallOutput += "\n✓ 共卸载 $successCount/${installedTools.size} 个工具"
+                                    packageInstallOutput += "\n? ??? $successCount/${installedTools.size} ???"
                                     loadPackages()
                                     refreshInfo()
-                                    Toast.makeText(context, "已卸载 $successCount 个工具", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "??? $successCount ???", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             contentColor = ErrorColor,
@@ -585,7 +654,9 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                     }
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(400.dp),
                         userScrollEnabled = false,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -614,7 +685,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                     .then(
                                         if (!installed && !isInstalling) Modifier.clickable {
                                             installingToolApk = apkName
-                                            packageInstallOutput = "正在安装 $displayName ($apkName) ...\n"
+                                            packageInstallOutput = "???? $displayName ($apkName) ...\n"
                                             scope.launch {
                                                 try {
                                                     val result = withContext(Dispatchers.IO) {
@@ -623,18 +694,18 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                                     installingToolApk = null
                                                     packageInstallOutput += result.output
                                                     if (result.exitCode == 0) {
-                                                        packageInstallOutput += "\n\n✓ $displayName 安装成功"
+                                                        packageInstallOutput += "\n\n? $displayName ????"
                                                         loadPackages()
                                                         refreshInfo()
-                                                        Toast.makeText(context, "$displayName 安装成功", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "$displayName ????", Toast.LENGTH_SHORT).show()
                                                     } else {
-                                                        packageInstallOutput += "\n\n✗ 安装失败 (exit: ${result.exitCode})"
-                                                        Toast.makeText(context, "$displayName 安装失败", Toast.LENGTH_SHORT).show()
+                                                        packageInstallOutput += "\n\n? ???? (exit: ${result.exitCode})"
+                                                        Toast.makeText(context, "$displayName ????", Toast.LENGTH_SHORT).show()
                                                     }
                                                 } catch (e: Exception) {
                                                     installingToolApk = null
-                                                    packageInstallOutput += "\n\n✗ 安装异常: ${e.message}"
-                                                    Toast.makeText(context, "安装异常: ${e.message?.take(80)}", Toast.LENGTH_LONG).show()
+                                                    packageInstallOutput += "\n\n? ????: ${e.message}"
+                                                    Toast.makeText(context, "????: ${e.message?.take(80)}", Toast.LENGTH_LONG).show()
                                                 }
                                             }
                                         } else Modifier
@@ -655,10 +726,10 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                     Spacer(modifier = Modifier.height(4.dp))
                                     CustomText(
                                         text = when {
-                                            isInstalling -> "安装中..."
-                                            isUninstalling -> "卸载中..."
-                                            installed -> version ?: "已安装"
-                                            else -> "点击安装"
+                                            isInstalling -> "???..."
+                                            isUninstalling -> "???..."
+                                            installed -> version ?: "???"
+                                            else -> "????"
                                         },
                                         fontSize = 11.sp,
                                         color = when {
@@ -672,7 +743,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                         CustomTextButton(
                                             onClick = {
                                                 uninstallingToolApk = apkName
-                                                packageInstallOutput = "正在卸载 $displayName ($apkName) ...\n"
+                                                packageInstallOutput = "???? $displayName ($apkName) ...\n"
                                                 scope.launch {
                                                     try {
                                                         val result = withContext(Dispatchers.IO) {
@@ -681,25 +752,25 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                                         uninstallingToolApk = null
                                                         packageInstallOutput += result.output
                                                         if (result.exitCode == 0) {
-                                                            packageInstallOutput += "\n\n✓ $displayName 已卸载"
+                                                            packageInstallOutput += "\n\n? $displayName ???"
                                                             loadPackages()
                                                             refreshInfo()
-                                                            Toast.makeText(context, "$displayName 已卸载", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(context, "$displayName ???", Toast.LENGTH_SHORT).show()
                                                         } else {
-                                                            packageInstallOutput += "\n\n✗ 卸载失败 (exit: ${result.exitCode})"
-                                                            Toast.makeText(context, "卸载失败", Toast.LENGTH_SHORT).show()
+                                                            packageInstallOutput += "\n\n? ???? (exit: ${result.exitCode})"
+                                                            Toast.makeText(context, "????", Toast.LENGTH_SHORT).show()
                                                         }
                                                     } catch (e: Exception) {
                                                         uninstallingToolApk = null
-                                                        packageInstallOutput += "\n\n✗ 卸载异常: ${e.message}"
-                                                        Toast.makeText(context, "卸载异常: ${e.message?.take(80)}", Toast.LENGTH_LONG).show()
+                                                        packageInstallOutput += "\n\n? ????: ${e.message}"
+                                                        Toast.makeText(context, "????: ${e.message?.take(80)}", Toast.LENGTH_LONG).show()
                                                     }
                                                 }
                                             },
                                             contentColor = ErrorColor,
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                         ) {
-                                            CustomText("卸载", fontSize = 11.sp, color = ErrorColor)
+                                            CustomText("??", fontSize = 11.sp, color = ErrorColor)
                                         }
                                     }
                                 }
@@ -708,7 +779,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                     }
 
                     CustomText(
-                        text = "输入包名安装 Alpine 软件包（如 python3、gcc、git、nodejs、curl）",
+                        text = "?????? Alpine ????? python3?gcc?git?nodejs?curl?",
                         fontSize = 12.sp,
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 12.dp, bottom = 12.dp)
@@ -740,7 +811,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                 modifier = Modifier.fillMaxWidth(),
                                 decorationBox = { inner ->
                                     if (packageToInstall.isEmpty()) {
-                                        CustomText("包名，如 python3", fontSize = 14.sp, color = TextSecondary)
+                                        CustomText("???? python3", fontSize = 14.sp, color = TextSecondary)
                                     }
                                     inner()
                                 }
@@ -752,7 +823,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                 val pkg = packageToInstall.trim()
                                 focusManager.clearFocus()
                                 packageInstalling = true
-                                packageInstallOutput = "正在安装 $pkg ...\n"
+                                packageInstallOutput = "???? $pkg ...\n"
                                 scope.launch {
                                     try {
                                         val result = withContext(Dispatchers.IO) {
@@ -761,19 +832,19 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                         packageInstalling = false
                                         packageInstallOutput += result.output
                                         if (result.exitCode == 0) {
-                                            packageInstallOutput += "\n\n✓ $pkg 安装成功"
+                                            packageInstallOutput += "\n\n? $pkg ????"
                                             packageToInstall = ""
-                                            Toast.makeText(context, "$pkg 安装成功", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "$pkg ????", Toast.LENGTH_SHORT).show()
                                             loadPackages()
                                             refreshInfo()
                                         } else {
-                                            packageInstallOutput += "\n\n✗ 安装失败 (exit: ${result.exitCode})"
-                                            Toast.makeText(context, "安装失败", Toast.LENGTH_SHORT).show()
+                                            packageInstallOutput += "\n\n? ???? (exit: ${result.exitCode})"
+                                            Toast.makeText(context, "????", Toast.LENGTH_SHORT).show()
                                         }
                                     } catch (e: Exception) {
                                         packageInstalling = false
-                                        packageInstallOutput += "\n\n✗ 安装异常: ${e.message}"
-                                        Toast.makeText(context, "安装异常: ${e.message?.take(100)}", Toast.LENGTH_LONG).show()
+                                        packageInstallOutput += "\n\n? ????: ${e.message}"
+                                        Toast.makeText(context, "????: ${e.message?.take(100)}", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             },
@@ -786,7 +857,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             CustomText(
-                                if (packageInstalling) "安装中..." else "安装",
+                                if (packageInstalling) "???..." else "??",
                                 fontSize = 13.sp,
                                 color = Color.White
                             )
@@ -807,7 +878,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 CustomText(
-                                    text = "安装过程",
+                                    text = "????",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary,
@@ -817,19 +888,19 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                     onClick = {
                                         val clip = android.content.ClipData.newPlainText("proot_install", packageInstallOutput)
                                         (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(clip)
-                                        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "???????", Toast.LENGTH_SHORT).show()
                                     },
                                     contentColor = Accent,
                                     contentPadding = PaddingValues(4.dp)
                                 ) {
-                                    CustomText("复制", fontSize = 12.sp, color = Accent)
+                                    CustomText("??", fontSize = 12.sp, color = Accent)
                                 }
                                 CustomTextButton(
                                     onClick = { packageInstallOutput = "" },
                                     contentColor = TextSecondary,
                                     contentPadding = PaddingValues(4.dp)
                                 ) {
-                                    CustomText("收起", fontSize = 12.sp, color = TextSecondary)
+                                    CustomText("??", fontSize = 12.sp, color = TextSecondary)
                                 }
                             }
                             Box(
@@ -874,18 +945,18 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         CustomButton(
                             onClick = {
                                 apkUpdating = true
-                                apkUpdateOutput = "正在更新软件包索引...\n"
+                                apkUpdateOutput = "?????????...\n"
                                 scope.launch {
                                     try {
                                         val result = withContext(Dispatchers.IO) { prootEnv.updateIndex() }
                                         apkUpdateOutput += result.output
                                         if (result.exitCode == 0) {
-                                            apkUpdateOutput += "\n\n✓ 索引更新成功"
+                                            apkUpdateOutput += "\n\n? ??????"
                                         } else {
-                                            apkUpdateOutput += "\n\n✗ 更新失败 (exit: ${result.exitCode})"
+                                            apkUpdateOutput += "\n\n? ???? (exit: ${result.exitCode})"
                                         }
                                     } catch (e: Exception) {
-                                        apkUpdateOutput += "\n\n✗ 更新异常: ${e.message}"
+                                        apkUpdateOutput += "\n\n? ????: ${e.message}"
                                     }
                                     apkUpdating = false
                                 }
@@ -899,7 +970,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             CustomText(
-                                if (apkUpdating) "更新中..." else "apk update",
+                                if (apkUpdating) "???..." else "apk update",
                                 fontSize = 12.sp,
                                 color = if (apkUpdating) TextSecondary else Accent
                             )
@@ -909,7 +980,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             contentColor = Accent,
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            CustomText("刷新列表", fontSize = 12.sp)
+                            CustomText("????", fontSize = 12.sp)
                         }
                     }
 
@@ -927,7 +998,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 CustomText(
-                                    text = "更新过程",
+                                    text = "????",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary,
@@ -937,19 +1008,19 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                     onClick = {
                                         val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
                                         cm?.setPrimaryClip(android.content.ClipData.newPlainText("apk_update", apkUpdateOutput))
-                                        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "???????", Toast.LENGTH_SHORT).show()
                                     },
                                     contentColor = Accent,
                                     contentPadding = PaddingValues(4.dp)
                                 ) {
-                                    CustomText("复制", fontSize = 12.sp, color = Accent)
+                                    CustomText("??", fontSize = 12.sp, color = Accent)
                                 }
                                 CustomTextButton(
                                     onClick = { apkUpdateOutput = "" },
                                     contentColor = TextSecondary,
                                     contentPadding = PaddingValues(4.dp)
                                 ) {
-                                    CustomText("收起", fontSize = 12.sp, color = TextSecondary)
+                                    CustomText("??", fontSize = 12.sp, color = TextSecondary)
                                 }
                             }
                             Box(
@@ -996,7 +1067,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CustomText(
-                            text = if (packagesLoading) "加载中..." else "已安装 ${installedPackages.size} 个包",
+                            text = if (packagesLoading) "???..." else "??? ${installedPackages.size} ??",
                             fontSize = 13.sp,
                             color = TextSecondary,
                             modifier = Modifier.weight(1f)
@@ -1011,12 +1082,12 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                     )
                                     exportFile.parentFile?.mkdirs()
                                     exportFile.writeText(exportText)
-                                    Toast.makeText(context, "已导出到 ${exportFile.absolutePath}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "???? ${exportFile.absolutePath}", Toast.LENGTH_LONG).show()
                                 },
                                 contentColor = Accent,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                CustomText("导出列表", fontSize = 12.sp)
+                                CustomText("????", fontSize = 12.sp)
                             }
                         }
                     }
