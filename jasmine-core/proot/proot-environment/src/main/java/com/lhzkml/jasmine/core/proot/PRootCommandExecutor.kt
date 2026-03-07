@@ -44,7 +44,14 @@ object PRootCommandExecutor {
             env[key] = value
         }
 
-        val process = processBuilder.start()
+        val process = try {
+            processBuilder.start()
+        } catch (e: Exception) {
+            return@withContext PRootResult(
+                output = "Error: Failed to start PRoot process: ${e.message}",
+                exitCode = -1
+            )
+        }
 
         if (background) {
             Thread.sleep(1000)

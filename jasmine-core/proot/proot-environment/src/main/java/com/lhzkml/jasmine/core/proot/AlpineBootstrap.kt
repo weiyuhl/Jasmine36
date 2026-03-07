@@ -84,15 +84,20 @@ object AlpineBootstrap {
             onProgress(0.65f, "正在解压 rootfs...")
             extractRootfs(tarGz, paths.rootfsDir)
 
+            val binBusybox = File(paths.rootfsDir, "bin/busybox")
             val binSh = File(paths.rootfsDir, "bin/sh")
-            log("After extraction: bin/sh exists=${binSh.exists()}, isFile=${binSh.isFile}")
+            val binShLinkExists = java.nio.file.Files.exists(
+                binSh.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS
+            )
+            log("After extraction: bin/busybox exists=${binBusybox.exists()} size=${binBusybox.length()}")
+            log("After extraction: bin/sh linkExists=$binShLinkExists exists=${binSh.exists()}")
             logDirectoryTree(File(paths.rootfsDir, "bin"), "bin/", 0)
 
-            if (!binSh.exists()) {
+            if (!binBusybox.exists() || binBusybox.length() < 1024) {
                 val topFiles = paths.rootfsDir.listFiles()
                 val binFiles = File(paths.rootfsDir, "bin").listFiles()
                 val err = buildString {
-                    appendLine("rootfs 解压失败：bin/sh 不存在")
+                    appendLine("rootfs 解压失败：bin/busybox 不存在或大小异常")
                     appendLine("tar.gz 大小: ${tarGz.length()} bytes")
                     appendLine("rootfsDir top: ${topFiles?.map { "${it.name}(${if (it.isDirectory) "dir" else "${it.length()}"})" }}")
                     appendLine("bin/ 内容 (${binFiles?.size ?: 0} 项): ${binFiles?.take(20)?.map { "${it.name}(${it.length()})" }}")
@@ -123,7 +128,7 @@ object AlpineBootstrap {
         return paths.prootBinary.exists() &&
                 paths.prootBinary.length() > 1024 &&
                 File(paths.rootfsDir, ".jasmine_installed").exists() &&
-                File(paths.rootfsDir, "bin/sh").exists()
+                File(paths.rootfsDir, "bin/busybox").let { it.exists() && it.length() > 1024 }
     }
 
     fun getLatestLogFile(paths: PRootPaths): File? {
@@ -411,43 +416,48 @@ object AlpineBootstrap {
 
     private fun createSymlink(outFile: File, linkTarget: String, targetDir: File): Boolean {
         val linkPath = outFile.toPath()
-        // Try native symlink first
+
+        // Convert absolute symlink targets to relative paths.
+        // e.g. bin/sh -> /bin/busybox becomes bin/sh -> busybox
+        // This ensures File.exists() works correctly (doesn't resolve to host FS).
+        val effectiveTarget = if (linkTarget.startsWith("/")) {
+            val absInRootfs = File(targetDir, linkTarget.removePrefix("/"))
+            try {
+                val relPath = outFile.parentFile.toPath().relativize(absInRootfs.toPath())
+                relPath.toString().replace('\\', '/')
+            } catch (_: Exception) {
+                linkTarget
+            }
+        } else {
+            linkTarget
+        }
+
+        // Try native symlink with the (possibly relative) target
         try {
             java.nio.file.Files.deleteIfExists(linkPath)
-            java.nio.file.Files.createSymbolicLink(linkPath, java.nio.file.Paths.get(linkTarget))
+            java.nio.file.Files.createSymbolicLink(linkPath, java.nio.file.Paths.get(effectiveTarget))
             return true
         } catch (e: Exception) {
-            log("symlink native fail: ${outFile.name} -> $linkTarget: ${e.message}")
+            log("symlink native fail: ${outFile.name} -> $effectiveTarget: ${e.message}")
         }
 
-        // Fallback: if the target is relative, copy the target file
-        if (!linkTarget.startsWith("/")) {
-            val resolved = File(outFile.parentFile, linkTarget)
-            if (resolved.exists() && resolved.isFile) {
-                try {
-                    resolved.copyTo(outFile, overwrite = true)
-                    setExecIfNeeded(outFile.name, outFile)
-                    return true
-                } catch (e: Exception) {
-                    log("symlink copy fail: ${outFile.name} -> $linkTarget: ${e.message}")
-                }
-            }
+        // Fallback: copy the target file from within rootfs
+        val resolvedFile = if (linkTarget.startsWith("/")) {
+            File(targetDir, linkTarget.removePrefix("/"))
+        } else {
+            File(outFile.parentFile, linkTarget)
         }
-
-        // Last resort: for absolute-path symlinks like /bin/busybox,
-        // resolve within rootfs and copy
-        val rootfsResolved = File(targetDir, linkTarget.removePrefix("/"))
-        if (rootfsResolved.exists() && rootfsResolved.isFile) {
+        if (resolvedFile.exists() && resolvedFile.isFile) {
             try {
-                rootfsResolved.copyTo(outFile, overwrite = true)
+                resolvedFile.copyTo(outFile, overwrite = true)
                 setExecIfNeeded(outFile.name, outFile)
                 return true
             } catch (e: Exception) {
-                log("symlink rootfs-copy fail: ${outFile.name} -> $linkTarget: ${e.message}")
+                log("symlink copy fail: ${outFile.name} -> $linkTarget: ${e.message}")
             }
         }
 
-        log("symlink all methods fail: ${outFile.name} -> $linkTarget")
+        log("symlink all methods fail: ${outFile.name} -> $linkTarget (effective: $effectiveTarget)")
         return false
     }
 

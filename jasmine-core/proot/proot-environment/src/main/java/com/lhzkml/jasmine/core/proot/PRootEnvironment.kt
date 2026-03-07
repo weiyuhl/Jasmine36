@@ -125,7 +125,15 @@ class PRootEnvironment(
      * 获取 rootfs 占用磁盘空间（字节）。
      */
     fun getDiskUsageBytes(): Long {
-        return paths.baseDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        return try {
+            paths.baseDir.walkTopDown()
+                .filter {
+                    try { it.isFile } catch (_: Exception) { false }
+                }
+                .sumOf {
+                    try { it.length() } catch (_: Exception) { 0L }
+                }
+        } catch (_: Exception) { 0L }
     }
 
     fun formatDiskUsage(): String {

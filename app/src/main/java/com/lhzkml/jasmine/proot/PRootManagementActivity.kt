@@ -89,9 +89,17 @@ fun PRootManagementScreen(onBack: () -> Unit) {
         isInstalled = prootEnv.isInstalled
         if (isInstalled) {
             scope.launch {
-                alpineVersion = withContext(Dispatchers.IO) { prootEnv.getAlpineVersion() }
-                prootVersion = withContext(Dispatchers.IO) { prootEnv.getPRootVersion() }
-                diskUsage = withContext(Dispatchers.IO) { prootEnv.formatDiskUsage() }
+                try {
+                    alpineVersion = withContext(Dispatchers.IO) {
+                        try { prootEnv.getAlpineVersion() } catch (_: Exception) { "获取失败" }
+                    }
+                    prootVersion = withContext(Dispatchers.IO) {
+                        try { prootEnv.getPRootVersion() } catch (_: Exception) { "获取失败" }
+                    }
+                    diskUsage = withContext(Dispatchers.IO) {
+                        try { prootEnv.formatDiskUsage() } catch (_: Exception) { "计算失败" }
+                    }
+                } catch (_: Exception) { /* prevent crash */ }
             }
         }
     }
@@ -100,8 +108,12 @@ fun PRootManagementScreen(onBack: () -> Unit) {
         if (!isInstalled) return
         packagesLoading = true
         scope.launch {
-            val pkgs = withContext(Dispatchers.IO) { prootEnv.listInstalledPackages() }
-            installedPackages = pkgs
+            try {
+                val pkgs = withContext(Dispatchers.IO) {
+                    try { prootEnv.listInstalledPackages() } catch (_: Exception) { emptyList() }
+                }
+                installedPackages = pkgs
+            } catch (_: Exception) { /* prevent crash */ }
             packagesLoading = false
         }
     }
