@@ -101,7 +101,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
 JNIEXPORT jstring JNICALL
 Java_com_lhzkml_jasmine_mnn_MnnBridge_getMnnVersion(JNIEnv *env, jclass clazz) {
     LOGD("Getting MNN version");
-    return env->NewStringUTF(MNN_VERSION);
+    const char* ver = MNN::getVersion();
+    return env->NewStringUTF(ver ? ver : MNN_VERSION);
 }
 
 JNIEXPORT jboolean JNICALL

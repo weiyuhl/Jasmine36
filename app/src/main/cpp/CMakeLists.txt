@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("jasmine_mnn")
 
-# MNN 路径
-set(MNN_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../../../../../MNN-master/include")
-set(MNN_LLM_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../../../../../MNN-master/transformers/llm/engine/include")
+# MNN 路径（头文件在 cpp/third_party，库在 jniLibs）
+set(MNN_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party")
+set(MNN_LLM_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/transformers/llm/engine/include")
 
 # 包含头文件
 include_directories(${MNN_INCLUDE_DIR})
