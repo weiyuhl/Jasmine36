@@ -58,8 +58,13 @@ fun PRootManagementScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
+    val activity = context as? ComponentActivity
     val prootEnv = remember {
-        PRootEnvironment(context.filesDir, context.cacheDir)
+        PRootEnvironment(
+            context.filesDir,
+            context.cacheDir,
+            activity?.getExternalFilesDir(null)
+        )
     }
 
     var isInstalled by remember { mutableStateOf(prootEnv.isInstalled) }

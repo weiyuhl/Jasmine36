@@ -13,9 +13,10 @@ import java.io.File
  */
 class PRootEnvironment(
     filesDir: File,
-    private val cacheDir: File
+    private val cacheDir: File,
+    externalDir: File? = null
 ) {
-    val paths = PRootPaths.from(filesDir)
+    val paths = PRootPaths.from(filesDir, externalDir)
 
     val isInstalled: Boolean
         get() = AlpineBootstrap.isInstalled(paths)

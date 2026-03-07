@@ -12,17 +12,24 @@ data class PRootPaths(
     val baseDir: File,
     val rootfsDir: File,
     val prootBinary: File,
-    val homeDir: File
+    val homeDir: File,
+    val logDir: File
 ) {
     companion object {
-        fun from(filesDir: File): PRootPaths {
+        fun from(filesDir: File, externalDir: File? = null): PRootPaths {
             val baseDir = File(filesDir, "proot")
             val rootfsDir = File(baseDir, "alpine-rootfs")
+            val logDir = if (externalDir != null) {
+                File(externalDir, "proot/logs")
+            } else {
+                File(baseDir, "logs")
+            }
             return PRootPaths(
                 baseDir = baseDir,
                 rootfsDir = rootfsDir,
                 prootBinary = File(baseDir, "proot-arm64"),
-                homeDir = File(rootfsDir, "root")
+                homeDir = File(rootfsDir, "root"),
+                logDir = logDir
             )
         }
     }

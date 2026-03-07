@@ -20,9 +20,7 @@ object AlpineBootstrap {
     private fun log(msg: String) {
         val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
         val line = "[$ts] $msg\n"
-        try {
-            logFile?.appendText(line)
-        } catch (_: Exception) {}
+        try { logFile?.appendText(line) } catch (_: Exception) {}
     }
 
     suspend fun install(
@@ -30,15 +28,15 @@ object AlpineBootstrap {
         cacheDir: File,
         onProgress: (Float, String) -> Unit
     ) = withContext(Dispatchers.IO) {
-        val logDir = File(paths.baseDir, "logs")
-        logDir.mkdirs()
-        logFile = File(logDir, "install_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.log")
+        paths.logDir.mkdirs()
+        logFile = File(paths.logDir, "install_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.log")
         logFile?.writeText("")
 
         log("=== PRoot Alpine Install Start ===")
         log("baseDir: ${paths.baseDir.absolutePath}")
         log("rootfsDir: ${paths.rootfsDir.absolutePath}")
         log("prootBinary: ${paths.prootBinary.absolutePath}")
+        log("logDir: ${paths.logDir.absolutePath}")
         log("cacheDir: ${cacheDir.absolutePath}")
 
         paths.baseDir.mkdirs()
@@ -50,11 +48,7 @@ object AlpineBootstrap {
             onProgress(0.05f, "正在下载 PRoot 静态二进制...")
             val apkFile = File(cacheDir, AlpineConstants.PROOT_STATIC_APK_FILENAME)
             log("Downloading PRoot APK from ${AlpineConstants.PROOT_STATIC_APK_URL}")
-            downloadFile(
-                AlpineConstants.PROOT_STATIC_APK_URL,
-                apkFile,
-                cacheDir
-            ) { progress ->
+            downloadFile(AlpineConstants.PROOT_STATIC_APK_URL, apkFile, cacheDir) { progress ->
                 onProgress(0.05f + progress * 0.15f, "正在下载 PRoot 静态二进制...")
             }
             log("PRoot APK downloaded: ${apkFile.length()} bytes")
@@ -62,9 +56,8 @@ object AlpineBootstrap {
             onProgress(0.22f, "正在提取 PRoot 二进制...")
             extractBinaryFromApk(apkFile, AlpineConstants.PROOT_BINARY_PATH_IN_APK, paths.prootBinary)
             apkFile.delete()
-
             paths.prootBinary.setExecutable(true, false)
-            log("PRoot binary: exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}, exec=${paths.prootBinary.canExecute()}")
+            log("PRoot binary: exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}")
 
             if (!paths.prootBinary.exists() || paths.prootBinary.length() < 1024) {
                 val err = "PRoot 二进制提取失败：文件不存在或大小异常 (${paths.prootBinary.length()} bytes)"
@@ -81,31 +74,28 @@ object AlpineBootstrap {
         if (!markerFile.exists()) {
             if (!tarGz.exists() || tarGz.length() < 1024) {
                 onProgress(0.30f, "正在下载 Alpine minirootfs...")
-                log("Downloading Alpine rootfs from ${AlpineConstants.MINIROOTFS_URL}")
-                downloadFile(
-                    AlpineConstants.MINIROOTFS_URL,
-                    tarGz,
-                    cacheDir
-                ) { progress ->
+                log("Downloading rootfs from ${AlpineConstants.MINIROOTFS_URL}")
+                downloadFile(AlpineConstants.MINIROOTFS_URL, tarGz, cacheDir) { progress ->
                     onProgress(0.30f + progress * 0.30f, "正在下载 Alpine minirootfs...")
                 }
             }
-            log("Alpine rootfs tar.gz: ${tarGz.length()} bytes")
+            log("rootfs tar.gz: ${tarGz.length()} bytes")
 
             onProgress(0.65f, "正在解压 rootfs...")
             extractRootfs(tarGz, paths.rootfsDir)
 
             val binSh = File(paths.rootfsDir, "bin/sh")
-            log("After extraction: bin/sh exists=${binSh.exists()}")
-            logDirectoryContents(paths.rootfsDir, 0)
+            log("After extraction: bin/sh exists=${binSh.exists()}, isFile=${binSh.isFile}")
+            logDirectoryTree(File(paths.rootfsDir, "bin"), "bin/", 0)
 
             if (!binSh.exists()) {
+                val topFiles = paths.rootfsDir.listFiles()
+                val binFiles = File(paths.rootfsDir, "bin").listFiles()
                 val err = buildString {
                     appendLine("rootfs 解压失败：bin/sh 不存在")
                     appendLine("tar.gz 大小: ${tarGz.length()} bytes")
-                    appendLine("rootfsDir: ${paths.rootfsDir.absolutePath}")
-                    val topFiles = paths.rootfsDir.listFiles()
-                    appendLine("rootfsDir 内容: ${topFiles?.map { "${it.name}(${if (it.isDirectory) "dir" else "${it.length()}"})" } ?: "null"}")
+                    appendLine("rootfsDir top: ${topFiles?.map { "${it.name}(${if (it.isDirectory) "dir" else "${it.length()}"})" }}")
+                    appendLine("bin/ 内容 (${binFiles?.size ?: 0} 项): ${binFiles?.take(20)?.map { "${it.name}(${it.length()})" }}")
                 }
                 log("ERROR: $err")
                 tarGz.delete()
@@ -116,9 +106,9 @@ object AlpineBootstrap {
             onProgress(0.85f, "正在配置环境...")
             configureEnvironment(paths)
             markerFile.writeText("installed")
-            log("Installation marker written")
+            log("Marker written, installation complete")
         } else {
-            log("rootfs marker already exists, skipping extraction")
+            log("Marker already exists, skipping extraction")
         }
 
         log("=== Install Complete ===")
@@ -126,9 +116,7 @@ object AlpineBootstrap {
     }
 
     suspend fun uninstall(paths: PRootPaths) = withContext(Dispatchers.IO) {
-        if (paths.baseDir.exists()) {
-            paths.baseDir.deleteRecursively()
-        }
+        if (paths.baseDir.exists()) paths.baseDir.deleteRecursively()
     }
 
     fun isInstalled(paths: PRootPaths): Boolean {
@@ -138,27 +126,17 @@ object AlpineBootstrap {
                 File(paths.rootfsDir, "bin/sh").exists()
     }
 
-    /**
-     * 获取最新的安装日志文件路径。
-     */
     fun getLatestLogFile(paths: PRootPaths): File? {
-        val logDir = File(paths.baseDir, "logs")
-        return logDir.listFiles()
+        return paths.logDir.listFiles()
             ?.filter { it.name.startsWith("install_") && it.name.endsWith(".log") }
             ?.maxByOrNull { it.lastModified() }
     }
 
     // ─── Download ───
 
-    private fun downloadFile(
-        urlStr: String,
-        target: File,
-        cacheDir: File,
-        onProgress: (Float) -> Unit
-    ) {
+    private fun downloadFile(urlStr: String, target: File, cacheDir: File, onProgress: (Float) -> Unit) {
         val tmpFile = File(cacheDir, target.name + ".tmp")
         tmpFile.parentFile?.mkdirs()
-
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.connectTimeout = 30_000
         conn.readTimeout = 60_000
@@ -166,9 +144,7 @@ object AlpineBootstrap {
         try {
             conn.connect()
             val code = conn.responseCode
-            if (code != 200) {
-                throw RuntimeException("HTTP $code from $urlStr")
-            }
+            if (code != 200) throw RuntimeException("HTTP $code from $urlStr")
             val totalBytes = conn.contentLengthLong
             var downloaded = 0L
             conn.inputStream.buffered().use { input ->
@@ -178,9 +154,7 @@ object AlpineBootstrap {
                     while (input.read(buffer).also { read = it } != -1) {
                         output.write(buffer, 0, read)
                         downloaded += read
-                        if (totalBytes > 0) {
-                            onProgress((downloaded.toFloat() / totalBytes).coerceAtMost(1f))
-                        }
+                        if (totalBytes > 0) onProgress((downloaded.toFloat() / totalBytes).coerceAtMost(1f))
                     }
                 }
             }
@@ -198,40 +172,33 @@ object AlpineBootstrap {
     private fun extractBinaryFromApk(apkFile: File, entryPath: String, target: File) {
         val tmpDir = File(apkFile.parentFile, "proot_extract_tmp")
         tmpDir.mkdirs()
-
         try {
-            log("APK extraction: trying system tar (specific file)...")
+            log("APK: trying system tar (specific)...")
             val extracted = trySystemTarExtract(apkFile, entryPath, tmpDir)
             if (extracted != null && extracted.exists() && extracted.length() > 1024) {
-                log("System tar (specific) succeeded: ${extracted.length()} bytes")
+                log("APK: system tar (specific) OK: ${extracted.length()} bytes")
                 target.parentFile?.mkdirs()
                 extracted.copyTo(target, overwrite = true)
                 return
             }
-
-            log("APK extraction: trying system tar (extract all)...")
+            log("APK: trying system tar (all)...")
             val extractedAll = trySystemTarExtractAll(apkFile, tmpDir)
             if (extractedAll) {
                 val binary = File(tmpDir, entryPath)
                 if (binary.exists() && binary.length() > 1024) {
-                    log("System tar (all) succeeded: ${binary.length()} bytes")
+                    log("APK: system tar (all) OK: ${binary.length()} bytes")
                     target.parentFile?.mkdirs()
                     binary.copyTo(target, overwrite = true)
                     return
                 }
-                log("System tar (all) extracted but binary not found. Contents: ${tmpDir.walkTopDown().take(20).map { it.name }.toList()}")
             }
-
-            log("APK extraction: trying Java tar parser...")
-            val javaExtracted = extractWithJavaTarParser(apkFile, entryPath, target)
-            if (javaExtracted) {
-                log("Java tar parser succeeded: ${target.length()} bytes")
+            log("APK: trying Java parser...")
+            val ok = extractWithJavaTarParser(apkFile, entryPath, target)
+            if (ok) {
+                log("APK: Java parser OK: ${target.length()} bytes")
                 return
             }
-
-            val err = "所有提取方法均失败。apk=${apkFile.length()}bytes, tmpDir=${tmpDir.listFiles()?.map { "${it.name}(${it.length()})" }}"
-            log("ERROR: $err")
-            throw RuntimeException(err)
+            throw RuntimeException("所有提取方法均失败 apk=${apkFile.length()} bytes")
         } finally {
             tmpDir.deleteRecursively()
         }
@@ -239,216 +206,299 @@ object AlpineBootstrap {
 
     private fun trySystemTarExtract(apkFile: File, entryPath: String, tmpDir: File): File? {
         return try {
-            val process = ProcessBuilder(
-                "tar", "xzf", apkFile.absolutePath,
-                "-C", tmpDir.absolutePath,
-                entryPath
-            ).redirectErrorStream(true).start()
-            val output = process.inputStream.bufferedReader().readText()
-            val exitCode = process.waitFor()
-            log("tar (specific) exit=$exitCode output=${output.take(200)}")
-            val f = File(tmpDir, entryPath)
-            if (f.exists()) f else null
-        } catch (e: Exception) {
-            log("tar (specific) exception: ${e.message}")
-            null
-        }
+            val p = ProcessBuilder("tar", "xzf", apkFile.absolutePath, "-C", tmpDir.absolutePath, entryPath)
+                .redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText()
+            val exit = p.waitFor()
+            log("tar(specific) exit=$exit out=${out.take(200)}")
+            File(tmpDir, entryPath).takeIf { it.exists() }
+        } catch (e: Exception) { log("tar(specific) err: ${e.message}"); null }
     }
 
     private fun trySystemTarExtractAll(apkFile: File, tmpDir: File): Boolean {
         return try {
-            val process = ProcessBuilder(
-                "tar", "xzf", apkFile.absolutePath,
-                "-C", tmpDir.absolutePath
-            ).redirectErrorStream(true).start()
-            val output = process.inputStream.bufferedReader().readText()
-            val exitCode = process.waitFor()
-            log("tar (all) exit=$exitCode output=${output.take(200)}")
-            exitCode == 0
-        } catch (e: Exception) {
-            log("tar (all) exception: ${e.message}")
-            false
-        }
+            val p = ProcessBuilder("tar", "xzf", apkFile.absolutePath, "-C", tmpDir.absolutePath)
+                .redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText()
+            val exit = p.waitFor()
+            log("tar(all) exit=$exit out=${out.take(200)}")
+            exit == 0
+        } catch (e: Exception) { log("tar(all) err: ${e.message}"); false }
     }
 
     private fun extractWithJavaTarParser(apkFile: File, entryPath: String, target: File): Boolean {
         return try {
-            FileInputStream(apkFile).buffered().use { rawInput ->
-                val multiGzipStream = MultiStreamGZIPInputStream(BufferedInputStream(rawInput, 65536))
-                extractTarEntry(multiGzipStream, entryPath, target)
+            FileInputStream(apkFile).buffered().use { raw ->
+                val ms = MultiStreamGZIPInputStream(BufferedInputStream(raw, 65536))
+                extractSingleTarEntry(ms, entryPath, target)
             }
-        } catch (e: Exception) {
-            log("Java tar parser exception: ${e.message}")
-            false
-        }
+        } catch (e: Exception) { log("Java parser err: ${e.message}"); false }
     }
 
     // ─── Rootfs extraction ───
 
-    /**
-     * 解压 Alpine minirootfs tar.gz。
-     * 先尝试系统 tar，失败则用 Java 纯解压。
-     */
     private fun extractRootfs(tarGz: File, targetDir: File) {
         targetDir.mkdirs()
 
         // Method 1: system tar
         log("rootfs: trying system tar...")
-        val process = ProcessBuilder(
-            "tar", "xzf", tarGz.absolutePath,
-            "-C", targetDir.absolutePath
-        ).redirectErrorStream(true).start()
-        val tarOutput = process.inputStream.bufferedReader().readText()
-        val tarExit = process.waitFor()
-        log("rootfs tar: exit=$tarExit output=${tarOutput.take(300)}")
+        val p = ProcessBuilder("tar", "xzf", tarGz.absolutePath, "-C", targetDir.absolutePath)
+            .redirectErrorStream(true).start()
+        val tarOut = p.inputStream.bufferedReader().readText()
+        val tarExit = p.waitFor()
+        log("rootfs tar: exit=$tarExit out=${tarOut.take(300)}")
 
         if (tarExit == 0 && File(targetDir, "bin/sh").exists()) {
-            log("rootfs: system tar succeeded")
+            log("rootfs: system tar succeeded, bin/sh exists")
             return
         }
+        log("rootfs: system tar incomplete (bin/sh missing), using Java extraction")
 
-        // Method 2: Java GZIPInputStream + tar parser
-        log("rootfs: system tar failed or incomplete, trying Java extraction...")
-        extractTarGzWithJava(tarGz, targetDir)
-        log("rootfs: Java extraction done. bin/sh exists=${File(targetDir, "bin/sh").exists()}")
+        // Method 2: Java extraction with full link handling
+        extractTarGzFullJava(tarGz, targetDir)
     }
 
     /**
-     * 纯 Java 解压 .tar.gz 到目标目录（完整解压所有文件）。
+     * 纯 Java 完整解压 tar.gz，支持目录/普通文件/符号链接/硬链接。
+     * 链接条目延迟到第二遍处理，确保目标文件已存在。
      */
-    private fun extractTarGzWithJava(tarGz: File, targetDir: File) {
+    private fun extractTarGzFullJava(tarGz: File, targetDir: File) {
+        data class DeferredLink(val cleanName: String, val linkName: String, val isSymlink: Boolean)
+
+        val deferredLinks = mutableListOf<DeferredLink>()
         var fileCount = 0
+        var dirCount = 0
+        var entryIndex = 0
+        var longName: String? = null
+
         FileInputStream(tarGz).buffered().use { fileIn ->
-            GZIPInputStream(fileIn).use { gzIn ->
-                val headerBuf = ByteArray(512)
+            GZIPInputStream(fileIn, 65536).use { gzIn ->
+                val hdr = ByteArray(512)
+                var consecutiveZero = 0
+
                 while (true) {
-                    val headerRead = readFully(gzIn, headerBuf)
-                    if (headerRead < 512) break
+                    val n = readFully(gzIn, hdr)
+                    if (n < 512) { log("Java: incomplete header at #$entryIndex (read $n)"); break }
 
-                    if (headerBuf.all { it == 0.toByte() }) break
+                    if (hdr.all { it == 0.toByte() }) {
+                        consecutiveZero++
+                        if (consecutiveZero >= 2) break
+                        continue
+                    }
+                    consecutiveZero = 0
+                    entryIndex++
 
-                    val name = parseTarName(headerBuf)
-                    val size = parseTarSize(headerBuf)
-                    val typeFlag = headerBuf[156]
-                    val linkName = headerBuf.copyOfRange(157, 257)
+                    val rawName = parseTarName(hdr)
+                    val size = parseTarSize(hdr)
+                    val typeFlag = hdr[156]
+                    val rawLink = hdr.copyOfRange(157, 257)
                         .takeWhile { it != 0.toByte() }.toByteArray().toString(Charsets.UTF_8)
 
+                    val typeCh = if (typeFlag in 32..126) typeFlag.toInt().toChar() else '?'
+
+                    // GNU long name extension (type 'L')
+                    if (typeFlag == 'L'.code.toByte()) {
+                        val paddedSize = ((size + 511) / 512) * 512
+                        val buf = ByteArray(paddedSize.toInt())
+                        readFully(gzIn, buf)
+                        longName = buf.copyOf(size.toInt()).toString(Charsets.UTF_8).trimEnd('\u0000')
+                        continue
+                    }
+                    // GNU long link extension (type 'K')
+                    if (typeFlag == 'K'.code.toByte()) {
+                        val paddedSize = ((size + 511) / 512) * 512
+                        skipFully(gzIn, paddedSize)
+                        continue
+                    }
+                    // PAX headers
+                    if (typeFlag == 'x'.code.toByte() || typeFlag == 'g'.code.toByte()) {
+                        val paddedSize = ((size + 511) / 512) * 512
+                        skipFully(gzIn, paddedSize)
+                        continue
+                    }
+
+                    val name = (longName ?: rawName)
+                    longName = null
                     val cleanName = name.removePrefix("./").removePrefix("/")
+
                     if (cleanName.isEmpty()) {
                         if (size > 0) skipFully(gzIn, ((size + 511) / 512) * 512)
                         continue
                     }
 
+                    if (entryIndex <= 30 || entryIndex % 100 == 0) {
+                        log("  #$entryIndex $typeCh '$cleanName' size=$size link='$rawLink'")
+                    }
+
                     val outFile = File(targetDir, cleanName)
 
                     when {
-                        typeFlag == '5'.code.toByte() || name.endsWith("/") -> {
+                        // Directory
+                        typeFlag == '5'.code.toByte() || cleanName.endsWith("/") -> {
                             outFile.mkdirs()
+                            dirCount++
+                            if (size > 0) skipFully(gzIn, ((size + 511) / 512) * 512)
                         }
+                        // Symlink
                         typeFlag == '2'.code.toByte() -> {
-                            // Symlink: create as regular copy or skip
-                            val linkTarget = linkName.removePrefix("./").removePrefix("/")
-                            outFile.parentFile?.mkdirs()
-                            try {
-                                val targetPath = java.nio.file.Paths.get(targetDir.absolutePath, linkTarget)
-                                val linkPath = java.nio.file.Paths.get(outFile.absolutePath)
-                                java.nio.file.Files.deleteIfExists(linkPath)
-                                java.nio.file.Files.createSymbolicLink(
-                                    linkPath,
-                                    linkPath.parent.relativize(targetPath).normalize()
-                                        .let { java.nio.file.Paths.get(linkName) }
-                                )
-                            } catch (_: Exception) {
-                                // Symlink creation may fail; write a placeholder
-                                outFile.writeText(linkName)
-                            }
+                            deferredLinks.add(DeferredLink(cleanName, rawLink, isSymlink = true))
                         }
+                        // Hardlink
                         typeFlag == '1'.code.toByte() -> {
-                            // Hard link
-                            outFile.parentFile?.mkdirs()
-                            val linkTarget = File(targetDir, linkName.removePrefix("./").removePrefix("/"))
-                            if (linkTarget.exists()) {
-                                linkTarget.copyTo(outFile, overwrite = true)
-                            }
+                            deferredLinks.add(DeferredLink(cleanName, rawLink, isSymlink = false))
                         }
+                        // Regular file
                         typeFlag == 0.toByte() || typeFlag == '0'.code.toByte() -> {
                             outFile.parentFile?.mkdirs()
+                            val paddedSize = ((size + 511) / 512) * 512
                             if (size > 0) {
                                 FileOutputStream(outFile).use { fos ->
                                     val buf = ByteArray(8192)
                                     var remaining = size
                                     while (remaining > 0) {
                                         val toRead = minOf(remaining, buf.size.toLong()).toInt()
-                                        val read = gzIn.read(buf, 0, toRead)
-                                        if (read <= 0) break
-                                        fos.write(buf, 0, read)
-                                        remaining -= read
+                                        val rd = gzIn.read(buf, 0, toRead)
+                                        if (rd <= 0) break
+                                        fos.write(buf, 0, rd)
+                                        remaining -= rd
                                     }
-                                    // Skip padding
-                                    val written = size - remaining
-                                    val padding = ((size + 511) / 512) * 512 - written
-                                    if (padding > 0) skipFully(gzIn, padding)
                                 }
+                                val padding = paddedSize - size
+                                if (padding > 0) skipFully(gzIn, padding)
                             }
+                            setExecIfNeeded(cleanName, outFile)
                             fileCount++
                         }
                         else -> {
                             if (size > 0) skipFully(gzIn, ((size + 511) / 512) * 512)
                         }
                     }
-
-                    // Set executable for bin/ files
-                    if (outFile.exists() && outFile.isFile &&
-                        (cleanName.startsWith("bin/") || cleanName.startsWith("sbin/") ||
-                                cleanName.startsWith("usr/bin/") || cleanName.startsWith("usr/sbin/"))) {
-                        outFile.setExecutable(true, false)
-                    }
                 }
             }
         }
-        log("Java tar extraction: $fileCount files extracted")
+
+        log("Java tar pass1: $fileCount files, $dirCount dirs, ${deferredLinks.size} deferred links, $entryIndex total entries")
+
+        // Pass 2: create all links
+        var linkOk = 0
+        var linkFail = 0
+        for (link in deferredLinks) {
+            val outFile = File(targetDir, link.cleanName)
+            outFile.parentFile?.mkdirs()
+
+            if (link.isSymlink) {
+                val ok = createSymlink(outFile, link.linkName, targetDir)
+                if (ok) linkOk++ else linkFail++
+            } else {
+                val targetFile = File(targetDir, link.linkName.removePrefix("./").removePrefix("/"))
+                if (targetFile.exists()) {
+                    try {
+                        targetFile.copyTo(outFile, overwrite = true)
+                        setExecIfNeeded(link.cleanName, outFile)
+                        linkOk++
+                    } catch (e: Exception) {
+                        log("hardlink copy fail: ${link.cleanName} -> ${link.linkName}: ${e.message}")
+                        linkFail++
+                    }
+                } else {
+                    log("hardlink target missing: ${link.cleanName} -> ${link.linkName}")
+                    linkFail++
+                }
+            }
+        }
+        log("Java tar pass2: $linkOk links OK, $linkFail links failed")
     }
 
-    // ─── Tar parsing helpers ───
+    private fun createSymlink(outFile: File, linkTarget: String, targetDir: File): Boolean {
+        val linkPath = outFile.toPath()
+        // Try native symlink first
+        try {
+            java.nio.file.Files.deleteIfExists(linkPath)
+            java.nio.file.Files.createSymbolicLink(linkPath, java.nio.file.Paths.get(linkTarget))
+            return true
+        } catch (e: Exception) {
+            log("symlink native fail: ${outFile.name} -> $linkTarget: ${e.message}")
+        }
 
-    private fun extractTarEntry(input: java.io.InputStream, entryPath: String, target: File): Boolean {
-        val headerBuf = ByteArray(512)
+        // Fallback: if the target is relative, copy the target file
+        if (!linkTarget.startsWith("/")) {
+            val resolved = File(outFile.parentFile, linkTarget)
+            if (resolved.exists() && resolved.isFile) {
+                try {
+                    resolved.copyTo(outFile, overwrite = true)
+                    setExecIfNeeded(outFile.name, outFile)
+                    return true
+                } catch (e: Exception) {
+                    log("symlink copy fail: ${outFile.name} -> $linkTarget: ${e.message}")
+                }
+            }
+        }
+
+        // Last resort: for absolute-path symlinks like /bin/busybox,
+        // resolve within rootfs and copy
+        val rootfsResolved = File(targetDir, linkTarget.removePrefix("/"))
+        if (rootfsResolved.exists() && rootfsResolved.isFile) {
+            try {
+                rootfsResolved.copyTo(outFile, overwrite = true)
+                setExecIfNeeded(outFile.name, outFile)
+                return true
+            } catch (e: Exception) {
+                log("symlink rootfs-copy fail: ${outFile.name} -> $linkTarget: ${e.message}")
+            }
+        }
+
+        log("symlink all methods fail: ${outFile.name} -> $linkTarget")
+        return false
+    }
+
+    private fun setExecIfNeeded(cleanName: String, file: File) {
+        if (cleanName.startsWith("bin/") || cleanName.startsWith("sbin/") ||
+            cleanName.startsWith("usr/bin/") || cleanName.startsWith("usr/sbin/") ||
+            cleanName.startsWith("usr/local/bin/")) {
+            file.setExecutable(true, false)
+        }
+    }
+
+    // ─── Single entry extraction (for APK) ───
+
+    private fun extractSingleTarEntry(input: java.io.InputStream, entryPath: String, target: File): Boolean {
+        val hdr = ByteArray(512)
         while (true) {
-            val headerRead = readFully(input, headerBuf)
-            if (headerRead < 512) return false
-            if (headerBuf.all { it == 0.toByte() }) {
-                val nextBlock = ByteArray(512)
-                val nextRead = readFully(input, nextBlock)
-                if (nextRead < 512 || nextBlock.all { it == 0.toByte() }) return false
+            val n = readFully(input, hdr)
+            if (n < 512) return false
+            if (hdr.all { it == 0.toByte() }) {
+                val next = ByteArray(512)
+                val nr = readFully(input, next)
+                if (nr < 512 || next.all { it == 0.toByte() }) return false
                 continue
             }
-
-            val name = parseTarName(headerBuf)
-            val size = parseTarSize(headerBuf)
-            val typeFlag = headerBuf[156]
+            val name = parseTarName(hdr)
+            val size = parseTarSize(hdr)
+            val typeFlag = hdr[156]
             val isFile = typeFlag == 0.toByte() || typeFlag == '0'.code.toByte()
-            val normalizedName = name.removePrefix("./").removePrefix("/")
+            val normalized = name.removePrefix("./").removePrefix("/")
             val normalizedEntry = entryPath.removePrefix("./").removePrefix("/")
 
-            if (isFile && normalizedName == normalizedEntry && size > 0) {
+            if (isFile && normalized == normalizedEntry && size > 0) {
                 target.parentFile?.mkdirs()
                 FileOutputStream(target).use { out ->
                     val buf = ByteArray(8192)
                     var remaining = size
                     while (remaining > 0) {
                         val toRead = minOf(remaining, buf.size.toLong()).toInt()
-                        val read = input.read(buf, 0, toRead)
-                        if (read <= 0) break
-                        out.write(buf, 0, read)
-                        remaining -= read
+                        val rd = input.read(buf, 0, toRead)
+                        if (rd <= 0) break
+                        out.write(buf, 0, rd)
+                        remaining -= rd
                     }
                 }
                 return target.exists() && target.length() > 0
             }
-
             if (size > 0) skipFully(input, ((size + 511) / 512) * 512)
         }
     }
+
+    // ─── Tar parsing helpers ───
 
     private fun parseTarName(header: ByteArray): String {
         val prefix = header.copyOfRange(345, 500).takeWhile { it != 0.toByte() }
@@ -462,9 +512,7 @@ object AlpineBootstrap {
         val sizeBytes = header.copyOfRange(124, 136)
         if (sizeBytes[0].toInt() and 0x80 != 0) {
             var size = 0L
-            for (i in 4 until 12) {
-                size = (size shl 8) or (sizeBytes[i].toLong() and 0xFF)
-            }
+            for (i in 4 until 12) size = (size shl 8) or (sizeBytes[i].toLong() and 0xFF)
             return size
         }
         val sizeStr = sizeBytes.takeWhile { it != 0.toByte() && it != ' '.code.toByte() }
@@ -473,13 +521,13 @@ object AlpineBootstrap {
     }
 
     private fun readFully(input: java.io.InputStream, buf: ByteArray): Int {
-        var offset = 0
-        while (offset < buf.size) {
-            val read = input.read(buf, offset, buf.size - offset)
-            if (read <= 0) return offset
-            offset += read
+        var off = 0
+        while (off < buf.size) {
+            val r = input.read(buf, off, buf.size - off)
+            if (r <= 0) return off
+            off += r
         }
-        return offset
+        return off
     }
 
     private fun skipFully(input: java.io.InputStream, bytes: Long) {
@@ -487,24 +535,25 @@ object AlpineBootstrap {
         val buf = ByteArray(8192)
         while (remaining > 0) {
             val toRead = minOf(remaining, buf.size.toLong()).toInt()
-            val read = input.read(buf, 0, toRead)
-            if (read <= 0) break
-            remaining -= read
+            val r = input.read(buf, 0, toRead)
+            if (r <= 0) break
+            remaining -= r
         }
     }
 
-    private fun logDirectoryContents(dir: File, depth: Int) {
-        if (depth > 2) return
+    private fun logDirectoryTree(dir: File, prefix: String, depth: Int) {
+        if (depth > 1 || !dir.exists()) return
         val files = dir.listFiles() ?: return
         for (f in files.take(30)) {
-            val prefix = "  ".repeat(depth)
             if (f.isDirectory) {
-                log("$prefix ${f.name}/")
-                logDirectoryContents(f, depth + 1)
+                log("  $prefix${f.name}/")
+                logDirectoryTree(f, "$prefix${f.name}/", depth + 1)
             } else {
-                log("$prefix ${f.name} (${f.length()} bytes)")
+                val extra = if (f.length() > 0) "${f.length()}b" else "empty"
+                log("  $prefix${f.name} ($extra)")
             }
         }
+        if (files.size > 30) log("  $prefix... and ${files.size - 30} more")
     }
 
     // ─── Environment config ───
@@ -557,9 +606,7 @@ private class MultiStreamGZIPInputStream(
         val b1 = rawInput.read()
         val b2 = rawInput.read()
         rawInput.reset()
-        if (b1 == 0x1f && b2 == 0x8b) {
-            currentGzip = GZIPInputStream(rawInput)
-        }
+        if (b1 == 0x1f && b2 == 0x8b) currentGzip = GZIPInputStream(rawInput)
     }
 
     override fun read(): Int {
@@ -574,9 +621,9 @@ private class MultiStreamGZIPInputStream(
     override fun read(buf: ByteArray, off: Int, len: Int): Int {
         while (true) {
             val gz = currentGzip ?: return -1
-            val read = gz.read(buf, off, len)
-            if (read > 0) return read
-            if (read == -1 && !tryNextStream()) return -1
+            val rd = gz.read(buf, off, len)
+            if (rd > 0) return rd
+            if (rd == -1 && !tryNextStream()) return -1
         }
     }
 
