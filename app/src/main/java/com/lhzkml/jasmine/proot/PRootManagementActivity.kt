@@ -324,10 +324,22 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         CustomButton(
                             onClick = {
                                 scope.launch {
-                                    val logFile = prootEnv.getLatestLogFile()
                                     logContent = withContext(Dispatchers.IO) {
                                         try {
-                                            logFile?.readText() ?: "暂无日志"
+                                            val logs = buildString {
+                                                val logDir = prootEnv.paths.logDir
+                                                if (logDir.exists()) {
+                                                    logDir.listFiles()
+                                                        ?.sortedByDescending { it.lastModified() }
+                                                        ?.take(3)
+                                                        ?.forEach { f ->
+                                                            appendLine("=== ${f.name} ===")
+                                                            appendLine(f.readText().takeLast(10000))
+                                                            appendLine()
+                                                        }
+                                                }
+                                            }
+                                            logs.ifEmpty { "暂无日志" }
                                         } catch (_: Exception) { "无法读取日志" }
                                     }
                                     showLog = true
@@ -340,7 +352,7 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             ),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            CustomText("安装日志", fontSize = 14.sp, color = TextPrimary)
+                            CustomText("查看日志", fontSize = 14.sp, color = TextPrimary)
                         }
                         CustomButton(
                             onClick = { showUninstallConfirm = true },
@@ -354,6 +366,12 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             CustomText("卸载环境", fontSize = 14.sp, color = ErrorColor)
                         }
                     }
+                    CustomText(
+                        text = "日志目录: ${prootEnv.paths.logDir.absolutePath}",
+                        fontSize = 10.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
             }
 
@@ -523,17 +541,22 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                 focusManager.clearFocus()
                                 packageInstalling = true
                                 scope.launch {
-                                    val result = withContext(Dispatchers.IO) {
-                                        prootEnv.installPackage(pkg)
-                                    }
-                                    packageInstalling = false
-                                    if (result.exitCode == 0) {
-                                        packageToInstall = ""
-                                        Toast.makeText(context, "$pkg 安装成功", Toast.LENGTH_SHORT).show()
-                                        loadPackages()
-                                        refreshInfo()
-                                    } else {
-                                        Toast.makeText(context, "安装失败: ${result.output.take(200)}", Toast.LENGTH_LONG).show()
+                                    try {
+                                        val result = withContext(Dispatchers.IO) {
+                                            prootEnv.installPackage(pkg)
+                                        }
+                                        packageInstalling = false
+                                        if (result.exitCode == 0) {
+                                            packageToInstall = ""
+                                            Toast.makeText(context, "$pkg 安装成功", Toast.LENGTH_SHORT).show()
+                                            loadPackages()
+                                            refreshInfo()
+                                        } else {
+                                            Toast.makeText(context, "安装失败: ${result.output.take(200)}", Toast.LENGTH_LONG).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        packageInstalling = false
+                                        Toast.makeText(context, "安装异常: ${e.message?.take(100)}", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             },
@@ -562,11 +585,15 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         CustomTextButton(
                             onClick = {
                                 scope.launch {
-                                    val result = withContext(Dispatchers.IO) { prootEnv.updateIndex() }
-                                    if (result.exitCode == 0) {
-                                        Toast.makeText(context, "索引更新成功", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "更新失败", Toast.LENGTH_SHORT).show()
+                                    try {
+                                        val result = withContext(Dispatchers.IO) { prootEnv.updateIndex() }
+                                        if (result.exitCode == 0) {
+                                            Toast.makeText(context, "索引更新成功", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "更新失败: ${result.output.take(150)}", Toast.LENGTH_LONG).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "更新异常: ${e.message?.take(100)}", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             },

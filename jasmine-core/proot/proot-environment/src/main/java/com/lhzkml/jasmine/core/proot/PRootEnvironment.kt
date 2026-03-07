@@ -1,6 +1,9 @@
 package com.lhzkml.jasmine.core.proot
 
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * PRoot + Alpine Linux 环境管理器。
@@ -17,6 +20,18 @@ class PRootEnvironment(
     externalDir: File? = null
 ) {
     val paths = PRootPaths.from(filesDir, externalDir)
+
+    private val runtimeLogFile: File by lazy {
+        paths.logDir.mkdirs()
+        val ts = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+        File(paths.logDir, "runtime_$ts.log")
+    }
+
+    fun log(msg: String) {
+        val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
+        val line = "[$ts] $msg\n"
+        try { runtimeLogFile.appendText(line) } catch (_: Exception) {}
+    }
 
     val isInstalled: Boolean
         get() = AlpineBootstrap.isInstalled(paths)
@@ -54,7 +69,8 @@ class PRootEnvironment(
         timeoutSeconds: Int = 60,
         background: Boolean = false
     ): PRootResult {
-        return PRootCommandExecutor.execute(
+        log("exec: $command")
+        val result = PRootCommandExecutor.execute(
             paths = paths,
             command = command,
             workingDirectory = workingDirectory,
@@ -63,6 +79,8 @@ class PRootEnvironment(
             timeoutSeconds = timeoutSeconds,
             background = background
         )
+        log("exec result: exit=${result.exitCode}, output=${result.output.take(500)}")
+        return result
     }
 
     /**
@@ -109,15 +127,27 @@ class PRootEnvironment(
      */
     fun getPRootVersion(): String {
         return try {
-            val process = ProcessBuilder(paths.prootBinary.absolutePath, "--version")
+            val bin = paths.prootBinary
+            log("getPRootVersion: path=${bin.absolutePath}, exists=${bin.exists()}, size=${bin.length()}, canExec=${bin.canExecute()}")
+            if (!bin.canExecute()) {
+                bin.setExecutable(true, false)
+                if (!bin.canExecute()) {
+                    try { Runtime.getRuntime().exec(arrayOf("chmod", "755", bin.absolutePath)).waitFor() } catch (_: Exception) {}
+                }
+                log("getPRootVersion: after chmod canExec=${bin.canExecute()}")
+            }
+            val process = ProcessBuilder(bin.absolutePath, "--version")
                 .redirectErrorStream(true)
                 .start()
             process.waitFor()
             val output = process.inputStream.bufferedReader().readText()
-            output.lines().firstOrNull { it.contains("proot", ignoreCase = true) }?.trim()
+            val ver = output.lines().firstOrNull { it.contains("proot", ignoreCase = true) }?.trim()
                 ?: output.trim().take(100)
+            log("getPRootVersion: $ver")
+            ver
         } catch (e: Exception) {
-            "unknown"
+            log("getPRootVersion error: ${e.message}")
+            "unknown: ${e.message?.take(100)}"
         }
     }
 

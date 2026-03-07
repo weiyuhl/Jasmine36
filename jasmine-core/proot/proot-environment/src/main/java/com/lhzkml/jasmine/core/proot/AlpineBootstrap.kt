@@ -56,8 +56,8 @@ object AlpineBootstrap {
             onProgress(0.22f, "正在提取 PRoot 二进制...")
             extractBinaryFromApk(apkFile, AlpineConstants.PROOT_BINARY_PATH_IN_APK, paths.prootBinary)
             apkFile.delete()
-            paths.prootBinary.setExecutable(true, false)
-            log("PRoot binary: exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}")
+            ensureExecutable(paths.prootBinary)
+            log("PRoot binary: exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}, canExec=${paths.prootBinary.canExecute()}")
 
             if (!paths.prootBinary.exists() || paths.prootBinary.length() < 1024) {
                 val err = "PRoot 二进制提取失败：文件不存在或大小异常 (${paths.prootBinary.length()} bytes)"
@@ -465,7 +465,31 @@ object AlpineBootstrap {
         if (cleanName.startsWith("bin/") || cleanName.startsWith("sbin/") ||
             cleanName.startsWith("usr/bin/") || cleanName.startsWith("usr/sbin/") ||
             cleanName.startsWith("usr/local/bin/")) {
-            file.setExecutable(true, false)
+            ensureExecutable(file)
+        }
+    }
+
+    private fun ensureExecutable(file: File) {
+        file.setExecutable(true, false)
+        file.setReadable(true, false)
+        if (file.canExecute()) return
+
+        try {
+            val p = Runtime.getRuntime().exec(arrayOf("chmod", "755", file.absolutePath))
+            p.waitFor()
+            log("chmod 755 ${file.name}: exit=${p.exitValue()}, canExec=${file.canExecute()}")
+        } catch (e: Exception) {
+            log("chmod failed for ${file.name}: ${e.message}")
+        }
+
+        if (!file.canExecute()) {
+            try {
+                val p = Runtime.getRuntime().exec(arrayOf("chmod", "+x", file.absolutePath))
+                p.waitFor()
+                log("chmod +x ${file.name}: exit=${p.exitValue()}, canExec=${file.canExecute()}")
+            } catch (e: Exception) {
+                log("chmod +x failed for ${file.name}: ${e.message}")
+            }
         }
     }
 

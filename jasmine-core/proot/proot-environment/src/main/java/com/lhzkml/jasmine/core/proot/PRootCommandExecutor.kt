@@ -29,6 +29,22 @@ object PRootCommandExecutor {
             )
         }
 
+        // Ensure PRoot binary has execute permission
+        if (!paths.prootBinary.canExecute()) {
+            paths.prootBinary.setExecutable(true, false)
+            if (!paths.prootBinary.canExecute()) {
+                try {
+                    Runtime.getRuntime().exec(arrayOf("chmod", "755", paths.prootBinary.absolutePath)).waitFor()
+                } catch (_: Exception) {}
+            }
+            if (!paths.prootBinary.canExecute()) {
+                return@withContext PRootResult(
+                    output = "Error: PRoot binary is not executable. Path: ${paths.prootBinary.absolutePath}, exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}",
+                    exitCode = -1
+                )
+            }
+        }
+
         val args = buildCommandArgs(paths, command, workingDirectory, extraBindPaths)
 
         val processBuilder = ProcessBuilder(args)
