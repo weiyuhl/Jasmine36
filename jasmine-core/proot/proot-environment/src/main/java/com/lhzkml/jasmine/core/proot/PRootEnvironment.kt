@@ -81,7 +81,7 @@ class PRootEnvironment(
             background = background
         )
         log("exec result: exit=${result.exitCode}, output=${result.output.take(500)}")
-        return result
+        return result.copy(output = filterProotNoise(result.output))
     }
 
     /**
@@ -111,7 +111,7 @@ class PRootEnvironment(
     suspend fun listInstalledPackages(): List<String> {
         val result = executeCommand("apk list --installed 2>/dev/null | sort")
         if (result.exitCode != 0) return emptyList()
-        return result.output.lines()
+        return filterProotNoise(result.output).lines()
             .filter { it.isNotBlank() }
     }
 
@@ -120,7 +120,8 @@ class PRootEnvironment(
      */
     suspend fun getAlpineVersion(): String {
         val result = executeCommand("cat /etc/alpine-release 2>/dev/null")
-        return result.output.trim().ifEmpty { "unknown" }
+        val clean = filterProotNoise(result.output).trim()
+        return clean.ifEmpty { "unknown" }
     }
 
     /**
@@ -130,14 +131,7 @@ class PRootEnvironment(
         return try {
             val bin = paths.prootBinary
             log("getPRootVersion: path=${bin.absolutePath}, exists=${bin.exists()}, size=${bin.length()}, canExec=${bin.canExecute()}")
-            if (!bin.canExecute()) {
-                bin.setExecutable(true, false)
-                if (!bin.canExecute()) {
-                    try { Runtime.getRuntime().exec(arrayOf("chmod", "755", bin.absolutePath)).waitFor() } catch (_: Exception) {}
-                }
-                log("getPRootVersion: after chmod canExec=${bin.canExecute()}")
-            }
-            val pb = ProcessBuilder(bin.absolutePath, "--version")
+            val pb = ProcessBuilder(bin.absolutePath, "-V")
                 .redirectErrorStream(true)
             val pbEnv = pb.environment()
             if (paths.prootLoader.exists()) pbEnv["PROOT_LOADER"] = paths.prootLoader.absolutePath
@@ -149,13 +143,31 @@ class PRootEnvironment(
             val process = pb.start()
             process.waitFor()
             val output = process.inputStream.bufferedReader().readText()
-            val ver = output.lines().firstOrNull { it.contains("proot", ignoreCase = true) }?.trim()
-                ?: output.trim().take(100)
+            val versionLine = output.lines()
+                .firstOrNull { it.trim().matches(Regex("^\\d+\\.\\d+.*")) }
+                ?.trim()
+            val ver = versionLine
+                ?: output.lines().firstOrNull { it.contains("proot", ignoreCase = true) && !it.contains("Visit") && !it.contains("help") }?.trim()
+                ?: output.trim().lines().firstOrNull()?.trim()?.take(50)
+                ?: "unknown"
             log("getPRootVersion: $ver")
             ver
         } catch (e: Exception) {
             log("getPRootVersion error: ${e.message}")
             "unknown: ${e.message?.take(100)}"
+        }
+    }
+
+    companion object {
+        fun filterProotNoise(output: String): String {
+            return output.lines()
+                .filter { line ->
+                    !line.startsWith("proot warning:") &&
+                    !line.startsWith("proot info:") &&
+                    !line.startsWith("proot error:") &&
+                    !line.contains("can't sanitize binding")
+                }
+                .joinToString("\n")
         }
     }
 

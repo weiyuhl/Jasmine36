@@ -141,9 +141,6 @@ object PRootCommandExecutor {
         args.add("-b"); args.add("/dev/urandom:/dev/random")
         args.add("-b"); args.add("/proc")
         args.add("-b"); args.add("/proc/self/fd:/dev/fd")
-        args.add("-b"); args.add("/proc/self/fd/0:/dev/stdin")
-        args.add("-b"); args.add("/proc/self/fd/1:/dev/stdout")
-        args.add("-b"); args.add("/proc/self/fd/2:/dev/stderr")
         args.add("-b"); args.add("/sys")
 
         // Fake /proc entries (matching Termux proot-distro setup_fake_sysdata)
