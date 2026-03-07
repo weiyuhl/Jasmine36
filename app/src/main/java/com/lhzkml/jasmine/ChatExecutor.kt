@@ -352,10 +352,14 @@ class ChatExecutor(
                 }
 
                 val planPromptText = SimpleLLMPlanner.formatPlanForPrompt(plan)
-                val planSystemMsg = ChatMessage("system", planPromptText)
-                messagesWithPlan = listOf(trimmedMessages.first()) +
-                    listOf(planSystemMsg) +
-                    trimmedMessages.drop(1)
+                // 将计划合并到首条 system 消息，避免连续两条 system 导致部分 API 处理异常
+                val first = trimmedMessages.first()
+                messagesWithPlan = if (first.role == "system") {
+                    listOf(ChatMessage.system(first.content + "\n\n" + planPromptText)) +
+                        trimmedMessages.drop(1)
+                } else {
+                    listOf(ChatMessage.system(planPromptText)) + trimmedMessages
+                }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     chatStateManager.handleSystemLog("[Plan] [规划跳过: ${e.message}]\n\n")
@@ -484,8 +488,9 @@ class ChatExecutor(
             agentId = currentConversationId() ?: "graph-agent"
         )
 
+        // 必须包含完整对话（含用户当前消息），否则模型无法看到用户刚发的问题，导致问答不一致
         val graphPrompt = Prompt.build("graph-agent") {
-            for (msg in trimmedMessages.dropLast(1)) {
+            for (msg in trimmedMessages) {
                 when (msg.role) {
                     "system" -> system(msg.content)
                     "user" -> user(msg.content)

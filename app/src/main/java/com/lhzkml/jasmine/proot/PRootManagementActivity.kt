@@ -310,18 +310,31 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                             statusMessage = ""
                             scope.launch {
                                 try {
+                                    val act = context as? ComponentActivity
                                     withContext(Dispatchers.IO) {
                                         prootEnv.install { p, msg ->
-                                            progress = p
-                                            statusMessage = msg
+                                            if (act?.isDestroyed != true) {
+                                                act?.runOnUiThread {
+                                                    if (!act.isDestroyed) {
+                                                        progress = p
+                                                        statusMessage = msg
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                     installing = false
                                     isInstalled = prootEnv.isInstalled
                                     if (isInstalled) {
-                                        refreshInfo()
-                                        loadPackages()
                                         Toast.makeText(context, "Alpine Linux 安装完成", Toast.LENGTH_SHORT).show()
+                                        // 延迟执行 refreshInfo/loadPackages，避免安装刚完成时文件系统未完全同步导致异常
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(500)
+                                            if (act?.isDestroyed != true) {
+                                                refreshInfo()
+                                                loadPackages()
+                                            }
+                                        }
                                     } else {
                                         statusMessage = "安装异常：文件校验未通过，请卸载后重试"
                                         Toast.makeText(context, "安装异常，请卸载后重试", Toast.LENGTH_LONG).show()
