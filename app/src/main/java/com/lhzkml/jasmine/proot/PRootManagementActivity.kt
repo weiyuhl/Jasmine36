@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +27,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -74,6 +77,8 @@ fun PRootManagementScreen(onBack: () -> Unit) {
     var packageInstalling by remember { mutableStateOf(false) }
 
     var showUninstallConfirm by remember { mutableStateOf(false) }
+    var showLog by remember { mutableStateOf(false) }
+    var logContent by remember { mutableStateOf("") }
 
     fun refreshInfo() {
         isInstalled = prootEnv.isInstalled
@@ -218,8 +223,32 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         text = statusMessage,
                         fontSize = 12.sp,
                         color = ErrorColor,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
+                    val logFile = prootEnv.getLatestLogFile()
+                    if (logFile != null && logFile.exists()) {
+                        CustomText(
+                            text = "日志: ${logFile.absolutePath}",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                        CustomTextButton(
+                            onClick = {
+                                scope.launch {
+                                    logContent = withContext(Dispatchers.IO) {
+                                        try { logFile.readText() } catch (_: Exception) { "无法读取日志" }
+                                    }
+                                    showLog = true
+                                }
+                            },
+                            contentColor = Accent,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 2.dp)
+                        ) {
+                            CustomText("查看安装日志", fontSize = 12.sp, color = Accent)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
 
                 if (!isInstalled && !installing) {
@@ -271,16 +300,42 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                 }
 
                 if (isInstalled && !installing) {
-                    CustomButton(
-                        onClick = { showUninstallConfirm = true },
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
-                        colors = CustomButtonDefaults.buttonColors(
-                            containerColor = ErrorColor.copy(alpha = 0.1f),
-                            contentColor = ErrorColor
-                        ),
-                        shape = RoundedCornerShape(8.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        CustomText("卸载环境", fontSize = 14.sp, color = ErrorColor)
+                        CustomButton(
+                            onClick = {
+                                scope.launch {
+                                    val logFile = prootEnv.getLatestLogFile()
+                                    logContent = withContext(Dispatchers.IO) {
+                                        try {
+                                            logFile?.readText() ?: "暂无日志"
+                                        } catch (_: Exception) { "无法读取日志" }
+                                    }
+                                    showLog = true
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            colors = CustomButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFF0F0F0),
+                                contentColor = TextPrimary
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            CustomText("安装日志", fontSize = 14.sp, color = TextPrimary)
+                        }
+                        CustomButton(
+                            onClick = { showUninstallConfirm = true },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            colors = CustomButtonDefaults.buttonColors(
+                                containerColor = ErrorColor.copy(alpha = 0.1f),
+                                contentColor = ErrorColor
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            CustomText("卸载环境", fontSize = 14.sp, color = ErrorColor)
+                        }
                     }
                 }
             }
@@ -333,6 +388,57 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         ) {
                             CustomText("确定卸载", fontSize = 13.sp, color = Color.White)
                         }
+                    }
+                }
+            }
+
+            // Log viewer
+            if (showLog && logContent.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF8F8F8), RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CustomText(
+                            text = "安装日志",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        CustomTextButton(
+                            onClick = { showLog = false },
+                            contentColor = TextSecondary,
+                            contentPadding = PaddingValues(4.dp)
+                        ) {
+                            CustomText("收起", fontSize = 12.sp, color = TextSecondary)
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF1E1E1E))
+                            .padding(8.dp)
+                    ) {
+                        val hScroll = rememberScrollState()
+                        val vScroll = rememberScrollState()
+                        Text(
+                            text = logContent,
+                            fontSize = 11.sp,
+                            color = Color(0xFFD4D4D4),
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier
+                                .verticalScroll(vScroll)
+                                .horizontalScroll(hScroll)
+                        )
                     }
                 }
             }

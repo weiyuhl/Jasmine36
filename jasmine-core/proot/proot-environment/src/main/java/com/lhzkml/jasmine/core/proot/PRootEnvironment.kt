@@ -136,4 +136,14 @@ class PRootEnvironment(
             else -> "${"%.2f".format(bytes / (1024.0 * 1024.0 * 1024.0))} GB"
         }
     }
+
+    /**
+     * 获取最新的安装日志文件。
+     */
+    fun getLatestLogFile(): File? = AlpineBootstrap.getLatestLogFile(paths)
+
+    /**
+     * 获取日志目录。
+     */
+    fun getLogDir(): File = File(paths.baseDir, "logs")
 }
