@@ -127,13 +127,47 @@ object PRootCommandExecutor {
 
         args.add(paths.prootBinary.absolutePath)
         args.add("--rootfs=${paths.rootfsDir.absolutePath}")
-        args.add("-0") // fake root
+        args.add("--root-id")
         args.add("-w")
         args.add(workingDirectory)
+        args.add("--link2symlink")
+        args.add("--kill-on-exit")
+        args.add("--sysvipc")
+        args.add("-L")
+        args.add("--kernel-release=6.17.0-PRoot-Distro")
 
-        for (bindPath in AlpineConstants.DEFAULT_BIND_PATHS) {
-            args.add("-b")
-            args.add(bindPath)
+        // Core filesystem binds (matching Termux proot-distro)
+        args.add("-b"); args.add("/dev")
+        args.add("-b"); args.add("/dev/urandom:/dev/random")
+        args.add("-b"); args.add("/proc")
+        args.add("-b"); args.add("/proc/self/fd:/dev/fd")
+        args.add("-b"); args.add("/proc/self/fd/0:/dev/stdin")
+        args.add("-b"); args.add("/proc/self/fd/1:/dev/stdout")
+        args.add("-b"); args.add("/proc/self/fd/2:/dev/stderr")
+        args.add("-b"); args.add("/sys")
+
+        // Fake /proc entries (matching Termux proot-distro setup_fake_sysdata)
+        val fakeProc = File(paths.rootfsDir, "proc")
+        val fakeProcBinds = mapOf(
+            ".loadavg" to "/proc/loadavg",
+            ".stat" to "/proc/stat",
+            ".uptime" to "/proc/uptime",
+            ".version" to "/proc/version",
+            ".vmstat" to "/proc/vmstat",
+            ".sysctl_entry_cap_last_cap" to "/proc/sys/kernel/cap_last_cap",
+            ".sysctl_inotify_max_user_watches" to "/proc/sys/fs/inotify/max_user_watches"
+        )
+        for ((file, target) in fakeProcBinds) {
+            val f = File(fakeProc, file)
+            if (f.exists()) {
+                args.add("-b"); args.add("${f.absolutePath}:$target")
+            }
+        }
+
+        // Hide SELinux
+        val emptyDir = File(paths.rootfsDir, "sys/.empty")
+        if (emptyDir.exists()) {
+            args.add("-b"); args.add("${emptyDir.absolutePath}:/sys/fs/selinux")
         }
 
         for ((hostPath, guestPath) in extraBindPaths) {
@@ -144,6 +178,14 @@ object PRootCommandExecutor {
             }
         }
 
+        // Use /usr/bin/env -i to set a clean environment (like Termux proot-distro)
+        args.add("/usr/bin/env")
+        args.add("-i")
+        args.add("HOME=/root")
+        args.add("LANG=C.UTF-8")
+        args.add("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+        args.add("TERM=xterm-256color")
+        args.add("TMPDIR=/tmp")
         args.add("/bin/sh")
         args.add("-c")
         args.add(command)

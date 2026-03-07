@@ -632,6 +632,57 @@ object AlpineBootstrap {
                 """.trimIndent() + "\n"
             )
         }
+
+        setupFakeProcSysData(paths)
+    }
+
+    private fun setupFakeProcSysData(paths: PRootPaths) {
+        val procDir = File(paths.rootfsDir, "proc")
+        procDir.mkdirs()
+
+        File(procDir, ".loadavg").writeText("0.12 0.07 0.02 2/165 765\n")
+
+        File(procDir, ".stat").writeText(buildString {
+            appendLine("cpu  1050008 127632 898432 43586190 175486 462292 205338 0 0 0")
+            for (i in 0..7) {
+                appendLine("cpu$i  131251 15954 112304 5448274 21936 57787 25667 0 0 0")
+            }
+            appendLine("intr 53261351 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0")
+            appendLine("ctxt 38014093")
+            appendLine("btime ${System.currentTimeMillis() / 1000 - 3600}")
+            appendLine("processes 26442")
+            appendLine("procs_running 1")
+            appendLine("procs_blocked 0")
+            appendLine("softirq 12739328 23 5765792 39 1439 1231 0 88 3292182 0 3679534")
+        })
+
+        File(procDir, ".uptime").writeText("124689.08 993073.57\n")
+
+        File(procDir, ".version").writeText(
+            "Linux version 6.17.0-PRoot-Distro (proot@termux) (gcc (GCC) 13.3.0, GNU ld (GNU Binutils) 2.42) #1 SMP PREEMPT_DYNAMIC Fri, 10 Oct 2025 00:00:00 +0000\n"
+        )
+
+        File(procDir, ".vmstat").writeText(buildString {
+            appendLine("nr_free_pages 146031")
+            appendLine("nr_zone_inactive_anon 196744")
+            appendLine("nr_zone_active_anon 301503")
+            appendLine("nr_zone_inactive_file 60829")
+            appendLine("nr_zone_active_file 309462")
+            appendLine("nr_zone_unevictable 164")
+            appendLine("nr_zone_write_pending 8")
+            appendLine("nr_mlock 34")
+            appendLine("nr_bounce 0")
+            appendLine("pgpgin 41674710")
+            appendLine("pgpgout 18250656")
+        })
+
+        File(procDir, ".sysctl_entry_cap_last_cap").writeText("40\n")
+        File(procDir, ".sysctl_inotify_max_user_watches").writeText("524288\n")
+
+        val sysDir = File(paths.rootfsDir, "sys/.empty")
+        sysDir.mkdirs()
+
+        log("Fake /proc and /sys data created")
     }
 }
 
