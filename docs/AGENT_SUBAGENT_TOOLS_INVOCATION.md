@@ -1,6 +1,11 @@
-# Agent 工具调用方法完整参考
+# 子代理（Subagent）工具调用方法完整参考
 
-本文档记录 Agent **全部 15 个工具**的调用格式、参数定义、限制条件及示例，禁止遗漏。
+本文档记录子代理**全部 14 个工具**的调用格式、参数定义、限制条件及示例，禁止遗漏。
+
+**重要说明**：
+- 子代理工具集与主 Agent **不同**：子代理**不包含** `mcp_task`（无法再启动子代理）
+- 子代理类型（generalPurpose / explore / shell）可能具有不同工具集；本文档基于 **generalPurpose** 子代理的完整工具集编写
+- 若以 `readonly=true` 启动，子代理的写操作工具（Write、StrReplace、Delete、EditNotebook、TodoWrite）可能被限制
 
 ---
 
@@ -121,6 +126,8 @@
 | `path` | string | 是 | 文件路径 |
 | `contents` | string | 是 | 文件内容 |
 
+**限制**：`readonly` 模式下可能不可用。
+
 **示例**：
 ```
 <invoke name="Write">
@@ -144,6 +151,8 @@
 | `new_string` | string | 是 | 替换后字符串 |
 | `replace_all` | boolean | 否 | 是否替换全部出现，默认 false |
 
+**限制**：`readonly` 模式下可能不可用。
+
 **示例**：
 ```
 <invoke name="StrReplace">
@@ -162,6 +171,8 @@
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `path` | string | 是 | 要删除的文件路径 |
+
+**限制**：`readonly` 模式下可能不可用。
 
 **示例**：
 ```
@@ -223,6 +234,8 @@
 | `old_string` | string | 是 | 编辑已有 cell：要替换的内容；新建 cell：传空字符串 |
 | `new_string` | string | 是 | 替换后的内容或新 cell 内容 |
 
+**限制**：`readonly` 模式下可能不可用。
+
 **示例**：
 ```
 <invoke name="EditNotebook">
@@ -247,6 +260,8 @@
 | `merge` | boolean | 是 | 是否与现有任务合并（false 则替换全部） |
 
 **status 取值**：`pending` | `in_progress` | `completed` | `cancelled`
+
+**限制**：`readonly` 模式下可能不可用。
 
 **示例**：
 ```
@@ -343,6 +358,8 @@
 - 用途：检查是否有命令在运行、查看命令完整输出
 - 查看元数据：`head -n 10 *.txt`（在 terminals 目录下）
 
+**限制**：`readonly` 模式下可能不可用（取决于子代理类型配置）。
+
 **示例**：
 ```
 <invoke name="Shell">
@@ -350,45 +367,6 @@
 <parameter name="working_directory">d:\Jasmine</parameter>
 <parameter name="timeout">120000</parameter>
 <parameter name="description">构建 Release APK</parameter>
-</invoke>
-```
-
----
-
-### 2.15 mcp_task（子代理）
-
-**功能**：启动子代理处理复杂、多步骤任务。子代理在独立上下文中运行，无法访问主对话。
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `description` | string | 是 | 任务简述（3–5 词） |
-| `prompt` | string | 是 | 详细任务描述（子代理看不到主对话，需在 prompt 中写清上下文） |
-| `subagent_type` | string | 是 | `generalPurpose` / `explore` / `shell` |
-| `model` | string | 否 | 如 `fast`（更快、成本更低） |
-| `resume` | string | 否 | 恢复之前的 Agent ID |
-| `readonly` | boolean | 否 | 只读模式 |
-| `attachments` | array | 否 | 附加文件路径（如视频） |
-| `run_in_background` | boolean | 否 | 是否后台运行 |
-
-**subagent_type 说明**：
-- `generalPurpose`：通用，研究复杂问题、搜索代码、执行多步骤任务
-- `explore`：代码库探索，按模式找文件、按关键词搜代码、了解项目结构；可在 prompt 中指定 thoroughness（quick / medium / very thorough）
-- `shell`：命令执行，bash、git、终端操作等
-
-**返回值**：`run_in_background` 为 true 时，返回 `output_file` 路径，可后续用 Read 读取结果。
-
-**使用建议**：
-- 窄而具体的问题：直接用 Grep、Read、SemanticSearch
-- 需广泛探索代码库：用 `explore` 子代理
-- 需执行 git、构建等命令：用 `shell` 子代理或主 Agent 的 Shell 工具
-- 可并行启动多个子代理（建议不超过 4 个）
-
-**示例**：
-```
-<invoke name="mcp_task">
-<parameter name="description">探索 API 端点定义</parameter>
-<parameter name="prompt">在 app/src/main 目录下查找所有 REST API 端点的定义，列出路径和对应的 Controller/Activity...</parameter>
-<parameter name="subagent_type">explore</parameter>
 </invoke>
 ```
 
@@ -403,7 +381,6 @@
 | GenerateImage | 生成图片 |
 | Glob | 按模式查找文件 |
 | Grep | 文本/正则搜索 |
-| mcp_task | 启动子代理 |
 | mcp_web_fetch | 抓取网页 |
 | Read | 读取文件 |
 | ReadLints | 读取 Linter 诊断 |
@@ -414,6 +391,8 @@
 | WebSearch | 网络搜索 |
 | Write | 写入文件 |
 
+**子代理与主 Agent 工具差异**：子代理**无** `mcp_task`，无法启动下级子代理。
+
 ---
 
 ## 四、使用建议
@@ -421,7 +400,8 @@
 1. **优先专用工具**：读文件用 Read，搜索用 Grep/SemanticSearch，编辑用 StrReplace/Write
 2. **StrReplace**：仅精确匹配，不支持正则；注意编码问题
 3. **Shell**：适合构建、git、安装依赖、运行测试
-4. **mcp_task**：窄问题用主 Agent 工具；需广泛探索用 `explore`；可并行启动，建议不超过 4 个
+4. **子代理限制**：无法再启动子代理；复杂多步骤任务应由主 Agent 通过 mcp_task 分配
+5. **readonly 模式**：若以只读模式启动，Write、StrReplace、Delete、EditNotebook、TodoWrite、Shell 可能不可用
 
 ---
 
@@ -456,10 +436,10 @@
 
 **文件格式**：`<uuid>.jsonl`
 
-**引用规则**：
+**引用规则**（主 Agent 适用）：
 - 引用格式：`[标题（≤6 词）](uuid)`，不含 `.jsonl` 后缀
-- 仅可引用父对话的 transcript，不可引用子代理的 transcript
-- 不讨论该目录的内部结构
+- 仅可引用父对话的 transcript，**不可引用子代理的 transcript**
+- 子代理通常不直接访问或引用 agent_transcripts
 
 ---
 
@@ -475,7 +455,9 @@
 | 数据图表 | 代码生成（matplotlib 等） | GenerateImage |
 | 用户明确要图片 | GenerateImage | 忽略请求 |
 | Windows 多命令 | `;` 连接 | `&&`（PowerShell 不支持） |
+| 启动子代理 | 无（子代理无此能力） | 调用 mcp_task（不存在） |
 
 ---
 
 *文档生成时间：2026-03*
+*对应子代理类型：generalPurpose（explore/shell 类型工具集可能不同）*
