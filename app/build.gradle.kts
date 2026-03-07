@@ -100,6 +100,7 @@ dependencies {
     implementation(project(":jasmine-core:rag:rag-core"))
     implementation(project(":jasmine-core:rag:rag-objectbox"))
     implementation(project(":jasmine-core:rag:rag-embedding-api"))
+    implementation(project(":jasmine-core:proot:proot-environment"))
 
     // Markdown 渲染（底层使用 CommonMark，与 Claude App 相同解析引擎）
     implementation("io.noties.markwon:core:4.6.2")

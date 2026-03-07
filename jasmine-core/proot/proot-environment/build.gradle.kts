@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.lhzkml.jasmine.core.agent.tools"
+    namespace = "com.lhzkml.jasmine.core.proot"
     compileSdk = 36
 
     defaultConfig {
@@ -22,14 +22,8 @@ android {
 }
 
 dependencies {
-    api(project(":jasmine-core:prompt:prompt-llm"))
-    api(project(":jasmine-core:agent:agent-observe"))
-    implementation(project(":jasmine-core:proot:proot-environment"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.okhttp)
-    implementation(libs.ktor.client.content.negotiation)
-    implementation(libs.ktor.serialization.kotlinx.json)
     testImplementation(libs.junit)
-    testImplementation(libs.kotlinx.coroutines.test)
 }

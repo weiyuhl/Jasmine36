@@ -124,6 +124,9 @@
         <activity
             android:name=".oss.OssLicensesDetailActivity"
             android:exported="false" />
+        <activity
+            android:name=".proot.PRootManagementActivity"
+            android:exported="false" />
 
     </application>
 

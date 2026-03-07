@@ -2,6 +2,7 @@ package com.lhzkml.jasmine.core.agent.runtime
 
 import com.lhzkml.jasmine.core.agent.tools.*
 import com.lhzkml.jasmine.core.config.ConfigRepository
+import com.lhzkml.jasmine.core.proot.PRootEnvironment
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 
 /**
@@ -56,6 +57,11 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
     var subAgentConfig: SubAgentConfig = SubAgentConfig()
     var onSubAgentStart: (suspend (purpose: String, type: String) -> Unit)? = null
     var onSubAgentResult: (suspend (purpose: String, result: String) -> Unit)? = null
+
+    /**
+     * PRoot/Alpine Linux 环境实例（由 app 层提供）
+     */
+    var prootEnvironment: PRootEnvironment? = null
 
     /**
      * 构建工具注册表
@@ -124,7 +130,8 @@ class ToolRegistryBuilder(private val configRepo: ConfigRepository) {
                 register(ExecuteShellCommandTool(
                     confirmationHandler = shellConfirmationHandler ?: { _, _, _ -> true },
                     policyConfig = policyConfig,
-                    basePath = basePath
+                    basePath = basePath,
+                    prootEnvironment = prootEnvironment
                 ))
             }
 

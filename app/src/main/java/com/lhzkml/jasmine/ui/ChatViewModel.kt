@@ -247,6 +247,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val activity = _activity ?: throw IllegalStateException("Activity not set")
         toolRegistryBuilder.workspacePath = ProviderManager.getWorkspacePath(activity)
         toolRegistryBuilder.fallbackBasePath = activity.getExternalFilesDir(null)?.absolutePath
+        toolRegistryBuilder.prootEnvironment = com.lhzkml.jasmine.core.proot.PRootEnvironment(
+            activity.filesDir, activity.cacheDir
+        )
         DialogHandlers.register(activity, toolRegistryBuilder)
         toolRegistryBuilder.subAgentClientProvider = { client }
         toolRegistryBuilder.subAgentModelProvider = { model }
