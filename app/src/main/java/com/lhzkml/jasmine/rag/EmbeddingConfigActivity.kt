@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.rag
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -23,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.theme.JasmineTheme
 import com.lhzkml.jasmine.ProviderManager
+import com.lhzkml.jasmine.ui.components.CustomButton
+import com.lhzkml.jasmine.ui.components.CustomButtonDefaults
 import com.lhzkml.jasmine.ui.components.CustomHorizontalDivider
 import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.components.CustomTextButton
@@ -48,12 +51,15 @@ fun EmbeddingConfigScreen(onBack: () -> Unit) {
     var apiKey by remember { mutableStateOf(ProviderManager.getRagEmbeddingApiKey(context)) }
     var model by remember { mutableStateOf(ProviderManager.getRagEmbeddingModel(context)) }
 
+    fun save() {
+        ProviderManager.setRagEmbeddingBaseUrl(context, baseUrl.trim())
+        ProviderManager.setRagEmbeddingApiKey(context, apiKey)
+        ProviderManager.setRagEmbeddingModel(context, model.trim().ifBlank { "text-embedding-3-small" })
+        Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+    }
+
     DisposableEffect(Unit) {
-        onDispose {
-            ProviderManager.setRagEmbeddingBaseUrl(context, baseUrl.trim())
-            ProviderManager.setRagEmbeddingApiKey(context, apiKey)
-            ProviderManager.setRagEmbeddingModel(context, model.trim().ifBlank { "text-embedding-3-small" })
-        }
+        onDispose { save() }
     }
 
     Column(
@@ -125,6 +131,22 @@ fun EmbeddingConfigScreen(onBack: () -> Unit) {
                 CustomText(text = "模型名称", fontSize = 14.sp, color = TextPrimary)
                 CustomText(text = "如 text-embedding-3-small（384 维）", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
                 RagTextField(value = model, onValueChange = { model = it }, placeholder = "text-embedding-3-small")
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                CustomButton(
+                    onClick = { save() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = CustomButtonDefaults.buttonColors(
+                        containerColor = Accent,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    CustomText("保存", fontSize = 16.sp, color = Color.White)
+                }
             }
         }
     }
