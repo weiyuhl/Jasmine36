@@ -80,7 +80,7 @@ class PRootEnvironment(
             timeoutSeconds = timeoutSeconds,
             background = background
         )
-        log("exec result: exit=${result.exitCode}, output=${result.output.take(500)}")
+        log("exec result: exit=${result.exitCode}, output=${result.output.take(20000)}")
         return result.copy(output = filterProotNoise(result.output))
     }
 
@@ -88,7 +88,8 @@ class PRootEnvironment(
      * 通过 apk 安装包。
      */
     suspend fun installPackage(packageName: String): PRootResult {
-        return executeCommand("apk add --no-cache $packageName", timeoutSeconds = 120)
+        // --no-scripts 跳过 trigger/post-install 脚本，避免 fchdir 等 syscall 在部分 Android 内核上失败
+        return executeCommand("apk add --no-cache --no-scripts $packageName", timeoutSeconds = 120)
     }
 
     /**
@@ -144,10 +145,12 @@ class PRootEnvironment(
             val process = pb.start()
             process.waitFor()
             val output = process.inputStream.bufferedReader().readText()
-            // 从输出中提取版本号，支持 5.1.107、5.1.107-70 等格式
-            val versionMatch = Regex("(\\d+\\.\\d+(?:\\.\\d+)?(?:-\\d+)?)").find(output)
-            val ver = versionMatch?.groupValues?.get(1)
-                ?: output.lines().firstOrNull { it.contains("proot", ignoreCase = true) && !it.contains("Visit") }?.trim()?.take(30)
+            val versionRegex = Regex("(\\d+\\.\\d+(?:\\.\\d+)?(?:-\\d+)?)")
+            // 优先从包含 "proot" 的行中提取版本号，避免匹配到 libgcc 等其它版本
+            val prootLine = output.lines().firstOrNull { it.contains("proot", ignoreCase = true) && !it.contains("Visit") }
+            val ver = prootLine?.let { versionRegex.find(it)?.groupValues?.get(1) }
+                ?: versionRegex.find(output)?.groupValues?.get(1)
+                ?: prootLine?.trim()?.take(30)
                 ?: "unknown"
             log("getPRootVersion: $ver")
             ver

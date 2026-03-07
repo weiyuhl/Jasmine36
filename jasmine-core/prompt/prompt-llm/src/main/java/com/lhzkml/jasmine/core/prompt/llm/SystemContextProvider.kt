@@ -455,7 +455,7 @@ class LinuxEnvironmentContextProvider(
             appendLine()
             appendLine("IMPORTANT: When executing shell commands, you MUST set usePRoot=true for ALL commands that:")
             appendLine("- Need Linux tools not available on Android (python3, gcc, git, node, pip, npm, make, etc.)")
-            appendLine("- Need package management (apk add/del/update)")
+            appendLine("- Need package management (apk add/del/update). Use 'apk add --no-cache --no-scripts' to avoid trigger script failures on Android.")
             appendLine("- Need a standard Linux filesystem layout (/usr, /etc, /tmp, etc.)")
             appendLine("- Need Linux-specific utilities (grep with GNU options, sed, awk, tar, wget, curl, etc.)")
             appendLine()

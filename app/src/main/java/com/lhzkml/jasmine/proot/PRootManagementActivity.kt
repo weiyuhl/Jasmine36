@@ -6,10 +6,14 @@ import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -85,6 +90,31 @@ fun PRootManagementScreen(onBack: () -> Unit) {
 
     var apkUpdating by remember { mutableStateOf(false) }
     var apkUpdateOutput by remember { mutableStateOf("") }
+
+    var packageInstallOutput by remember { mutableStateOf("") }
+    var installingToolApk by remember { mutableStateOf<String?>(null) }
+    var uninstallingToolApk by remember { mutableStateOf<String?>(null) }
+    var uninstallingAllTools by remember { mutableStateOf(false) }
+
+    val commonTools = remember {
+        listOf(
+            "git" to "Git",
+            "nodejs" to "Node.js",
+            "python3" to "Python",
+            "gcc" to "GCC",
+            "make" to "Make",
+            "curl" to "curl",
+            "openssh" to "OpenSSH"
+        )
+    }
+
+    fun getToolVersion(apkName: String): String? {
+        val line = installedPackages.firstOrNull { it.startsWith("$apkName-") } ?: return null
+        return line.removePrefix("$apkName-").substringBefore(" ").take(20)
+    }
+
+    fun isToolInstalled(apkName: String): Boolean =
+        installedPackages.any { it.startsWith("$apkName-") }
 
     var showUninstallConfirm by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
@@ -501,10 +531,174 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                     )
 
                     CustomText(
+                        text = "常用工具",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextPrimary,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    val installedTools = commonTools.filter { isToolInstalled(it.first) }
+                    if (installedTools.isNotEmpty() && !uninstallingAllTools) {
+                        CustomTextButton(
+                            onClick = {
+                                uninstallingAllTools = true
+                                packageInstallOutput = "正在一键卸载全部常用工具...\n"
+                                scope.launch {
+                                    var successCount = 0
+                                    for ((apkName, displayName) in installedTools) {
+                                        try {
+                                            val result = withContext(Dispatchers.IO) {
+                                                prootEnv.removePackage(apkName)
+                                            }
+                                            packageInstallOutput += "卸载 $displayName: ${if (result.exitCode == 0) "成功" else "失败"}\n"
+                                            if (result.exitCode == 0) successCount++
+                                        } catch (e: Exception) {
+                                            packageInstallOutput += "卸载 $displayName 异常: ${e.message}\n"
+                                        }
+                                    }
+                                    uninstallingAllTools = false
+                                    packageInstallOutput += "\n✓ 共卸载 $successCount/${installedTools.size} 个工具"
+                                    loadPackages()
+                                    refreshInfo()
+                                    Toast.makeText(context, "已卸载 $successCount 个工具", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            contentColor = ErrorColor,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            CustomText("一键卸载全部", fontSize = 12.sp, color = ErrorColor)
+                        }
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxWidth(),
+                        userScrollEnabled = false,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(commonTools) { (apkName, displayName) ->
+                            val installed = isToolInstalled(apkName)
+                            val version = getToolVersion(apkName)
+                            val isInstalling = installingToolApk == apkName
+                            val isUninstalling = uninstallingToolApk == apkName || uninstallingAllTools
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(88.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (installed) StatusConnected.copy(alpha = 0.12f)
+                                        else if (isInstalling) Color(0xFFE8E8E8)
+                                        else Accent.copy(alpha = 0.08f)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (installed) StatusConnected.copy(alpha = 0.4f)
+                                        else Color(0xFFE0E0E0),
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .then(
+                                        if (!installed && !isInstalling) Modifier.clickable {
+                                            installingToolApk = apkName
+                                            packageInstallOutput = "正在安装 $displayName ($apkName) ...\n"
+                                            scope.launch {
+                                                try {
+                                                    val result = withContext(Dispatchers.IO) {
+                                                        prootEnv.installPackage(apkName)
+                                                    }
+                                                    installingToolApk = null
+                                                    packageInstallOutput += result.output
+                                                    if (result.exitCode == 0) {
+                                                        packageInstallOutput += "\n\n✓ $displayName 安装成功"
+                                                        loadPackages()
+                                                        refreshInfo()
+                                                        Toast.makeText(context, "$displayName 安装成功", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        packageInstallOutput += "\n\n✗ 安装失败 (exit: ${result.exitCode})"
+                                                        Toast.makeText(context, "$displayName 安装失败", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                } catch (e: Exception) {
+                                                    installingToolApk = null
+                                                    packageInstallOutput += "\n\n✗ 安装异常: ${e.message}"
+                                                    Toast.makeText(context, "安装异常: ${e.message?.take(80)}", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        } else Modifier
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    CustomText(
+                                        text = displayName,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = TextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    CustomText(
+                                        text = when {
+                                            isInstalling -> "安装中..."
+                                            isUninstalling -> "卸载中..."
+                                            installed -> version ?: "已安装"
+                                            else -> "点击安装"
+                                        },
+                                        fontSize = 11.sp,
+                                        color = when {
+                                            isInstalling || isUninstalling -> TextSecondary
+                                            installed -> StatusConnected
+                                            else -> TextSecondary
+                                        }
+                                    )
+                                    if (installed && !isUninstalling) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        CustomTextButton(
+                                            onClick = {
+                                                uninstallingToolApk = apkName
+                                                packageInstallOutput = "正在卸载 $displayName ($apkName) ...\n"
+                                                scope.launch {
+                                                    try {
+                                                        val result = withContext(Dispatchers.IO) {
+                                                            prootEnv.removePackage(apkName)
+                                                        }
+                                                        uninstallingToolApk = null
+                                                        packageInstallOutput += result.output
+                                                        if (result.exitCode == 0) {
+                                                            packageInstallOutput += "\n\n✓ $displayName 已卸载"
+                                                            loadPackages()
+                                                            refreshInfo()
+                                                            Toast.makeText(context, "$displayName 已卸载", Toast.LENGTH_SHORT).show()
+                                                        } else {
+                                                            packageInstallOutput += "\n\n✗ 卸载失败 (exit: ${result.exitCode})"
+                                                            Toast.makeText(context, "卸载失败", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        uninstallingToolApk = null
+                                                        packageInstallOutput += "\n\n✗ 卸载异常: ${e.message}"
+                                                        Toast.makeText(context, "卸载异常: ${e.message?.take(80)}", Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            },
+                                            contentColor = ErrorColor,
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            CustomText("卸载", fontSize = 11.sp, color = ErrorColor)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    CustomText(
                         text = "输入包名安装 Alpine 软件包（如 python3、gcc、git、nodejs、curl）",
                         fontSize = 12.sp,
                         color = TextSecondary,
-                        modifier = Modifier.padding(bottom = 12.dp)
+                        modifier = Modifier.padding(top = 12.dp, bottom = 12.dp)
                     )
 
                     Row(
@@ -545,22 +739,27 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                 val pkg = packageToInstall.trim()
                                 focusManager.clearFocus()
                                 packageInstalling = true
+                                packageInstallOutput = "正在安装 $pkg ...\n"
                                 scope.launch {
                                     try {
                                         val result = withContext(Dispatchers.IO) {
                                             prootEnv.installPackage(pkg)
                                         }
                                         packageInstalling = false
+                                        packageInstallOutput += result.output
                                         if (result.exitCode == 0) {
+                                            packageInstallOutput += "\n\n✓ $pkg 安装成功"
                                             packageToInstall = ""
                                             Toast.makeText(context, "$pkg 安装成功", Toast.LENGTH_SHORT).show()
                                             loadPackages()
                                             refreshInfo()
                                         } else {
-                                            Toast.makeText(context, "安装失败: ${result.output.take(200)}", Toast.LENGTH_LONG).show()
+                                            packageInstallOutput += "\n\n✗ 安装失败 (exit: ${result.exitCode})"
+                                            Toast.makeText(context, "安装失败", Toast.LENGTH_SHORT).show()
                                         }
                                     } catch (e: Exception) {
                                         packageInstalling = false
+                                        packageInstallOutput += "\n\n✗ 安装异常: ${e.message}"
                                         Toast.makeText(context, "安装异常: ${e.message?.take(100)}", Toast.LENGTH_LONG).show()
                                     }
                                 }
@@ -578,6 +777,78 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                                 fontSize = 13.sp,
                                 color = Color.White
                             )
+                        }
+                    }
+
+                    if (packageInstallOutput.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                                .background(Color(0xFFF8F8F8), RoundedCornerShape(16.dp))
+                                .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CustomText(
+                                    text = "安装过程",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                CustomTextButton(
+                                    onClick = {
+                                        val clip = android.content.ClipData.newPlainText("proot_install", packageInstallOutput)
+                                        (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(clip)
+                                        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                    },
+                                    contentColor = Accent,
+                                    contentPadding = PaddingValues(4.dp)
+                                ) {
+                                    CustomText("复制", fontSize = 12.sp, color = Accent)
+                                }
+                                CustomTextButton(
+                                    onClick = { packageInstallOutput = "" },
+                                    contentColor = TextSecondary,
+                                    contentPadding = PaddingValues(4.dp)
+                                ) {
+                                    CustomText("收起", fontSize = 12.sp, color = TextSecondary)
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF1E1E1E))
+                                    .padding(8.dp)
+                            ) {
+                                Column {
+                                    if (packageInstalling) {
+                                        LinearProgressIndicator(
+                                            modifier = Modifier.fillMaxWidth().height(2.dp),
+                                            color = Accent,
+                                            trackColor = Color(0xFF333333)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                    }
+                                    val vScroll = rememberScrollState()
+                                    val hScroll = rememberScrollState()
+                                    Text(
+                                        text = packageInstallOutput,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFD4D4D4),
+                                        fontFamily = FontFamily.Monospace,
+                                        modifier = Modifier
+                                            .heightIn(max = 200.dp)
+                                            .verticalScroll(vScroll)
+                                            .horizontalScroll(hScroll)
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -630,35 +901,73 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                     }
 
                     if (apkUpdateOutput.isNotEmpty()) {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF1E1E1E))
-                                .padding(8.dp)
+                                .background(Color(0xFFF8F8F8), RoundedCornerShape(16.dp))
+                                .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
+                                .padding(16.dp)
                         ) {
-                            Column {
-                                if (apkUpdating) {
-                                    LinearProgressIndicator(
-                                        modifier = Modifier.fillMaxWidth().height(2.dp),
-                                        color = Accent,
-                                        trackColor = Color(0xFF333333)
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                }
-                                val vScroll = rememberScrollState()
-                                val hScroll = rememberScrollState()
-                                Text(
-                                    text = apkUpdateOutput,
-                                    fontSize = 11.sp,
-                                    color = Color(0xFFD4D4D4),
-                                    fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier
-                                        .heightIn(max = 160.dp)
-                                        .verticalScroll(vScroll)
-                                        .horizontalScroll(hScroll)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CustomText(
+                                    text = "更新过程",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                CustomTextButton(
+                                    onClick = {
+                                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                        cm?.setPrimaryClip(android.content.ClipData.newPlainText("apk_update", apkUpdateOutput))
+                                        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                    },
+                                    contentColor = Accent,
+                                    contentPadding = PaddingValues(4.dp)
+                                ) {
+                                    CustomText("复制", fontSize = 12.sp, color = Accent)
+                                }
+                                CustomTextButton(
+                                    onClick = { apkUpdateOutput = "" },
+                                    contentColor = TextSecondary,
+                                    contentPadding = PaddingValues(4.dp)
+                                ) {
+                                    CustomText("收起", fontSize = 12.sp, color = TextSecondary)
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF1E1E1E))
+                                    .padding(8.dp)
+                            ) {
+                                Column {
+                                    if (apkUpdating) {
+                                        LinearProgressIndicator(
+                                            modifier = Modifier.fillMaxWidth().height(2.dp),
+                                            color = Accent,
+                                            trackColor = Color(0xFF333333)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                    }
+                                    val vScroll = rememberScrollState()
+                                    val hScroll = rememberScrollState()
+                                    Text(
+                                        text = apkUpdateOutput,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFD4D4D4),
+                                        fontFamily = FontFamily.Monospace,
+                                        modifier = Modifier
+                                            .heightIn(max = 200.dp)
+                                            .verticalScroll(vScroll)
+                                            .horizontalScroll(hScroll)
+                                    )
+                                }
                             }
                         }
                     }

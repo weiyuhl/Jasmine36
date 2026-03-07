@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 class MnnModelMarketActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+        
         Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
             android.util.Log.e("MnnMarket", "Uncaught exception", throwable)
             try {
@@ -69,7 +69,7 @@ fun MnnModelMarketScreen(onBack: () -> Unit) {
     }
 
     if (showErrorFallback) {
-        Column(
+    Column(
             modifier = Modifier.fillMaxSize().background(BgPrimary).padding(20.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
@@ -180,7 +180,7 @@ fun MnnModelMarketScreen(onBack: () -> Unit) {
                     "模型市场", fontSize = 17.sp, color = TextPrimary,
                     fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
                 )
-                CustomText(
+            CustomText(
                     "下载源: ${currentSource.displayName}", fontSize = 11.sp, color = TextSecondary
                 )
             }
@@ -195,7 +195,7 @@ fun MnnModelMarketScreen(onBack: () -> Unit) {
             }
         }
         CustomHorizontalDivider(color = Color(0xFFE0E0E0), thickness = 1.dp)
-
+        
         // 搜索栏 + 筛选按钮
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
@@ -211,8 +211,8 @@ fun MnnModelMarketScreen(onBack: () -> Unit) {
                 )
             }
             Spacer(modifier = Modifier.width(10.dp))
-            Box(
-                modifier = Modifier
+        Box(
+            modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (filterState.isEmpty) BgInput else TextPrimary)
                     .clickable { showFilterDialog = true }
@@ -229,7 +229,7 @@ fun MnnModelMarketScreen(onBack: () -> Unit) {
                             modifier = Modifier.size(18.dp)
                                 .clip(RoundedCornerShape(9.dp))
                                 .background(Color.White),
-                            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center
                         ) {
                             CustomText(
                                 "${filterState.activeCount}", fontSize = 10.sp,
