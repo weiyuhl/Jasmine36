@@ -47,6 +47,7 @@ import com.lhzkml.jasmine.core.prompt.llm.LLMWriteSession
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextProvider
+import com.lhzkml.jasmine.core.prompt.llm.LinuxEnvironmentContextProvider
 import com.lhzkml.jasmine.RagStore
 import com.lhzkml.jasmine.core.rag.RagConfig
 import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
@@ -222,7 +223,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val ragProvider = RagStore.buildRagContextProvider {
                     val rawActive = ProviderManager.getRagActiveLibraryIds(activity)
                     val libs = ProviderManager.getRagLibraries(activity)
-                    // 未勾选任何库时，默认检索全部知识库
                     val effectiveActive = if (rawActive.isEmpty() && libs.isNotEmpty()) libs.map { it.id }.toSet() else rawActive
                     RagConfig(
                         enabled = ProviderManager.isRagEnabled(activity),
@@ -236,6 +236,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             if (ragProvider != null) add(ragProvider)
+            if (isAgent) {
+                val prootEnv = com.lhzkml.jasmine.core.proot.PRootEnvironment(
+                    activity.filesDir, activity.cacheDir, activity.getExternalFilesDir(null),
+                    java.io.File(activity.applicationInfo.nativeLibraryDir)
+                )
+                add(LinuxEnvironmentContextProvider(prootEnv.isInstalled))
+            }
         }
         contextCollector = runtimeBuilder.buildSystemContext(
             isAgentMode = isAgent, workspacePath = wsPath, modelName = modelName,

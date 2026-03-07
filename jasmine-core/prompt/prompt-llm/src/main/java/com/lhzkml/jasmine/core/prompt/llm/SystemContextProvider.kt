@@ -434,3 +434,42 @@ class CustomContextProvider(
         return content.ifBlank { null }
     }
 }
+
+/**
+ * Linux 环境上下文 — 当 PRoot/Alpine 已安装时，注入环境信息到系统提示词
+ *
+ * 让模型自动知道有完整 Linux 环境可用，无需手动指定 usePRoot=true。
+ * 模型在执行 shell 命令时会根据命令类型自动判断是否使用 PRoot 环境。
+ */
+class LinuxEnvironmentContextProvider(
+    private val installed: Boolean,
+    private val installedPackages: List<String> = emptyList()
+) : SystemContextProvider {
+    override val name = "linux_environment"
+    override suspend fun getContextSection(query: String?): String? {
+        if (!installed) return null
+        return buildString {
+            appendLine("<linux_environment>")
+            appendLine("This device has a full Alpine Linux environment installed via PRoot (no root required).")
+            appendLine("Alpine Linux includes apk package manager and can install python3, gcc, git, nodejs, curl, etc.")
+            appendLine()
+            appendLine("IMPORTANT: When executing shell commands, you MUST set usePRoot=true for ALL commands that:")
+            appendLine("- Need Linux tools not available on Android (python3, gcc, git, node, pip, npm, make, etc.)")
+            appendLine("- Need package management (apk add/del/update)")
+            appendLine("- Need a standard Linux filesystem layout (/usr, /etc, /tmp, etc.)")
+            appendLine("- Need Linux-specific utilities (grep with GNU options, sed, awk, tar, wget, curl, etc.)")
+            appendLine()
+            appendLine("Only use usePRoot=false (default) for Android-specific commands like:")
+            appendLine("- File operations in the workspace (ls, cat, cp, mv)")
+            appendLine("- Git operations in the workspace")
+            appendLine("- Android-specific commands (am, pm, logcat)")
+            appendLine()
+            appendLine("The workspace is mounted at /workspace inside PRoot. Use workingDirectory=\"/workspace\" to access workspace files from PRoot.")
+            if (installedPackages.isNotEmpty()) {
+                appendLine()
+                appendLine("Currently installed packages: ${installedPackages.joinToString(", ") { it.substringBefore(" ") }}")
+            }
+            appendLine("</linux_environment>")
+        }.trimEnd()
+    }
+}

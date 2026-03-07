@@ -83,6 +83,9 @@ fun PRootManagementScreen(onBack: () -> Unit) {
     var packageToInstall by remember { mutableStateOf("") }
     var packageInstalling by remember { mutableStateOf(false) }
 
+    var apkUpdating by remember { mutableStateOf(false) }
+    var apkUpdateOutput by remember { mutableStateOf("") }
+
     var showUninstallConfirm by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
     var logContent by remember { mutableStateOf("") }
@@ -584,25 +587,38 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        CustomTextButton(
+                        CustomButton(
                             onClick = {
+                                apkUpdating = true
+                                apkUpdateOutput = "正在更新软件包索引...\n"
                                 scope.launch {
                                     try {
                                         val result = withContext(Dispatchers.IO) { prootEnv.updateIndex() }
+                                        apkUpdateOutput += result.output
                                         if (result.exitCode == 0) {
-                                            Toast.makeText(context, "索引更新成功", Toast.LENGTH_SHORT).show()
+                                            apkUpdateOutput += "\n\n✓ 索引更新成功"
                                         } else {
-                                            Toast.makeText(context, "更新失败: ${result.output.take(150)}", Toast.LENGTH_LONG).show()
+                                            apkUpdateOutput += "\n\n✗ 更新失败 (exit: ${result.exitCode})"
                                         }
                                     } catch (e: Exception) {
-                                        Toast.makeText(context, "更新异常: ${e.message?.take(100)}", Toast.LENGTH_LONG).show()
+                                        apkUpdateOutput += "\n\n✗ 更新异常: ${e.message}"
                                     }
+                                    apkUpdating = false
                                 }
                             },
-                            contentColor = Accent,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            enabled = !apkUpdating,
+                            modifier = Modifier.height(36.dp),
+                            colors = CustomButtonDefaults.buttonColors(
+                                containerColor = if (apkUpdating) Color(0xFFE8E8E8) else Accent.copy(alpha = 0.1f),
+                                contentColor = Accent
+                            ),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            CustomText("apk update", fontSize = 12.sp)
+                            CustomText(
+                                if (apkUpdating) "更新中..." else "apk update",
+                                fontSize = 12.sp,
+                                color = if (apkUpdating) TextSecondary else Accent
+                            )
                         }
                         CustomTextButton(
                             onClick = { loadPackages() },
@@ -613,18 +629,75 @@ fun PRootManagementScreen(onBack: () -> Unit) {
                         }
                     }
 
+                    if (apkUpdateOutput.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF1E1E1E))
+                                .padding(8.dp)
+                        ) {
+                            Column {
+                                if (apkUpdating) {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier.fillMaxWidth().height(2.dp),
+                                        color = Accent,
+                                        trackColor = Color(0xFF333333)
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                }
+                                val vScroll = rememberScrollState()
+                                val hScroll = rememberScrollState()
+                                Text(
+                                    text = apkUpdateOutput,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFD4D4D4),
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier
+                                        .heightIn(max = 160.dp)
+                                        .verticalScroll(vScroll)
+                                        .horizontalScroll(hScroll)
+                                )
+                            }
+                        }
+                    }
+
                     CustomHorizontalDivider(
                         color = Color(0xFFE8E8E8),
                         thickness = 1.dp,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
 
-                    CustomText(
-                        text = if (packagesLoading) "加载中..." else "已安装 ${installedPackages.size} 个包",
-                        fontSize = 13.sp,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CustomText(
+                            text = if (packagesLoading) "加载中..." else "已安装 ${installedPackages.size} 个包",
+                            fontSize = 13.sp,
+                            color = TextSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (installedPackages.isNotEmpty()) {
+                            CustomTextButton(
+                                onClick = {
+                                    val exportText = installedPackages.joinToString("\n")
+                                    val exportFile = File(
+                                        (context as? ComponentActivity)?.getExternalFilesDir(null),
+                                        "proot/installed_packages.txt"
+                                    )
+                                    exportFile.parentFile?.mkdirs()
+                                    exportFile.writeText(exportText)
+                                    Toast.makeText(context, "已导出到 ${exportFile.absolutePath}", Toast.LENGTH_LONG).show()
+                                },
+                                contentColor = Accent,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                CustomText("导出列表", fontSize = 12.sp)
+                            }
+                        }
+                    }
 
                     if (installedPackages.isNotEmpty()) {
                         LazyColumn(
