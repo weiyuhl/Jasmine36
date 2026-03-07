@@ -220,13 +220,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else ""
             val additionalProviders: List<SystemContextProvider> = buildList {
                 val ragProvider = RagStore.buildRagContextProvider {
+                    val rawActive = ProviderManager.getRagActiveLibraryIds(activity)
+                    val libs = ProviderManager.getRagLibraries(activity)
+                    // 未勾选任何库时，默认检索全部知识库
+                    val effectiveActive = if (rawActive.isEmpty() && libs.isNotEmpty()) libs.map { it.id }.toSet() else rawActive
                     RagConfig(
                         enabled = ProviderManager.isRagEnabled(activity),
                         topK = ProviderManager.getRagTopK(activity),
                         embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(activity),
                         embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(activity),
                         embeddingModel = ProviderManager.getRagEmbeddingModel(activity),
-                        activeLibraryIds = ProviderManager.getRagActiveLibraryIds(activity)
+                        useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(activity),
+                        embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(activity),
+                        activeLibraryIds = effectiveActive
                     )
                 }
             if (ragProvider != null) add(ragProvider)

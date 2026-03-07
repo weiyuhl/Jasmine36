@@ -415,9 +415,14 @@ fun SettingsSwitchItem(
 private fun getRagInfo(context: android.content.Context): String {
     if (!ProviderManager.isRagEnabled(context)) return "已关闭"
     val topK = ProviderManager.getRagTopK(context)
-    val url = ProviderManager.getRagEmbeddingBaseUrl(context)
-    val hasConfig = url.isNotBlank() && ProviderManager.getRagEmbeddingApiKey(context).isNotBlank()
-    return if (hasConfig) "TopK $topK · 已配置" else "未配置 API"
+    val useLocal = ProviderManager.getRagEmbeddingUseLocal(context)
+    val hasConfig = if (useLocal) {
+        ProviderManager.getRagEmbeddingModelPath(context).isNotBlank()
+    } else {
+        ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank() &&
+            ProviderManager.getRagEmbeddingApiKey(context).isNotBlank()
+    }
+    return if (hasConfig) "TopK $topK · 已配置" else "未配置"
 }
 
 private fun getProviderStatus(context: android.content.Context): String {

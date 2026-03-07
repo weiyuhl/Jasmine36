@@ -1,7 +1,8 @@
 package com.lhzkml.jasmine.rag
 
-import android.widget.Toast
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -22,6 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.TextStyle
@@ -32,8 +36,10 @@ import com.lhzkml.jasmine.RagStore
 import com.lhzkml.jasmine.core.config.RagLibraryConfig
 import com.lhzkml.jasmine.rag.RagLibraryContentActivity
 import com.lhzkml.jasmine.core.rag.IndexDocument
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -61,6 +67,7 @@ fun RagConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
 
     var enabled by remember { mutableStateOf(ProviderManager.isRagEnabled(context)) }
+    var useLocalEmbedding by remember { mutableStateOf(ProviderManager.getRagEmbeddingUseLocal(context)) }
     var topK by remember { mutableStateOf(ProviderManager.getRagTopK(context).toString()) }
     var isIndexing by remember { mutableStateOf(false) }
     var indexStatus by remember { mutableStateOf<String?>(null) }
@@ -82,6 +89,18 @@ fun RagConfigScreen(onBack: () -> Unit) {
         if (workspaceTargetLib !in libraries.map { it.id }) workspaceTargetLib = libraries.firstOrNull()?.id ?: "default"
     }
 
+    // 从 Embedding 配置页返回时刷新来源选择
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     fun persistLibraries() {
         ProviderManager.setRagLibraries(context, libraries)
         ProviderManager.setRagActiveLibraryIds(context, activeIds)
@@ -94,6 +113,7 @@ fun RagConfigScreen(onBack: () -> Unit) {
     DisposableEffect(Unit) {
         onDispose {
             ProviderManager.setRagEnabled(context, enabled)
+            ProviderManager.setRagEmbeddingUseLocal(context, useLocalEmbedding)
             ProviderManager.setRagTopK(context, topK.toIntOrNull()?.coerceIn(1, 32) ?: 5)
             persistLibraries()
         }
@@ -175,12 +195,56 @@ fun RagConfigScreen(onBack: () -> Unit) {
                         .border(1.dp, Color(0xFFE8E8E8), RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
+                    // Embedding 来源切换
+                    CustomText(text = "Embedding 来源", fontSize = 14.sp, color = TextPrimary)
                     CustomText(
-                        text = "Embedding 服务请在「设置」-「模型供应商」-「Embedding 服务」中配置",
-                        fontSize = 12.sp,
+                        text = "选择向量化使用的服务：远程 API 或本地 MNN 模型",
+                        fontSize = 11.sp,
                         color = TextSecondary,
-                        modifier = Modifier.padding(bottom = 12.dp)
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        listOf("远程 API" to false, "本地 MNN" to true).forEach { (label, local) ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (useLocalEmbedding == local) Accent.copy(alpha = 0.2f) else Color(0xFFF0F0F0))
+                                    .border(1.dp, if (useLocalEmbedding == local) Accent else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        useLocalEmbedding = local
+                                        ProviderManager.setRagEmbeddingUseLocal(context, local)
+                                        RagStore.releaseCachedMnnEmbedding()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CustomText(
+                                    text = label,
+                                    fontSize = 14.sp,
+                                    color = if (useLocalEmbedding == local) Accent else TextSecondary,
+                                    fontWeight = if (useLocalEmbedding == local) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CustomTextButton(
+                        onClick = { context.startActivity(Intent(context, EmbeddingConfigActivity::class.java)) },
+                        contentColor = Accent,
+                        contentPadding = PaddingValues(4.dp)
+                    ) {
+                        CustomText(
+                            text = if (useLocalEmbedding) "去选择本地模型" else "去配置 API 地址与 Key",
+                            fontSize = 12.sp,
+                            color = Accent
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     CustomText(text = "检索数量 TopK", fontSize = 14.sp, color = TextPrimary)
                     CustomText(text = "返回最相关的文档条数 (1~32)", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
                     RagTextField(
@@ -335,16 +399,25 @@ fun RagConfigScreen(onBack: () -> Unit) {
                                     return@CustomTextButton
                                 }
                                 manualSaveStatus = null
-                                CoroutineScope(Dispatchers.Main).launch {
-                                    val msg = withContext(Dispatchers.IO) {
-                                        saveManualEntry(context, selectedLibForManual, manualTitle.ifBlank { "manual_${System.currentTimeMillis()}" }, manualContent)
+                                val exceptionHandler = CoroutineExceptionHandler { _, t ->
+                                    val err = t.message ?: t.toString()
+                                    manualSaveStatus = "保存失败: $err"
+                                    Toast.makeText(context.applicationContext, "保存失败: $err", Toast.LENGTH_LONG).show()
+                                }
+                                CoroutineScope(Dispatchers.Main + SupervisorJob() + exceptionHandler).launch {
+                                    val msg = try {
+                                        withContext(Dispatchers.IO) {
+                                            saveManualEntry(context, selectedLibForManual, manualTitle.ifBlank { "manual_${System.currentTimeMillis()}" }, manualContent)
+                                        }
+                                    } catch (t: Throwable) {
+                                        "保存失败: ${t.message ?: t.toString()}"
                                     }
                                     manualSaveStatus = msg
                                     if (msg.startsWith("已保存")) {
                                         manualTitle = ""
                                         manualContent = ""
                                     }
-                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context.applicationContext, msg, Toast.LENGTH_SHORT).show()
                                 }
                             },
                             contentColor = Accent,
@@ -504,6 +577,7 @@ fun RagConfigScreen(onBack: () -> Unit) {
                         }
                         val id = "lib_${name.replace(Regex("[^a-zA-Z0-9\u4e00-\u9fa5]"), "_").lowercase()}_${UUID.randomUUID().toString().take(8)}"
                         libraries = libraries + RagLibraryConfig(id, name, newLibDesc.trim())
+                        activeIds = activeIds + id  // 新建知识库默认参与检索
                         persistLibraries()
                         showAddLibraryDialog = false
                         newLibName = ""
@@ -536,11 +610,13 @@ private suspend fun saveManualEntry(
             embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(context),
             embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(context),
             embeddingModel = ProviderManager.getRagEmbeddingModel(context),
+            useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(context),
+            embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(context),
             activeLibraryIds = ProviderManager.getRagActiveLibraryIds(context)
         )
     }
     val indexingService = RagStore.buildIndexingService(configProvider)
-        ?: return "请先配置 Embedding API 地址和 Key"
+        ?: return (RagStore.lastEmbeddingFailureReason ?: "请先配置 Embedding（远程 API 或本地 MNN 模型）")
     return try {
         val result = indexingService.indexDocument(IndexDocument(sourceId, content, libraryId))
         if (result.success) "已保存，${result.chunksIndexed} 个块已索引" else "保存失败: ${result.error}"
@@ -561,11 +637,13 @@ private suspend fun runIndexing(
             embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(context),
             embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(context),
             embeddingModel = ProviderManager.getRagEmbeddingModel(context),
+            useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(context),
+            embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(context),
             activeLibraryIds = ProviderManager.getRagActiveLibraryIds(context)
         )
     }
     val indexingService = RagStore.buildIndexingService(configProvider)
-        ?: return "请先配置 Embedding API 地址和 Key"
+        ?: return (RagStore.lastEmbeddingFailureReason ?: "请先配置 Embedding（远程 API 或本地 MNN 模型）")
     val root = File(workspacePath)
     val extensions = ProviderManager.getRagIndexableExtensions(context)
     val documents = mutableListOf<IndexDocument>()

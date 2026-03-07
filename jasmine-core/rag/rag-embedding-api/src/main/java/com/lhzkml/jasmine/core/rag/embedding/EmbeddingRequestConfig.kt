@@ -8,5 +8,5 @@ data class EmbeddingRequestConfig(
     val baseUrl: String,
     val apiKey: String,
     val model: String = "text-embedding-3-small",
-    val dimensions: Int = 384
+    val dimensions: Int = 1024
 )

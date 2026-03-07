@@ -12,6 +12,10 @@ data class RagConfig(
     val embeddingBaseUrl: String = "",
     val embeddingApiKey: String = "",
     val embeddingModel: String = "text-embedding-3-small",
+    /** 是否使用本地 MNN Embedding */
+    val useLocalEmbedding: Boolean = false,
+    /** 本地 MNN Embedding 模型路径（当 useLocalEmbedding 为 true 时使用） */
+    val embeddingModelPath: String = "",
     /** 参与检索的知识库 ID 集合，空表示检索全部 */
     val activeLibraryIds: Set<String> = emptySet()
 )

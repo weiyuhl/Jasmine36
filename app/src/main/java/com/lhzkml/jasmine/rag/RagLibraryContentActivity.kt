@@ -262,11 +262,14 @@ fun RagLibraryContentScreen(
                                     embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(context),
                                     embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(context),
                                     embeddingModel = ProviderManager.getRagEmbeddingModel(context),
+                                    useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(context),
+                                    embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(context),
                                     activeLibraryIds = ProviderManager.getRagActiveLibraryIds(context)
                                 )
                             }
                             val svc = RagStore.buildIndexingService(configProvider)
-                                ?: return@withContext "请先配置 Embedding"
+                                ?: return@withContext (RagStore.lastEmbeddingFailureReason
+                                    ?: "请先配置 Embedding（远程 API 或本地 MNN 模型）")
                             val result = svc.indexDocument(IndexDocument(title.ifBlank { target.sourceId }, content, libraryId))
                             if (result.success) "已保存" else "保存失败: ${result.error}"
                         }

@@ -427,6 +427,10 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun setRagEmbeddingApiKey(key: String) { prefs().edit().putString("rag_embedding_api_key", key).apply() }
     override fun getRagEmbeddingModel(): String = prefs().getString("rag_embedding_model", null) ?: "text-embedding-3-small"
     override fun setRagEmbeddingModel(model: String) { prefs().edit().putString("rag_embedding_model", model).apply() }
+    override fun getRagEmbeddingUseLocal(): Boolean = prefs().getBoolean("rag_embedding_use_local", false)
+    override fun setRagEmbeddingUseLocal(useLocal: Boolean) { prefs().edit().putBoolean("rag_embedding_use_local", useLocal).apply() }
+    override fun getRagEmbeddingModelPath(): String = prefs().getString("rag_embedding_model_path", null) ?: ""
+    override fun setRagEmbeddingModelPath(path: String) { prefs().edit().putString("rag_embedding_model_path", path).apply() }
     override fun getRagLibraries(): List<RagLibraryConfig> {
         val raw = prefs().getString("rag_libraries", null) ?: return listOf(
             RagLibraryConfig("default", "默认库", "通用知识")

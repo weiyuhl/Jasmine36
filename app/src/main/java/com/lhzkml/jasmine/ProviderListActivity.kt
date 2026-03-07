@@ -138,8 +138,15 @@ fun ProviderListScreen(
                         isCustom = false
                     ),
                     isActive = false,
-                    hasKey = ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank() && ProviderManager.getRagEmbeddingApiKey(context).isNotBlank(),
-                    model = if (ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank()) "已配置" else "未配置",
+                    hasKey = run {
+                        val useLocal = ProviderManager.getRagEmbeddingUseLocal(context)
+                        if (useLocal) ProviderManager.getRagEmbeddingModelPath(context).isNotBlank()
+                        else ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank() && ProviderManager.getRagEmbeddingApiKey(context).isNotBlank()
+                    },
+                    model = when {
+                        ProviderManager.getRagEmbeddingUseLocal(context) -> if (ProviderManager.getRagEmbeddingModelPath(context).isNotBlank()) "本地 MNN · 已配置" else "未配置"
+                        else -> if (ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank()) "远程 API · 已配置" else "未配置"
+                    },
                     onSwitchChange = { },
                     onClick = { context.startActivity(Intent(context, com.lhzkml.jasmine.rag.EmbeddingConfigActivity::class.java)) },
                     onDelete = null,

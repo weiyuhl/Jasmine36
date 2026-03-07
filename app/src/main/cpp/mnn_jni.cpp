@@ -270,4 +270,96 @@ Java_com_lhzkml_jasmine_mnn_MnnLlmSession_nativeGenerate(
     return env->NewStringUTF(result.c_str());
 }
 
+// ==================== MNN Embedding (RAG) ====================
+
+static std::unique_ptr<MNN::Express::ExecutorScope> g_embeddingScope;
+static std::unique_ptr<MNN::BackendConfig> g_embeddingBackendConfig;
+
+JNIEXPORT jlong JNICALL
+Java_com_lhzkml_jasmine_mnn_MnnEmbeddingSession_nativeInit(
+    JNIEnv *env,
+    jclass clazz,
+    jstring modelPath
+) {
+    const char *path = env->GetStringUTFChars(modelPath, nullptr);
+    LOGD("MNN Embedding init: %s", path);
+    try {
+        MNN::BackendConfig backendConfig;
+        auto executor = MNN::Express::Executor::newExecutor(MNN_FORWARD_CPU, backendConfig, 1);
+        g_embeddingScope = std::make_unique<MNN::Express::ExecutorScope>(executor);
+        auto *embedding = Embedding::createEmbedding(path, true);
+        env->ReleaseStringUTFChars(modelPath, path);
+        if (!embedding) {
+            LOGE("Failed to create Embedding");
+            g_embeddingScope.reset();
+            return 0;
+        }
+        LOGD("MNN Embedding loaded at %p", embedding);
+        return reinterpret_cast<jlong>(embedding);
+    } catch (const std::exception& e) {
+        LOGE("MNN Embedding init failed: %s", e.what());
+        env->ReleaseStringUTFChars(modelPath, path);
+        g_embeddingScope.reset();
+        return 0;
+    }
+}
+
+JNIEXPORT jint JNICALL
+Java_com_lhzkml_jasmine_mnn_MnnEmbeddingSession_nativeGetDimensions(
+    JNIEnv *env,
+    jclass clazz,
+    jlong ptr
+) {
+    auto *embedding = reinterpret_cast<Embedding*>(ptr);
+    if (!embedding) return 0;
+    return static_cast<jint>(embedding->dim());
+}
+
+JNIEXPORT jfloatArray JNICALL
+Java_com_lhzkml_jasmine_mnn_MnnEmbeddingSession_nativeEmbedText(
+    JNIEnv *env,
+    jclass clazz,
+    jlong ptr,
+    jstring text
+) {
+    auto *embedding = reinterpret_cast<Embedding*>(ptr);
+    if (!embedding) return nullptr;
+    const char *txt = env->GetStringUTFChars(text, nullptr);
+    try {
+        auto var = embedding->txt_embedding(txt);
+        env->ReleaseStringUTFChars(text, txt);
+        if (!var.get()) {
+            LOGE("txt_embedding returned null");
+            return nullptr;
+        }
+        const float *data = var->readMap<float>();
+        if (!data) {
+            LOGE("readMap returned null");
+            return nullptr;
+        }
+        int dim = embedding->dim();
+        jfloatArray result = env->NewFloatArray(dim);
+        env->SetFloatArrayRegion(result, 0, dim, data);
+        return result;
+    } catch (const std::exception& e) {
+        LOGE("MNN Embedding embed failed: %s", e.what());
+        env->ReleaseStringUTFChars(text, txt);
+        return nullptr;
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_lhzkml_jasmine_mnn_MnnEmbeddingSession_nativeRelease(
+    JNIEnv *env,
+    jclass clazz,
+    jlong ptr
+) {
+    LOGD("Releasing MNN Embedding at %p", reinterpret_cast<void*>(ptr));
+    auto *embedding = reinterpret_cast<Embedding*>(ptr);
+    if (embedding) {
+        delete embedding;
+    }
+    g_embeddingScope.reset();
+}
+
 } // extern "C"

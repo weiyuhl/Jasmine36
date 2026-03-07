@@ -190,6 +190,12 @@ interface ConfigRepository {
     fun setRagEmbeddingApiKey(key: String)
     fun getRagEmbeddingModel(): String
     fun setRagEmbeddingModel(model: String)
+    /** 是否使用本地 MNN Embedding（否则使用远程 API） */
+    fun getRagEmbeddingUseLocal(): Boolean
+    fun setRagEmbeddingUseLocal(useLocal: Boolean)
+    /** 本地 MNN Embedding 模型路径（模型目录，含 config.json） */
+    fun getRagEmbeddingModelPath(): String
+    fun setRagEmbeddingModelPath(path: String)
     fun getRagLibraries(): List<RagLibraryConfig>
     fun setRagLibraries(libraries: List<RagLibraryConfig>)
     fun getRagActiveLibraryIds(): Set<String>

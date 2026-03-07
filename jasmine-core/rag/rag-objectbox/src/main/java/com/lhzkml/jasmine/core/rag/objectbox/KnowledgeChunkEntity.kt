@@ -8,7 +8,7 @@ import io.objectbox.annotation.Id
 
 /**
  * ObjectBox 知识块实体
- * 使用 HNSW 向量索引，维度需与 EmbeddingService.dimensions 一致。
+ * 使用 HNSW 向量索引，支持 384/512/768/1024 等常见维度，由 PaddingEmbeddingService 统一适配。
  */
 @Entity
 data class KnowledgeChunkEntity(
@@ -17,7 +17,7 @@ data class KnowledgeChunkEntity(
     var sourceId: String = "",
     var content: String = "",
     var metadata: String = "{}",
-    @HnswIndex(dimensions = 384) var embedding: FloatArray? = null
+    @HnswIndex(dimensions = 1024) var embedding: FloatArray? = null
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
