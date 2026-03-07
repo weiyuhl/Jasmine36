@@ -33,8 +33,11 @@ object AlpineConstants {
     const val MINIROOTFS_FILENAME = "alpine-minirootfs-3.21.3-aarch64.tar.gz"
     const val MINIROOTFS_URL =
         "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/$MINIROOTFS_FILENAME"
-    const val PROOT_DOWNLOAD_URL =
-        "https://raw.githubusercontent.com/proot-me/proot-static-build/master/static/proot-aarch64"
+
+    const val PROOT_STATIC_APK_FILENAME = "proot-static-5.4.0-r2.apk"
+    const val PROOT_STATIC_APK_URL =
+        "https://dl-cdn.alpinelinux.org/alpine/edge/community/aarch64/$PROOT_STATIC_APK_FILENAME"
+    const val PROOT_BINARY_PATH_IN_APK = "usr/bin/proot.static"
 
     val DEFAULT_BIND_PATHS = listOf(
         "/dev",

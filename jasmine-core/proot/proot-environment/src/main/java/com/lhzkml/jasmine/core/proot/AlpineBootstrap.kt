@@ -1,34 +1,22 @@
 package com.lhzkml.jasmine.core.proot
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.request.get
-import io.ktor.client.request.prepareGet
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.client.statement.bodyAsText
-import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.BufferedInputStream
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.zip.GZIPInputStream
 
 /**
  * Alpine minirootfs + PRoot 二进制的下载与初始化。
  *
  * 安装流程：
- * 1. 下载 PRoot arm64 静态二进制
- * 2. 下载 Alpine minirootfs tar.gz
+ * 1. 从 Alpine 官方 CDN 下载 proot-static .apk 包并提取静态二进制
+ * 2. 从 Alpine 官方 CDN 下载 minirootfs tar.gz
  * 3. 解压 rootfs
  * 4. 配置 DNS / APK 镜像源
  */
 object AlpineBootstrap {
-
-    private val httpClient by lazy { HttpClient(OkHttp) }
 
     suspend fun install(
         paths: PRootPaths,
@@ -39,16 +27,21 @@ object AlpineBootstrap {
         paths.rootfsDir.mkdirs()
         paths.homeDir.mkdirs()
 
-        // Step 1: PRoot binary
+        // Step 1: PRoot static binary (from Alpine proot-static .apk package)
         if (!paths.prootBinary.exists() || paths.prootBinary.length() < 1024) {
-            onProgress(0.05f, "正在下载 PRoot 二进制...")
+            onProgress(0.05f, "正在下载 PRoot 静态二进制...")
+            val apkFile = File(cacheDir, AlpineConstants.PROOT_STATIC_APK_FILENAME)
             downloadFile(
-                AlpineConstants.PROOT_DOWNLOAD_URL,
-                paths.prootBinary,
+                AlpineConstants.PROOT_STATIC_APK_URL,
+                apkFile,
                 cacheDir
             ) { progress ->
-                onProgress(0.05f + progress * 0.20f, "正在下载 PRoot 二进制...")
+                onProgress(0.05f + progress * 0.15f, "正在下载 PRoot 静态二进制...")
             }
+
+            onProgress(0.22f, "正在提取 PRoot 二进制...")
+            extractBinaryFromApk(apkFile, AlpineConstants.PROOT_BINARY_PATH_IN_APK, paths.prootBinary)
+            apkFile.delete()
             paths.prootBinary.setExecutable(true, false)
         }
 
@@ -110,6 +103,10 @@ object AlpineBootstrap {
         conn.instanceFollowRedirects = true
         try {
             conn.connect()
+            val code = conn.responseCode
+            if (code != 200) {
+                throw RuntimeException("HTTP $code from $urlStr")
+            }
             val totalBytes = conn.contentLengthLong
             var downloaded = 0L
             conn.inputStream.buffered().use { input ->
@@ -125,16 +122,51 @@ object AlpineBootstrap {
                     }
                 }
             }
-            tmpFile.renameTo(target)
+            if (!tmpFile.renameTo(target)) {
+                tmpFile.copyTo(target, overwrite = true)
+                tmpFile.delete()
+            }
         } finally {
             conn.disconnect()
         }
     }
 
     /**
+     * 从 Alpine .apk 包中提取指定文件。
+     * Alpine .apk 实际上是 gzipped tar 归档，可直接用 tar 解压。
+     */
+    private fun extractBinaryFromApk(apkFile: File, entryPath: String, target: File) {
+        val tmpDir = File(apkFile.parentFile, "proot_extract_tmp")
+        tmpDir.mkdirs()
+
+        try {
+            val process = ProcessBuilder(
+                "tar", "xzf", apkFile.absolutePath,
+                "-C", tmpDir.absolutePath,
+                entryPath
+            ).redirectErrorStream(true).start()
+
+            val output = process.inputStream.bufferedReader().readText()
+            val exitCode = process.waitFor()
+            if (exitCode != 0) {
+                throw RuntimeException("Failed to extract PRoot from .apk (exit $exitCode): $output")
+            }
+
+            val extracted = File(tmpDir, entryPath)
+            if (!extracted.exists()) {
+                throw RuntimeException("PRoot binary not found in .apk at $entryPath")
+            }
+
+            target.parentFile?.mkdirs()
+            extracted.copyTo(target, overwrite = true)
+        } finally {
+            tmpDir.deleteRecursively()
+        }
+    }
+
+    /**
      * 解压 .tar.gz 到目标目录。
-     * 使用 Android 系统自带的 tar 命令（busybox/toybox），
-     * 因为 Java 的 TarInputStream 不在标准库中。
+     * 使用 Android 系统自带的 tar 命令（busybox/toybox）。
      */
     private fun extractTarGz(tarGz: File, targetDir: File) {
         targetDir.mkdirs()
@@ -151,17 +183,14 @@ object AlpineBootstrap {
     }
 
     private fun configureEnvironment(paths: PRootPaths) {
-        // DNS
         val resolv = File(paths.rootfsDir, "etc/resolv.conf")
         resolv.parentFile?.mkdirs()
         resolv.writeText("nameserver ${AlpineConstants.DEFAULT_DNS}\nnameserver 8.8.8.8\n")
 
-        // APK repositories
         val repos = File(paths.rootfsDir, "etc/apk/repositories")
         repos.parentFile?.mkdirs()
         repos.writeText(AlpineConstants.DEFAULT_REPOSITORIES.joinToString("\n") + "\n")
 
-        // Minimal /etc/passwd and /etc/group for root
         val passwd = File(paths.rootfsDir, "etc/passwd")
         if (!passwd.exists() || !passwd.readText().contains("root")) {
             passwd.writeText("root:x:0:0:root:/root:/bin/sh\n")
@@ -171,10 +200,8 @@ object AlpineBootstrap {
             group.writeText("root:x:0:root\n")
         }
 
-        // Ensure /tmp exists
         File(paths.rootfsDir, "tmp").mkdirs()
 
-        // Profile for interactive shells
         val profile = File(paths.rootfsDir, "root/.profile")
         if (!profile.exists()) {
             profile.writeText(
