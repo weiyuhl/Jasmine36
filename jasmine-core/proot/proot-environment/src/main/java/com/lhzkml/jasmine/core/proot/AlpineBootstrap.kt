@@ -43,29 +43,16 @@ object AlpineBootstrap {
         paths.rootfsDir.mkdirs()
         paths.homeDir.mkdirs()
 
-        // Step 1: PRoot static binary
+        // Step 1: PRoot binary (bundled as libproot.so in nativeLibraryDir)
+        onProgress(0.05f, "正在检查 PRoot 二进制...")
+        log("PRoot binary: path=${paths.prootBinary.absolutePath}")
+        log("PRoot binary: exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}, canExec=${paths.prootBinary.canExecute()}")
         if (!paths.prootBinary.exists() || paths.prootBinary.length() < 1024) {
-            onProgress(0.05f, "正在下载 PRoot 静态二进制...")
-            val apkFile = File(cacheDir, AlpineConstants.PROOT_STATIC_APK_FILENAME)
-            log("Downloading PRoot APK from ${AlpineConstants.PROOT_STATIC_APK_URL}")
-            downloadFile(AlpineConstants.PROOT_STATIC_APK_URL, apkFile, cacheDir) { progress ->
-                onProgress(0.05f + progress * 0.15f, "正在下载 PRoot 静态二进制...")
-            }
-            log("PRoot APK downloaded: ${apkFile.length()} bytes")
-
-            onProgress(0.22f, "正在提取 PRoot 二进制...")
-            extractBinaryFromApk(apkFile, AlpineConstants.PROOT_BINARY_PATH_IN_APK, paths.prootBinary)
-            apkFile.delete()
-            ensureExecutable(paths.prootBinary)
-            log("PRoot binary: exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}, canExec=${paths.prootBinary.canExecute()}")
-
-            if (!paths.prootBinary.exists() || paths.prootBinary.length() < 1024) {
-                val err = "PRoot 二进制提取失败：文件不存在或大小异常 (${paths.prootBinary.length()} bytes)"
-                log("ERROR: $err")
-                throw RuntimeException(err)
-            }
-        } else {
-            log("PRoot binary already exists: ${paths.prootBinary.length()} bytes")
+            val err = "PRoot 二进制不可用：${paths.prootBinary.absolutePath}\n" +
+                    "exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}\n" +
+                    "PRoot 应以 libproot.so 形式打包在 APK 的 jniLibs 中"
+            log("ERROR: $err")
+            throw RuntimeException(err)
         }
 
         // Step 2: Alpine minirootfs

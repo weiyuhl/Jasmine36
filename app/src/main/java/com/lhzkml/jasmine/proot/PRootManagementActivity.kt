@@ -2,6 +2,7 @@ package com.lhzkml.jasmine.proot
 
 import android.os.Bundle
 import android.widget.Toast
+import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -63,7 +64,8 @@ fun PRootManagementScreen(onBack: () -> Unit) {
         PRootEnvironment(
             context.filesDir,
             context.cacheDir,
-            activity?.getExternalFilesDir(null)
+            activity?.getExternalFilesDir(null),
+            File(context.applicationInfo.nativeLibraryDir)
         )
     }
 

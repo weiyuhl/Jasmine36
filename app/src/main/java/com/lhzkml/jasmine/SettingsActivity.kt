@@ -622,6 +622,7 @@ private fun getRulesPreview(context: android.content.Context): String {
 
 private fun getLinuxEnvStatus(context: android.content.Context): String {
     val extDir = (context as? android.app.Activity)?.getExternalFilesDir(null)
-    val env = PRootEnvironment(context.filesDir, context.cacheDir, extDir)
+    val nativeLibDir = java.io.File(context.applicationInfo.nativeLibraryDir)
+    val env = PRootEnvironment(context.filesDir, context.cacheDir, extDir, nativeLibDir)
     return if (env.isInstalled) "已安装" else "未安装"
 }

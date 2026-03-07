@@ -17,9 +17,10 @@ import java.util.Locale
 class PRootEnvironment(
     filesDir: File,
     private val cacheDir: File,
-    externalDir: File? = null
+    externalDir: File? = null,
+    nativeLibDir: File? = null
 ) {
-    val paths = PRootPaths.from(filesDir, externalDir)
+    val paths = PRootPaths.from(filesDir, externalDir, nativeLibDir)
 
     private val runtimeLogFile: File by lazy {
         paths.logDir.mkdirs()
@@ -184,5 +185,5 @@ class PRootEnvironment(
     /**
      * 获取日志目录。
      */
-    fun getLogDir(): File = File(paths.baseDir, "logs")
+    fun getLogDir(): File = paths.logDir
 }

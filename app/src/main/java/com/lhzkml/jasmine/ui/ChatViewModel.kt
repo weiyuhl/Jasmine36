@@ -248,7 +248,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         toolRegistryBuilder.workspacePath = ProviderManager.getWorkspacePath(activity)
         toolRegistryBuilder.fallbackBasePath = activity.getExternalFilesDir(null)?.absolutePath
         toolRegistryBuilder.prootEnvironment = com.lhzkml.jasmine.core.proot.PRootEnvironment(
-            activity.filesDir, activity.cacheDir, activity.getExternalFilesDir(null)
+            activity.filesDir, activity.cacheDir, activity.getExternalFilesDir(null),
+            java.io.File(activity.applicationInfo.nativeLibraryDir)
         )
         DialogHandlers.register(activity, toolRegistryBuilder)
         toolRegistryBuilder.subAgentClientProvider = { client }
