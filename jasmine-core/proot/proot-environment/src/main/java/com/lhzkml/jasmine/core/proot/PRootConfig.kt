@@ -12,12 +12,15 @@ data class PRootPaths(
     val baseDir: File,
     val rootfsDir: File,
     val prootBinary: File,
+    val prootLoader: File,
+    val prootLoader32: File,
+    val nativeLibDir: File?,
     val homeDir: File,
     val logDir: File
 ) {
-    companion object {
-        const val BUNDLED_PROOT_SO_NAME = "libproot.so"
+    val libSearchDir: File get() = File(baseDir, "lib")
 
+    companion object {
         fun from(filesDir: File, externalDir: File? = null, nativeLibDir: File? = null): PRootPaths {
             val baseDir = File(filesDir, "proot")
             val rootfsDir = File(baseDir, "alpine-rootfs")
@@ -26,15 +29,14 @@ data class PRootPaths(
             } else {
                 File(baseDir, "logs")
             }
-            val prootBinary = if (nativeLibDir != null) {
-                File(nativeLibDir, BUNDLED_PROOT_SO_NAME)
-            } else {
-                File(baseDir, "proot-arm64")
-            }
+            val libDir = nativeLibDir ?: baseDir
             return PRootPaths(
                 baseDir = baseDir,
                 rootfsDir = rootfsDir,
-                prootBinary = prootBinary,
+                prootBinary = File(libDir, "libproot.so"),
+                prootLoader = File(libDir, "libproot-loader.so"),
+                prootLoader32 = File(libDir, "libproot-loader32.so"),
+                nativeLibDir = nativeLibDir,
                 homeDir = File(rootfsDir, "root"),
                 logDir = logDir
             )

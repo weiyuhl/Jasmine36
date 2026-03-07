@@ -54,6 +54,19 @@ object PRootCommandExecutor {
         env["HOME"] = "/root"
         env["PROOT_TMP_DIR"] = paths.baseDir.absolutePath
         env["PROOT_NO_SECCOMP"] = "1"
+        if (paths.prootLoader.exists()) {
+            env["PROOT_LOADER"] = paths.prootLoader.absolutePath
+        }
+        if (paths.prootLoader32.exists()) {
+            env["PROOT_LOADER_32"] = paths.prootLoader32.absolutePath
+        }
+        val ldPaths = mutableListOf<String>()
+        val libSearchDir = paths.libSearchDir
+        if (libSearchDir.exists()) ldPaths.add(libSearchDir.absolutePath)
+        if (paths.nativeLibDir?.exists() == true) ldPaths.add(paths.nativeLibDir.absolutePath)
+        if (ldPaths.isNotEmpty()) {
+            env["LD_LIBRARY_PATH"] = ldPaths.joinToString(":")
+        }
         env.remove("LD_PRELOAD")
 
         for ((key, value) in environment) {

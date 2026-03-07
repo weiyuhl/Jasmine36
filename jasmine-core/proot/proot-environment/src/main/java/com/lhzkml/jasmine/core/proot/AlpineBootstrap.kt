@@ -47,6 +47,7 @@ object AlpineBootstrap {
         onProgress(0.05f, "正在检查 PRoot 二进制...")
         log("PRoot binary: path=${paths.prootBinary.absolutePath}")
         log("PRoot binary: exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}, canExec=${paths.prootBinary.canExecute()}")
+        log("PRoot loader: path=${paths.prootLoader.absolutePath}, exists=${paths.prootLoader.exists()}")
         if (!paths.prootBinary.exists() || paths.prootBinary.length() < 1024) {
             val err = "PRoot 二进制不可用：${paths.prootBinary.absolutePath}\n" +
                     "exists=${paths.prootBinary.exists()}, size=${paths.prootBinary.length()}\n" +
@@ -54,6 +55,9 @@ object AlpineBootstrap {
             log("ERROR: $err")
             throw RuntimeException(err)
         }
+
+        // Step 1.5: Prepare libtalloc.so.2 symlink for Termux PRoot dynamic linking
+        prepareTallocLib(paths)
 
         // Step 2: Alpine minirootfs
         val tarGz = File(cacheDir, AlpineConstants.MINIROOTFS_FILENAME)
@@ -478,6 +482,24 @@ object AlpineBootstrap {
                 log("chmod +x failed for ${file.name}: ${e.message}")
             }
         }
+    }
+
+    private fun prepareTallocLib(paths: PRootPaths) {
+        val libDir = paths.libSearchDir
+        libDir.mkdirs()
+        val tallocTarget = File(libDir, "libtalloc.so.2")
+        if (tallocTarget.exists()) {
+            log("libtalloc.so.2 already exists: ${tallocTarget.absolutePath}")
+            return
+        }
+        val nativeDir = paths.nativeLibDir ?: return
+        val source = File(nativeDir, "libtalloc.so")
+        if (!source.exists()) {
+            log("WARNING: libtalloc.so not found in nativeLibDir: ${nativeDir.absolutePath}")
+            return
+        }
+        source.copyTo(tallocTarget, overwrite = true)
+        log("Copied libtalloc.so -> libtalloc.so.2 (${tallocTarget.length()} bytes) at ${libDir.absolutePath}")
     }
 
     // ─── Single entry extraction (for APK) ───

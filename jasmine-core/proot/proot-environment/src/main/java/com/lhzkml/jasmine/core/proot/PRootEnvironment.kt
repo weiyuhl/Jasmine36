@@ -137,9 +137,16 @@ class PRootEnvironment(
                 }
                 log("getPRootVersion: after chmod canExec=${bin.canExecute()}")
             }
-            val process = ProcessBuilder(bin.absolutePath, "--version")
+            val pb = ProcessBuilder(bin.absolutePath, "--version")
                 .redirectErrorStream(true)
-                .start()
+            val pbEnv = pb.environment()
+            if (paths.prootLoader.exists()) pbEnv["PROOT_LOADER"] = paths.prootLoader.absolutePath
+            if (paths.prootLoader32.exists()) pbEnv["PROOT_LOADER_32"] = paths.prootLoader32.absolutePath
+            val ldPaths = mutableListOf<String>()
+            if (paths.libSearchDir.exists()) ldPaths.add(paths.libSearchDir.absolutePath)
+            if (paths.nativeLibDir?.exists() == true) ldPaths.add(paths.nativeLibDir.absolutePath)
+            if (ldPaths.isNotEmpty()) pbEnv["LD_LIBRARY_PATH"] = ldPaths.joinToString(":")
+            val process = pb.start()
             process.waitFor()
             val output = process.inputStream.bufferedReader().readText()
             val ver = output.lines().firstOrNull { it.contains("proot", ignoreCase = true) }?.trim()
