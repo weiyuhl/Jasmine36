@@ -213,22 +213,41 @@ fun PRootManagementScreen(onBack: () -> Unit) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                if (!isInstalled && !installing && statusMessage.isNotEmpty()) {
+                    CustomText(
+                        text = statusMessage,
+                        fontSize = 12.sp,
+                        color = ErrorColor,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
                 if (!isInstalled && !installing) {
                     CustomButton(
                         onClick = {
                             installing = true
+                            statusMessage = ""
                             scope.launch {
                                 try {
-                                    prootEnv.install { p, msg ->
-                                        progress = p
-                                        statusMessage = msg
+                                    withContext(Dispatchers.IO) {
+                                        prootEnv.install { p, msg ->
+                                            progress = p
+                                            statusMessage = msg
+                                        }
                                     }
                                     installing = false
-                                    refreshInfo()
-                                    loadPackages()
-                                    Toast.makeText(context, "Alpine Linux 安装完成", Toast.LENGTH_SHORT).show()
+                                    isInstalled = prootEnv.isInstalled
+                                    if (isInstalled) {
+                                        refreshInfo()
+                                        loadPackages()
+                                        Toast.makeText(context, "Alpine Linux 安装完成", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        statusMessage = "安装异常：文件校验未通过，请卸载后重试"
+                                        Toast.makeText(context, "安装异常，请卸载后重试", Toast.LENGTH_LONG).show()
+                                    }
                                 } catch (e: Exception) {
                                     installing = false
+                                    isInstalled = false
                                     statusMessage = "安装失败: ${e.message}"
                                     Toast.makeText(context, "安装失败: ${e.message}", Toast.LENGTH_LONG).show()
                                 }
