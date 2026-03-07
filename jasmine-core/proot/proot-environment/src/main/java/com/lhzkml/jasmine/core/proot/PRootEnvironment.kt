@@ -126,6 +126,7 @@ class PRootEnvironment(
 
     /**
      * 获取 PRoot 版本。
+     * Termux PRoot 输出格式可能为多行，用正则从任意位置提取版本号。
      */
     fun getPRootVersion(): String {
         return try {
@@ -143,12 +144,10 @@ class PRootEnvironment(
             val process = pb.start()
             process.waitFor()
             val output = process.inputStream.bufferedReader().readText()
-            val versionLine = output.lines()
-                .firstOrNull { it.trim().matches(Regex("^\\d+\\.\\d+.*")) }
-                ?.trim()
-            val ver = versionLine
-                ?: output.lines().firstOrNull { it.contains("proot", ignoreCase = true) && !it.contains("Visit") && !it.contains("help") }?.trim()
-                ?: output.trim().lines().firstOrNull()?.trim()?.take(50)
+            // 从输出中提取版本号，支持 5.1.107、5.1.107-70 等格式
+            val versionMatch = Regex("(\\d+\\.\\d+(?:\\.\\d+)?(?:-\\d+)?)").find(output)
+            val ver = versionMatch?.groupValues?.get(1)
+                ?: output.lines().firstOrNull { it.contains("proot", ignoreCase = true) && !it.contains("Visit") }?.trim()?.take(30)
                 ?: "unknown"
             log("getPRootVersion: $ver")
             ver
