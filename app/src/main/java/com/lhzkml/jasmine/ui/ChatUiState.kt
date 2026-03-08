@@ -39,6 +39,10 @@ data class ChatUiState(
     val requestOpenDrawerEnd: Boolean = false,
     val requestOpenDrawerStart: Boolean = false,
 
+    /** WakeLock 状态 */
+    val wakeLockHeld: Boolean = false,
+    val showBatteryOptimizationDialog: Boolean = false,
+
     val error: String? = null,
     val isLoading: Boolean = false
 )
@@ -118,6 +122,9 @@ sealed class ChatUiEvent {
     data class DeleteConversation(val info: ConversationInfo) : ChatUiEvent()
 
     object CloseWorkspace : ChatUiEvent()
+
+    object ToggleWakeLock : ChatUiEvent()
+    object RequestBatteryOptimization : ChatUiEvent()
 
     object OpenSettings : ChatUiEvent()
     object OpenDrawerEnd : ChatUiEvent()

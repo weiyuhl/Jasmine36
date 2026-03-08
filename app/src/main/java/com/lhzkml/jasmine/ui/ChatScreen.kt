@@ -90,8 +90,10 @@ fun ChatScreen(viewModel: ChatViewModel) {
     ) {
         TopBar(
             isAgentMode = uiState.isAgentMode,
+            wakeLockHeld = uiState.wakeLockHeld,
             onMenuClick = { viewModel.onEvent(ChatUiEvent.OpenDrawerEnd) },
-            onFileTreeClick = { viewModel.onEvent(ChatUiEvent.OpenDrawerStart) }
+            onFileTreeClick = { viewModel.onEvent(ChatUiEvent.OpenDrawerStart) },
+            onWakeLockClick = { viewModel.onEvent(ChatUiEvent.ToggleWakeLock) }
         )
 
         if (uiState.workspaceLabel.isNotEmpty()) {
@@ -215,13 +217,46 @@ fun ChatScreen(viewModel: ChatViewModel) {
     uiState.toolDialog?.let { dialog ->
         ToolDialogComposable(dialog)
     }
+
+    // 电池优化提示对话框
+    if (uiState.showBatteryOptimizationDialog) {
+        CustomAlertDialog(
+            onDismissRequest = { 
+                viewModel.onEvent(ChatUiEvent.ClearToastMessage)
+            },
+            containerColor = Color.White,
+            title = { CustomText("电池优化豁免", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = { 
+                CustomText(
+                    "为保证长时间任务稳定运行，建议豁免电池优化。\n\n" +
+                    "这将允许应用在后台持续运行，但会增加电池消耗。",
+                    color = TextPrimary, 
+                    fontSize = 14.sp
+                ) 
+            },
+            confirmButton = {
+                CustomTextButton(
+                    onClick = { viewModel.onEvent(ChatUiEvent.RequestBatteryOptimization) },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = Accent)
+                ) { CustomText("去设置", fontSize = 14.sp) }
+            },
+            dismissButton = {
+                CustomTextButton(
+                    onClick = { viewModel.onEvent(ChatUiEvent.ClearToastMessage) },
+                    colors = CustomButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                ) { CustomText("稍后", fontSize = 14.sp) }
+            }
+        )
+    }
 }
 
 @Composable
 fun TopBar(
     isAgentMode: Boolean,
+    wakeLockHeld: Boolean,
     onMenuClick: () -> Unit,
-    onFileTreeClick: () -> Unit
+    onFileTreeClick: () -> Unit,
+    onWakeLockClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -238,6 +273,26 @@ fun TopBar(
             color = TextPrimary,
             modifier = Modifier.weight(1f)
         )
+
+        // WakeLock 指示器
+        if (wakeLockHeld) {
+            CustomText(
+                text = "🔓",
+                fontSize = 16.sp,
+                modifier = Modifier
+                    .clickable { onWakeLockClick() }
+                    .padding(end = 8.dp)
+            )
+        } else {
+            CustomText(
+                text = "🔒",
+                fontSize = 16.sp,
+                color = TextSecondary,
+                modifier = Modifier
+                    .clickable { onWakeLockClick() }
+                    .padding(end = 8.dp)
+            )
+        }
 
         if (isAgentMode) {
             CustomText(

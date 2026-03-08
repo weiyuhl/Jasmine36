@@ -47,6 +47,9 @@ import com.lhzkml.jasmine.mnn.MnnModelManager
 import com.lhzkml.jasmine.RagStore
 import com.lhzkml.jasmine.StreamUpdate
 import com.lhzkml.jasmine.core.rag.RagConfig
+import com.lhzkml.jasmine.wakelock.WakeLockManager
+import com.lhzkml.jasmine.wakelock.WakeLockStateListener
+import com.lhzkml.jasmine.wakelock.BatteryOptimizationHelper
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +109,14 @@ class ChatViewModel(
     /** Channel 模式下持有当前 executor，供 savePartial 获取 getLogContent */
     private var activeChatExecutor: ChatExecutor? = null
 
+    // ── WakeLock 管理 ─────────────────────────────────────────────
+    private val wakeLockManager = WakeLockManager(ctx)
+    private val wakeLockListener = object : WakeLockStateListener {
+        override fun onWakeLockStateChanged(isHeld: Boolean) {
+            _uiState.update { it.copy(wakeLockHeld = isHeld) }
+        }
+    }
+
     interface LifecycleCallbacks {
         fun finishAndLaunch(intent: Intent)
     }
@@ -124,6 +135,8 @@ class ChatViewModel(
             is ChatUiEvent.NewConversation -> startNewConversation()
             is ChatUiEvent.DeleteConversation -> deleteConversation(event.info)
             is ChatUiEvent.CloseWorkspace -> closeWorkspace()
+            is ChatUiEvent.ToggleWakeLock -> toggleWakeLock()
+            is ChatUiEvent.RequestBatteryOptimization -> requestBatteryOptimization()
             is ChatUiEvent.OpenSettings -> _uiState.update { it.copy(navigationEvent = NavigationEvent.Settings) }
             is ChatUiEvent.OpenDrawerEnd -> _uiState.update { it.copy(requestOpenDrawerEnd = true) }
             is ChatUiEvent.OpenDrawerStart -> _uiState.update { it.copy(requestOpenDrawerStart = true) }
@@ -140,6 +153,9 @@ class ChatViewModel(
         ProviderManager.initialize(context)
 
         chatStateManager = ChatStateManager(chatItems) { requestScrollToBottom() }
+        
+        // 初始化 WakeLock 监听器
+        wakeLockManager.addListener(wakeLockListener)
 
         refreshAgentModeUI()
         refreshModelSelector()
@@ -182,12 +198,35 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        wakeLockManager.cleanup()
         clientRouter.close()
         webSearchTool?.close()
         fetchUrlTool?.close()
         tracing?.close()
         mcpConnectionManager.close()
         lifecycleCallbacks = null
+    }
+
+    // ── WakeLock 相关方法 ─────────────────────────────────────────
+
+    private fun toggleWakeLock() {
+        if (!wakeLockManager.isHeld) {
+            // 首次获取时检查电池优化
+            if (!BatteryOptimizationHelper.isIgnoringBatteryOptimizations(ctx)) {
+                _uiState.update { 
+                    it.copy(
+                        showBatteryOptimizationDialog = true,
+                        toastMessage = "建议豁免电池优化以保证后台任务稳定运行"
+                    ) 
+                }
+            }
+        }
+        wakeLockManager.toggle()
+    }
+
+    private fun requestBatteryOptimization() {
+        BatteryOptimizationHelper.requestIgnoreBatteryOptimizations(ctx)
+        _uiState.update { it.copy(showBatteryOptimizationDialog = false, toastMessage = null) }
     }
 
     fun shortenModelName(model: String): String = model.substringAfterLast("/")
