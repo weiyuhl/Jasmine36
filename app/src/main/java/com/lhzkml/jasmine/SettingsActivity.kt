@@ -23,8 +23,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.components.*
 import com.lhzkml.jasmine.mnn.MnnManagementActivity
-import com.lhzkml.jasmine.proot.PRootManagementActivity
-import com.lhzkml.jasmine.core.proot.PRootEnvironment
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.prompt.llm.SystemPromptManager
@@ -163,14 +161,6 @@ fun SettingsScreen(
                     value = "进入管理",
                     onClick = {
                         context.startActivity(Intent(context, MnnManagementActivity::class.java))
-                    }
-                )
-                SettingsItem(
-                    title = "Linux 环境",
-                    subtitle = "Alpine Linux + PRoot（Agent Shell 增强）",
-                    value = getLinuxEnvStatus(context),
-                    onClick = {
-                        context.startActivity(Intent(context, PRootManagementActivity::class.java))
                     }
                 )
 
@@ -618,11 +608,4 @@ private fun getRulesPreview(context: android.content.Context): String {
         hasProject -> "项目已配置"
         else -> "未设置"
     }
-}
-
-private fun getLinuxEnvStatus(context: android.content.Context): String {
-    val extDir = (context as? android.app.Activity)?.getExternalFilesDir(null)
-    val nativeLibDir = java.io.File(context.applicationInfo.nativeLibraryDir)
-    val env = PRootEnvironment(context.filesDir, context.cacheDir, extDir, nativeLibDir)
-    return if (env.isInstalled) "已安装" else "未安装"
 }

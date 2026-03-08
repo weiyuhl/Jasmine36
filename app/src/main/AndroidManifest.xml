@@ -125,10 +125,6 @@
         <activity
             android:name=".oss.OssLicensesDetailActivity"
             android:exported="false" />
-        <activity
-            android:name=".proot.PRootManagementActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
 
     </application>
 

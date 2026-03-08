@@ -8,7 +8,6 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import com.lhzkml.jasmine.core.proot.PRootEnvironment
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -80,20 +79,15 @@ data class ShellPolicyConfig(
 class ExecuteShellCommandTool(
     private val confirmationHandler: suspend (command: String, purpose: String, workingDirectory: String?) -> Boolean = { _, _, _ -> true },
     private val policyConfig: ShellPolicyConfig = ShellPolicyConfig(),
-    private val basePath: String? = null,
-    private val prootEnvironment: PRootEnvironment? = null
+    private val basePath: String? = null
 ) : Tool() {
-
-    private val hasLinuxEnv = prootEnvironment?.isInstalled == true
 
     override val descriptor = ToolDescriptor(
         name = "execute_shell_command",
         description = "Executes a shell command with optional working directory and timeout. " +
             "Returns command output and exit code. Each call runs in a new isolated shell, " +
             "so directory changes (cd) do NOT persist. Use workingDirectory parameter instead. " +
-            "You MUST provide a clear 'purpose' explaining WHY you are running this command." +
-            if (hasLinuxEnv) " Set usePRoot=true to run in a full Alpine Linux environment " +
-                "with apk package manager, python, gcc, git, curl, etc." else "",
+            "You MUST provide a clear 'purpose' explaining WHY you are running this command.",
         requiredParameters = listOf(
             ToolParameterDescriptor("command", "The shell command to execute (e.g. 'git status', 'ls -la')", ToolParameterType.StringType),
             ToolParameterDescriptor("purpose", "A brief explanation of why this command is being executed and what you expect to achieve (e.g. 'Check current git branch to determine deployment target')", ToolParameterType.StringType)
@@ -102,8 +96,7 @@ class ExecuteShellCommandTool(
             ToolParameterDescriptor("description", "Clear, concise description of what this command does in 5-10 words", ToolParameterType.StringType),
             ToolParameterDescriptor("timeoutSeconds", "Maximum time to wait for completion before returning partial output. Default 60. The command continues running in background if it exceeds this", ToolParameterType.IntegerType),
             ToolParameterDescriptor("workingDirectory", "Absolute path where the command runs. Default: workspace root", ToolParameterType.StringType),
-            ToolParameterDescriptor("background", "If true, immediately returns without waiting for completion (for dev servers, watchers). Default false", ToolParameterType.BooleanType),
-            ToolParameterDescriptor("usePRoot", "If true, runs the command inside the PRoot/Alpine Linux environment with full package manager and tools. Default false", ToolParameterType.BooleanType)
+            ToolParameterDescriptor("background", "If true, immediately returns without waiting for completion (for dev servers, watchers). Default false", ToolParameterType.BooleanType)
         )
     )
 
@@ -117,17 +110,12 @@ class ExecuteShellCommandTool(
         val timeoutSeconds = obj["timeoutSeconds"]?.jsonPrimitive?.int ?: 60
         val workingDirectory = obj["workingDirectory"]?.jsonPrimitive?.content
         val background = obj["background"]?.jsonPrimitive?.boolean ?: false
-        val usePRoot = obj["usePRoot"]?.jsonPrimitive?.boolean ?: false
 
         if (policyConfig.needsConfirmation(command)) {
             val approved = confirmationHandler(command, purpose, workingDirectory)
             if (!approved) {
                 return "Command execution denied: $command\nPurpose: $purpose"
             }
-        }
-
-        if (usePRoot) {
-            return executePRoot(command, purpose, description, timeoutSeconds, workingDirectory, background)
         }
 
         val workDir = if (workingDirectory != null) {
@@ -237,50 +225,6 @@ class ExecuteShellCommandTool(
             } else ""
         } catch (_: Exception) {
             ""
-        }
-    }
-
-    private suspend fun executePRoot(
-        command: String,
-        purpose: String,
-        description: String?,
-        timeoutSeconds: Int,
-        workingDirectory: String?,
-        background: Boolean
-    ): String {
-        val env = prootEnvironment
-            ?: return "Error: PRoot/Alpine Linux environment is not configured. Please install it in Settings > Linux Environment."
-
-        if (!env.isInstalled) {
-            return "Error: PRoot/Alpine Linux environment is not installed. Please install it in Settings > Linux Environment."
-        }
-
-        val extraBinds = if (basePath != null) {
-            listOf(basePath to "/workspace")
-        } else {
-            emptyList()
-        }
-
-        val prootWorkDir = workingDirectory ?: if (basePath != null) "/workspace" else "/root"
-
-        return try {
-            val result = env.executeCommand(
-                command = command,
-                workingDirectory = prootWorkDir,
-                extraBindPaths = extraBinds,
-                timeoutSeconds = timeoutSeconds,
-                background = background
-            )
-            buildString {
-                appendLine("Purpose: $purpose")
-                description?.let { appendLine("Description: $it") }
-                appendLine("Environment: PRoot/Alpine Linux")
-                appendLine("Command: $command")
-                if (result.output.isNotEmpty()) appendLine(result.output)
-                if (!result.timedOut) appendLine("Exit code: ${result.exitCode}")
-            }.trimEnd()
-        } catch (e: Exception) {
-            "Error: PRoot command failed: ${e.message}"
         }
     }
 }
