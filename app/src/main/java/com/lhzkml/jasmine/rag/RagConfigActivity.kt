@@ -56,14 +56,22 @@ class RagConfigActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
-                RagConfigScreen(onBack = { finish() })
+                RagConfigScreen(
+                    onBack = { finish() },
+                    onNavigateToLibraryContent = { id, name -> RagLibraryContentActivity.start(this, id, name) },
+                    onNavigateToEmbedding = { startActivity(Intent(this, EmbeddingConfigActivity::class.java)) }
+                )
             }
         }
     }
 }
 
 @Composable
-fun RagConfigScreen(onBack: () -> Unit) {
+fun RagConfigScreen(
+    onBack: () -> Unit,
+    onNavigateToLibraryContent: (libraryId: String, libraryName: String) -> Unit = { _, _ -> },
+    onNavigateToEmbedding: () -> Unit = {}
+) {
     val context = LocalContext.current
 
     var enabled by remember { mutableStateOf(ProviderManager.isRagEnabled(context)) }
@@ -233,7 +241,7 @@ fun RagConfigScreen(onBack: () -> Unit) {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     CustomTextButton(
-                        onClick = { context.startActivity(Intent(context, EmbeddingConfigActivity::class.java)) },
+                        onClick = { onNavigateToEmbedding() },
                         contentColor = Accent,
                         contentPadding = PaddingValues(4.dp)
                     ) {
@@ -290,7 +298,7 @@ fun RagConfigScreen(onBack: () -> Unit) {
                                 }
                             }
                             CustomTextButton(
-                                onClick = { RagLibraryContentActivity.start(context, lib.id, lib.name) },
+                                onClick = { onNavigateToLibraryContent(lib.id, lib.name) },
                                 contentColor = Accent,
                                 contentPadding = PaddingValues(6.dp)
                             ) {

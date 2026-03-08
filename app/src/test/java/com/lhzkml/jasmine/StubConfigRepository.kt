@@ -142,4 +142,24 @@ class StubConfigRepository : ConfigRepository {
     override fun setRagLibraries(libraries: List<RagLibraryConfig>) {}
     override fun getRagActiveLibraryIds(): Set<String> = setOf("default")
     override fun setRagActiveLibraryIds(ids: Set<String>) {}
+    override fun getPersonalRules(): String = ""
+    override fun setPersonalRules(rules: String) {}
+    override fun getProjectRules(workspacePath: String): String = ""
+    override fun setProjectRules(workspacePath: String, rules: String) {}
+    override fun isRagEnabled(): Boolean = false
+    override fun setRagEnabled(enabled: Boolean) {}
+    override fun getRagTopK(): Int = 5
+    override fun setRagTopK(value: Int) {}
+    override fun getRagEmbeddingBaseUrl(): String = ""
+    override fun setRagEmbeddingBaseUrl(url: String) {}
+    override fun getRagEmbeddingApiKey(): String = ""
+    override fun setRagEmbeddingApiKey(key: String) {}
+    override fun getRagEmbeddingModel(): String = ""
+    override fun setRagEmbeddingModel(model: String) {}
+    override fun getRagEmbeddingUseLocal(): Boolean = false
+    override fun setRagEmbeddingUseLocal(useLocal: Boolean) {}
+    override fun getRagEmbeddingModelPath(): String = ""
+    override fun setRagEmbeddingModelPath(path: String) {}
+    override fun getRagIndexableExtensions(): Set<String> = emptySet()
+    override fun setRagIndexableExtensions(extensions: Set<String>) {}
 }

@@ -13,6 +13,7 @@ import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
  * ProviderManager - 配置管理门面
  *
  * 这是一个薄薄的委托层，所有调用转发给 ConfigRepository 和 ProviderRegistry。
+ * 统一使用 AppConfig 提供的 EncryptedConfigRepository，确保敏感数据加密存储。
  */
 object ProviderManager {
 
@@ -20,7 +21,7 @@ object ProviderManager {
     private lateinit var registry: ProviderRegistry
 
     fun initialize(context: Context) {
-        configRepo = SharedPreferencesConfigRepository(context)
+        configRepo = AppConfig.configRepo()
         registry = ProviderRegistry(configRepo)
         registry.initialize()
     }

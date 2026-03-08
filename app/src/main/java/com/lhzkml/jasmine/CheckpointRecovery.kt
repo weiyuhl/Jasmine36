@@ -1,5 +1,6 @@
 package com.lhzkml.jasmine
 
+import android.content.Context
 import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
@@ -8,13 +9,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 快照/检查点恢复逻辑，从 MainActivity 中提取。
+ * 快照/检查点恢复逻辑。
  * 处理执行失败后的检查点恢复选择，以及启动时的检查点恢复提示。
- * @param showCheckpointRecoveryDialog 显示检查点选择对话框 (title, message, labels)，返回用户选择的索引或 null
- * @param showStartupRecoveryDialog 显示启动恢复确认对话框，返回用户是否确认
  */
 class CheckpointRecovery(
-    private val activity: MainActivity,
+    private val activity: Context,
     private val chatStateManager: ChatStateManager,
     private val messageHistory: MutableList<ChatMessage>,
     private val conversationRepo: ConversationRepository,

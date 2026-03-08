@@ -1,3 +1,11 @@
+import java.io.BufferedOutputStream
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.math.BigInteger
+import java.net.URL
+import java.security.DigestInputStream
+import java.security.MessageDigest
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
@@ -9,26 +17,14 @@ android {
     
     defaultConfig {
         minSdk = 26
-        
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-        }
-        
-        externalNativeBuild {
-            ndkBuild {
-                arguments += listOf(
-                    "NDK_PROJECT_PATH=${projectDir}/src/main/cpp",
-                    "APP_BUILD_SCRIPT=${projectDir}/src/main/cpp/Android.mk"
-                )
-            }
-        }
     }
-    
-    externalNativeBuild {
-        ndkBuild {
-            path = file("src/main/cpp/Android.mk")
-        }
-    }
+
+    // Native build 暂时禁用——需要先运行 downloadBootstraps 任务下载 bootstrap zip
+    // externalNativeBuild {
+    //     ndkBuild {
+    //         path = file("src/main/cpp/Android.mk")
+    //     }
+    // }
     
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -50,23 +46,22 @@ dependencies {
  * 下载单个架构的 Bootstrap 文件
  */
 fun downloadBootstrap(arch: String, expectedChecksum: String, version: String) {
-    val digest = java.security.MessageDigest.getInstance("SHA-256")
-    
+    val digest = MessageDigest.getInstance("SHA-256")
+
     val localUrl = "src/main/cpp/bootstrap-$arch.zip"
     val file = File(projectDir, localUrl)
-    
-    // 检查文件是否已存在且校验和正确
+
     if (file.exists()) {
         val buffer = ByteArray(8192)
-        val input = java.io.FileInputStream(file)
+        val input = FileInputStream(file)
         while (true) {
             val readBytes = input.read(buffer)
             if (readBytes < 0) break
             digest.update(buffer, 0, readBytes)
         }
         input.close()
-        
-        val checksum = java.math.BigInteger(1, digest.digest()).toString(16).padStart(64, '0')
+
+        val checksum = BigInteger(1, digest.digest()).toString(16).padStart(64, '0')
         if (checksum == expectedChecksum) {
             logger.quiet("Bootstrap $arch already exists with correct checksum")
             return
@@ -77,30 +72,28 @@ fun downloadBootstrap(arch: String, expectedChecksum: String, version: String) {
             file.delete()
         }
     }
-    
-    // 下载文件
+
     val remoteUrl = "https://github.com/termux/termux-packages/releases/download/bootstrap-$version/bootstrap-$arch.zip"
     logger.quiet("Downloading $remoteUrl ...")
-    
+
     file.parentFile?.mkdirs()
-    val out = java.io.BufferedOutputStream(java.io.FileOutputStream(file))
-    
-    val connection = java.net.URL(remoteUrl).openConnection()
+    val out = BufferedOutputStream(FileOutputStream(file))
+
+    val connection = URL(remoteUrl).openConnection()
     connection.setRequestProperty("User-Agent", "Jasmine-Termux-Integration")
     connection.connect()
-    
-    val digestStream = java.security.DigestInputStream(connection.getInputStream(), digest)
+
+    val digestStream = DigestInputStream(connection.getInputStream(), digest)
     digestStream.copyTo(out)
     out.close()
     digestStream.close()
-    
-    // 验证校验和
-    val checksum = java.math.BigInteger(1, digest.digest()).toString(16).padStart(64, '0')
+
+    val checksum = BigInteger(1, digest.digest()).toString(16).padStart(64, '0')
     if (checksum != expectedChecksum) {
         file.delete()
         throw GradleException("Wrong checksum for $remoteUrl\nExpected: $expectedChecksum\nActual:   $checksum")
     }
-    
+
     logger.quiet("Successfully downloaded bootstrap-$arch.zip")
 }
 
@@ -144,9 +137,10 @@ tasks.named("clean") {
 
 /**
  * 确保在编译前下载 Bootstrap
+ * 目前暂时禁用自动下载，需要手动运行 ./gradlew :jasmine-core:termux:termux-environment:downloadBootstraps
  */
-afterEvaluate {
-    tasks.matching { it.name.contains("compile", ignoreCase = true) }.configureEach {
-        dependsOn("downloadBootstraps")
-    }
-}
+// afterEvaluate {
+//     tasks.matching { it.name.contains("compile", ignoreCase = true) }.configureEach {
+//         dependsOn("downloadBootstraps")
+//     }
+// }

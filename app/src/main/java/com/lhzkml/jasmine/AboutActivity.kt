@@ -34,13 +34,23 @@ class AboutActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AboutScreen(onBack = { finish() })
+            AboutScreen(
+                onBack = { finish() },
+                onNavigateToOssLicenses = {
+                    startActivity(Intent(this, OssLicensesListActivity::class.java).apply {
+                        putExtra("title", getString(R.string.oss_licenses_title))
+                    })
+                }
+            )
         }
     }
 }
 
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(
+    onBack: () -> Unit,
+    onNavigateToOssLicenses: () -> Unit = {}
+) {
     val context = LocalContext.current
     val appVersion = remember {
         try {
@@ -101,7 +111,7 @@ fun AboutScreen(onBack: () -> Unit) {
             VersionItem(title = "应用版本", value = appVersion)
             VersionItem(title = "Jasmine-core 版本", value = jasmineCoreVersion)
             VersionItem(title = "MNN 引擎版本", value = mnnVersion)
-            OssLicensesItem(context = context)
+            OssLicensesItem(onClick = onNavigateToOssLicenses)
             Spacer(modifier = Modifier.height(24.dp))
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -151,17 +161,13 @@ private fun AboutIntroCard(
 }
 
 @Composable
-private fun OssLicensesItem(context: android.content.Context) {
+private fun OssLicensesItem(onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(Color.White)
-            .clickable {
-                val intent = Intent(context, OssLicensesListActivity::class.java)
-                intent.putExtra("title", context.getString(R.string.oss_licenses_title))
-                context.startActivity(intent)
-            }
+            .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween

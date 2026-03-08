@@ -3,11 +3,6 @@ package com.lhzkml.jasmine.ui
 import android.app.Application
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lhzkml.jasmine.AppConfig
@@ -19,12 +14,6 @@ import com.lhzkml.jasmine.CheckpointRecovery
 import com.lhzkml.jasmine.ContentBlock
 import com.lhzkml.jasmine.DialogHandlers
 import com.lhzkml.jasmine.ProviderManager
-import com.lhzkml.jasmine.ProviderConfigActivity
-import com.lhzkml.jasmine.SettingsActivity
-import com.lhzkml.jasmine.LauncherActivity
-import com.lhzkml.jasmine.MainActivity
-import com.lhzkml.jasmine.StreamProcessor
-import com.lhzkml.jasmine.StreamUpdate
 import com.lhzkml.jasmine.core.agent.observe.event.EventHandler
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.agent.observe.trace.Tracing
@@ -36,6 +25,7 @@ import com.lhzkml.jasmine.core.agent.tools.ToolRegistry
 import com.lhzkml.jasmine.core.config.ActiveProviderConfig
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
+import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientConfig
 import com.lhzkml.jasmine.core.prompt.executor.ChatClientFactory
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
@@ -47,51 +37,54 @@ import com.lhzkml.jasmine.core.prompt.llm.LLMWriteSession
 import com.lhzkml.jasmine.core.prompt.llm.ModelRegistry
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextCollector
 import com.lhzkml.jasmine.core.prompt.llm.SystemContextProvider
-import com.lhzkml.jasmine.RagStore
-import com.lhzkml.jasmine.core.rag.RagConfig
 import com.lhzkml.jasmine.core.prompt.llm.replaceHistoryWithTLDR
 import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.Prompt
-import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.agent.tools.WebSearchTool
 import com.lhzkml.jasmine.core.agent.tools.FetchUrlTool
-import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.mnn.MnnChatClient
 import com.lhzkml.jasmine.mnn.MnnModelManager
+import com.lhzkml.jasmine.RagStore
+import com.lhzkml.jasmine.core.rag.RagConfig
+import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
-class ChatViewModel(application: Application) : AndroidViewModel(application) {
+class ChatViewModel(
+    application: Application,
+    private val conversationRepo: ConversationRepository
+) : AndroidViewModel(application) {
 
     private val ctx: Context get() = getApplication()
 
-    val chatItems = mutableStateListOf<ChatItem>()
-    var isGenerating by mutableStateOf(false)
-    var currentModelDisplay by mutableStateOf("")
-    var modelList by mutableStateOf<List<String>>(emptyList())
-    var currentModel by mutableStateOf("")
-    var isAgentMode by mutableStateOf(false)
-    var workspacePath by mutableStateOf("")
-    var workspaceLabel by mutableStateOf("")
-    var showFileTree by mutableStateOf(false)
+    // ── 统一 UI 状态 ──────────────────────────────────────────────
+    private val _uiState = MutableStateFlow(ChatUiState())
+    val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
-    val drawerConversations = mutableStateListOf<ConversationInfo>()
-    var drawerEmpty by mutableStateOf(true)
+    /**
+     * ChatStateManager 内部使用 mutableStateListOf，在流式输出时高频更新。
+     * 这是消息列表的唯一数据源（Single Source of Truth），UI 直接观察此列表。
+     */
+    val chatItems = mutableStateListOf<ChatItem>()
 
     lateinit var chatStateManager: ChatStateManager
         private set
 
+    // ── 内部基础设施 ──────────────────────────────────────────────
     private val clientRouter = ChatClientRouter()
     private var currentProviderId: String? = null
-    var overrideModel: String? = null
-    private lateinit var conversationRepo: ConversationRepository
-    var currentConversationId: String? = null
+    private var overrideModel: String? = null
+    private var currentConversationId: String? = null
     val messageHistory = mutableListOf<ChatMessage>()
     private var contextManager = ContextManager()
     private var webSearchTool: WebSearchTool? = null
@@ -105,51 +98,41 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val runtimeBuilder = AgentRuntimeBuilder(AppConfig.configRepo())
     private val toolRegistryBuilder = ToolRegistryBuilder(AppConfig.configRepo())
     private val mcpConnectionManager get() = AppConfig.mcpConnectionManager()
-    var userScrolledUp by mutableStateOf(false)
 
-    /** 当前 MNN 模型是否支持 Thinking 开关 */
-    var supportsThinkingMode by mutableStateOf(false)
-    /** Thinking 模式是否开启 */
-    var isThinkingModeEnabled by mutableStateOf(true)
+    private var currentLocalModelId: String? = null
 
-    /** 检查点恢复选择对话框（执行失败时选择恢复轮次） */
-    var checkpointRecoveryDialog by mutableStateOf<CheckpointRecoveryDialogState?>(null)
-        private set
+    interface LifecycleCallbacks {
+        fun finishAndLaunch(intent: Intent)
+    }
 
-    /** 启动恢复确认对话框 */
-    var startupRecoveryDialog by mutableStateOf<StartupRecoveryDialogState?>(null)
-        private set
+    private var lifecycleCallbacks: LifecycleCallbacks? = null
 
-    data class CheckpointRecoveryDialogState(val title: String, val message: String, val labels: List<String>, val onSelect: (Int?) -> Unit)
-    data class StartupRecoveryDialogState(val title: String, val message: String, val onConfirm: (Boolean) -> Unit)
+    // ── 公开 API ─────────────────────────────────────────────────
 
-    private suspend fun showCheckpointRecoveryDialog(title: String, message: String, labels: List<String>): Int? {
-        return suspendCancellableCoroutine { cont ->
-            checkpointRecoveryDialog = CheckpointRecoveryDialogState(title, message, labels) { index ->
-                checkpointRecoveryDialog = null
-                cont.resume(index)
-            }
+    fun onEvent(event: ChatUiEvent) {
+        when (event) {
+            is ChatUiEvent.SendMessage -> sendMessage(event.text)
+            is ChatUiEvent.StopGeneration -> stopGenerating()
+            is ChatUiEvent.SelectModel -> selectModel(event.model)
+            is ChatUiEvent.SetThinkingMode -> setThinkingMode(event.enabled)
+            is ChatUiEvent.LoadConversation -> loadConversation(event.id)
+            is ChatUiEvent.NewConversation -> startNewConversation()
+            is ChatUiEvent.DeleteConversation -> deleteConversation(event.info)
+            is ChatUiEvent.CloseWorkspace -> closeWorkspace()
+            is ChatUiEvent.OpenSettings -> _uiState.update { it.copy(navigationEvent = NavigationEvent.Settings) }
+            is ChatUiEvent.OpenDrawerEnd -> _uiState.update { it.copy(requestOpenDrawerEnd = true) }
+            is ChatUiEvent.OpenDrawerStart -> _uiState.update { it.copy(requestOpenDrawerStart = true) }
+            is ChatUiEvent.ClearDrawerRequestEnd -> _uiState.update { it.copy(requestOpenDrawerEnd = false) }
+            is ChatUiEvent.ClearDrawerRequestStart -> _uiState.update { it.copy(requestOpenDrawerStart = false) }
+            is ChatUiEvent.UserScrolledUp -> _uiState.update { it.copy(userScrolledUp = event.scrolledUp) }
+            is ChatUiEvent.ClearNavigationEvent -> _uiState.update { it.copy(navigationEvent = null) }
+            is ChatUiEvent.ClearToastMessage -> _uiState.update { it.copy(toastMessage = null) }
         }
     }
 
-    private suspend fun showStartupRecoveryDialog(title: String, message: String): Boolean {
-        return suspendCancellableCoroutine { cont ->
-            startupRecoveryDialog = StartupRecoveryDialogState(title, message) { yes ->
-                startupRecoveryDialog = null
-                cont.resume(yes)
-            }
-        }
-    }
-
-    var scrollToBottomTrigger by mutableStateOf(0)
-        private set
-
-    private var _activity: MainActivity? = null
-
-    fun initialize(activity: MainActivity) {
-        _activity = activity
-        ProviderManager.initialize(activity)
-        conversationRepo = ConversationRepository(activity)
+    fun initialize(context: Context, callbacks: LifecycleCallbacks) {
+        lifecycleCallbacks = callbacks
+        ProviderManager.initialize(context)
 
         chatStateManager = ChatStateManager(chatItems) { requestScrollToBottom() }
 
@@ -157,14 +140,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         refreshModelSelector()
         subscribeConversations()
 
-        val intentConvId = activity.intent.getStringExtra(MainActivity.EXTRA_CONVERSATION_ID)
+        val intentConvId = (context as? android.app.Activity)?.intent
+            ?.getStringExtra("conversation_id")
         if (intentConvId != null) {
             loadConversation(intentConvId)
         } else {
-            val lastId = ProviderManager.getLastConversationId(activity)
+            val lastId = ProviderManager.getLastConversationId(context)
             if (lastId.isNotEmpty()) {
-                val currentWs = if (ProviderManager.isAgentMode(activity))
-                    ProviderManager.getWorkspacePath(activity) else ""
+                val currentWs = if (ProviderManager.isAgentMode(context))
+                    ProviderManager.getWorkspacePath(context) else ""
                 viewModelScope.launch(Dispatchers.IO) {
                     val info = conversationRepo.getConversation(lastId)
                     if (info != null && info.workspacePath == currentWs) {
@@ -178,7 +162,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun handleNewIntent(intent: Intent) {
-        intent.getStringExtra(MainActivity.EXTRA_CONVERSATION_ID)?.let { loadConversation(it) }
+        intent.getStringExtra("conversation_id")?.let { loadConversation(it) }
     }
 
     fun onResume() {
@@ -187,53 +171,78 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onPause() {
-        val activity = _activity ?: return
         savePartialIfGenerating()
-        ProviderManager.setLastConversationId(activity, currentConversationId ?: "")
+        ProviderManager.setLastConversationId(ctx, currentConversationId ?: "")
     }
 
-    fun onCleared2() {
+    override fun onCleared() {
+        super.onCleared()
         clientRouter.close()
         webSearchTool?.close()
         fetchUrlTool?.close()
         tracing?.close()
         mcpConnectionManager.close()
+        lifecycleCallbacks = null
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        onCleared2()
+    fun shortenModelName(model: String): String = model.substringAfterLast("/")
+
+    // ── 私有实现 ─────────────────────────────────────────────────
+
+    private fun requestScrollToBottom() {
+        if (_uiState.value.userScrolledUp) return
+        _uiState.update { it.copy(scrollToBottomTrigger = it.scrollToBottomTrigger + 1) }
     }
 
-    fun requestScrollToBottom() {
-        if (userScrolledUp) return
-        scrollToBottomTrigger++
+    private fun showToast(message: String) {
+        _uiState.update { it.copy(toastMessage = message) }
+    }
+
+    private suspend fun showCheckpointRecoveryDialog(title: String, message: String, labels: List<String>): Int? {
+        return suspendCancellableCoroutine { cont ->
+            _uiState.update {
+                it.copy(checkpointRecoveryDialog = CheckpointRecoveryDialogState(title, message, labels) { index ->
+                    _uiState.update { s -> s.copy(checkpointRecoveryDialog = null) }
+                    cont.resume(index)
+                })
+            }
+        }
+    }
+
+    private suspend fun showStartupRecoveryDialog(title: String, message: String): Boolean {
+        return suspendCancellableCoroutine { cont ->
+            _uiState.update {
+                it.copy(startupRecoveryDialog = StartupRecoveryDialogState(title, message) { yes ->
+                    _uiState.update { s -> s.copy(startupRecoveryDialog = null) }
+                    cont.resume(yes)
+                })
+            }
+        }
     }
 
     private fun refreshContextCollector() {
-        val activity = _activity ?: return
-        val isAgent = ProviderManager.isAgentMode(activity)
-        val wsPath = ProviderManager.getWorkspacePath(activity)
+        val isAgent = ProviderManager.isAgentMode(ctx)
+        val wsPath = ProviderManager.getWorkspacePath(ctx)
         val activeId = ProviderManager.getActiveId()
         val modelName = if (activeId != null) {
-            overrideModel ?: ProviderManager.getModel(activity, activeId)
+            overrideModel ?: ProviderManager.getModel(ctx, activeId)
         } else ""
-            val additionalProviders: List<SystemContextProvider> = buildList {
-                val ragProvider = RagStore.buildRagContextProvider {
-                    val rawActive = ProviderManager.getRagActiveLibraryIds(activity)
-                    val libs = ProviderManager.getRagLibraries(activity)
-                    val effectiveActive = if (rawActive.isEmpty() && libs.isNotEmpty()) libs.map { it.id }.toSet() else rawActive
-                    RagConfig(
-                        enabled = ProviderManager.isRagEnabled(activity),
-                        topK = ProviderManager.getRagTopK(activity),
-                        embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(activity),
-                        embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(activity),
-                        embeddingModel = ProviderManager.getRagEmbeddingModel(activity),
-                        useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(activity),
-                        embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(activity),
-                        activeLibraryIds = effectiveActive
-                    )
-                }
+        val additionalProviders: List<SystemContextProvider> = buildList {
+            val ragProvider = RagStore.buildRagContextProvider {
+                val rawActive = ProviderManager.getRagActiveLibraryIds(ctx)
+                val libs = ProviderManager.getRagLibraries(ctx)
+                val effectiveActive = if (rawActive.isEmpty() && libs.isNotEmpty()) libs.map { it.id }.toSet() else rawActive
+                RagConfig(
+                    enabled = ProviderManager.isRagEnabled(ctx),
+                    topK = ProviderManager.getRagTopK(ctx),
+                    embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(ctx),
+                    embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(ctx),
+                    embeddingModel = ProviderManager.getRagEmbeddingModel(ctx),
+                    useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(ctx),
+                    embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(ctx),
+                    activeLibraryIds = effectiveActive
+                )
+            }
             if (ragProvider != null) add(ragProvider)
         }
         contextCollector = runtimeBuilder.buildSystemContext(
@@ -242,45 +251,43 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private fun buildToolRegistry(client: com.lhzkml.jasmine.core.prompt.llm.ChatClient, model: String): ToolRegistry {
-        val activity = _activity ?: throw IllegalStateException("Activity not set")
-        toolRegistryBuilder.workspacePath = ProviderManager.getWorkspacePath(activity)
-        toolRegistryBuilder.fallbackBasePath = activity.getExternalFilesDir(null)?.absolutePath
-        DialogHandlers.register(activity, toolRegistryBuilder)
+    private fun buildToolRegistry(client: ChatClient, model: String): ToolRegistry {
+        toolRegistryBuilder.workspacePath = ProviderManager.getWorkspacePath(ctx)
+        toolRegistryBuilder.fallbackBasePath = ctx.getExternalFilesDir(null)?.absolutePath
+        DialogHandlers.register(_uiState, toolRegistryBuilder)
         toolRegistryBuilder.subAgentClientProvider = { client }
         toolRegistryBuilder.subAgentModelProvider = { model }
         toolRegistryBuilder.subAgentEventListener = object : com.lhzkml.jasmine.core.agent.tools.AgentEventListener {
             override suspend fun onToolCallStart(toolName: String, arguments: String) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     chatStateManager.handleToolCall(toolName, arguments)
                 }
             }
             override suspend fun onToolCallResult(toolName: String, result: String) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     chatStateManager.handleToolResult(toolName, result)
                 }
             }
             override suspend fun onThinking(content: String) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     chatStateManager.handleThinking(content)
                 }
             }
         }
         toolRegistryBuilder.onSubAgentStart = { purpose, type ->
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
                 chatStateManager.handleSubAgentStart(purpose, type)
             }
         }
         toolRegistryBuilder.onSubAgentResult = { purpose, result ->
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
                 chatStateManager.handleSubAgentResult(purpose, result)
             }
         }
-        return toolRegistryBuilder.build(ProviderManager.isAgentMode(activity))
+        return toolRegistryBuilder.build(ProviderManager.isAgentMode(ctx))
     }
 
     private fun preconnectMcpServers() {
-        val activity = _activity ?: return
         mcpConnectionManager.listener = object : McpConnectionManager.ConnectionListener {
             override fun onConnected(serverName: String, transportType: com.lhzkml.jasmine.core.config.McpTransportType, toolCount: Int) {
                 val transportLabel = when (transportType) {
@@ -288,12 +295,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     com.lhzkml.jasmine.core.config.McpTransportType.SSE -> "SSE"
                 }
                 CoroutineScope(Dispatchers.Main).launch {
-                    Toast.makeText(activity, "MCP: $serverName 已连接 [$transportLabel] ($toolCount 个工具)", Toast.LENGTH_SHORT).show()
+                    showToast("MCP: $serverName 已连接 [$transportLabel] ($toolCount 个工具)")
                 }
             }
             override fun onConnectionFailed(serverName: String, error: String) {
                 CoroutineScope(Dispatchers.Main).launch {
-                    Toast.makeText(activity, "MCP: $serverName 连接失败", Toast.LENGTH_SHORT).show()
+                    showToast("MCP: $serverName 连接失败")
                 }
             }
         }
@@ -305,8 +312,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildTracing(): Tracing? {
-        val activity = _activity ?: return null
-        return runtimeBuilder.buildTracing(activity.getExternalFilesDir("traces"))
+        return runtimeBuilder.buildTracing(ctx.getExternalFilesDir("traces"))
     }
 
     private fun buildEventHandler(): EventHandler? {
@@ -318,39 +324,43 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildPersistence(): Persistence? {
-        val activity = _activity ?: return null
-        return runtimeBuilder.buildPersistence(activity.getExternalFilesDir("snapshots"))
+        return runtimeBuilder.buildPersistence(ctx.getExternalFilesDir("snapshots"))
     }
 
-    fun subscribeConversations() {
-        val activity = _activity ?: return
+    private fun subscribeConversations() {
         conversationObserverJob?.cancel()
-        val isAgent = ProviderManager.isAgentMode(activity)
-        val wp = if (isAgent) ProviderManager.getWorkspacePath(activity) else ""
+        val isAgent = ProviderManager.isAgentMode(ctx)
+        val wp = if (isAgent) ProviderManager.getWorkspacePath(ctx) else ""
         conversationObserverJob = viewModelScope.launch {
             conversationRepo.observeConversationsByWorkspace(wp).collectLatest { list ->
-                drawerConversations.clear()
-                drawerConversations.addAll(list)
-                drawerEmpty = list.isEmpty()
+                _uiState.update { it.copy(conversations = list, conversationsEmpty = list.isEmpty()) }
             }
         }
     }
 
-    fun refreshAgentModeUI() {
-        val activity = _activity ?: return
-        val isAgent = ProviderManager.isAgentMode(activity)
-        isAgentMode = isAgent
+    private fun refreshAgentModeUI() {
+        val isAgent = ProviderManager.isAgentMode(ctx)
         if (isAgent) {
-            val path = ProviderManager.getWorkspacePath(activity)
-            workspacePath = path
-            showFileTree = true
-            workspaceLabel = if (path.isNotEmpty()) path else "未选择工作区"
+            val path = ProviderManager.getWorkspacePath(ctx)
+            _uiState.update {
+                it.copy(
+                    isAgentMode = true,
+                    workspacePath = path,
+                    showFileTree = true,
+                    workspaceLabel = path.ifEmpty { "未选择工作区" }
+                )
+            }
         } else {
-            showFileTree = false
-            workspaceLabel = "普通聊天"
-            workspacePath = ""
+            _uiState.update {
+                it.copy(
+                    isAgentMode = false,
+                    showFileTree = false,
+                    workspaceLabel = "普通聊天",
+                    workspacePath = ""
+                )
+            }
         }
-        val currentWs = if (isAgent) ProviderManager.getWorkspacePath(activity) else ""
+        val currentWs = if (isAgent) ProviderManager.getWorkspacePath(ctx) else ""
         if (currentConversationId != null) {
             viewModelScope.launch(Dispatchers.IO) {
                 val info = conversationRepo.getConversation(currentConversationId!!)
@@ -362,102 +372,102 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         subscribeConversations()
     }
 
-    fun refreshModelSelector() {
-        val activity = _activity ?: return
+    private fun refreshModelSelector() {
         val activeId = ProviderManager.getActiveId()
         if (activeId == null) {
-            currentModelDisplay = "未配置"
-            modelList = emptyList()
-            currentModel = ""
-            supportsThinkingMode = false
+            _uiState.update {
+                it.copy(currentModelDisplay = "未配置", modelList = emptyList(), currentModel = "", supportsThinkingMode = false)
+            }
             return
         }
 
         val provider = ProviderManager.getProvider(activeId)
         if (provider?.apiType == ApiType.LOCAL) {
-            val localModels = MnnModelManager.getLocalModels(activity)
+            val localModels = MnnModelManager.getLocalModels(ctx)
             val localModelIds = localModels.map { it.modelId }
-            modelList = localModelIds
-            val model = overrideModel ?: ProviderManager.getModel(activity, activeId)
-            currentModel = if (model.isNotEmpty() && model in localModelIds) model
+            val model = overrideModel ?: ProviderManager.getModel(ctx, activeId)
+            val selectedModel = if (model.isNotEmpty() && model in localModelIds) model
                 else localModelIds.firstOrNull() ?: ""
-            if (currentModel != model && currentModel.isNotEmpty()) {
-                overrideModel = currentModel
+            if (selectedModel != model && selectedModel.isNotEmpty()) {
+                overrideModel = selectedModel
             }
-            currentModelDisplay = "${shortenModelName(currentModel).ifEmpty { "请下载模型" }} \u02C7"
-            supportsThinkingMode = MnnModelManager.isSupportThinkingSwitch(activity, currentModel)
-            isThinkingModeEnabled = ProviderManager.getMnnThinkingEnabled(activity, currentModel)
+            _uiState.update {
+                it.copy(
+                    modelList = localModelIds,
+                    currentModel = selectedModel,
+                    currentModelDisplay = "${shortenModelName(selectedModel).ifEmpty { "请下载模型" }} \u02C7",
+                    supportsThinkingMode = MnnModelManager.isSupportThinkingSwitch(ctx, selectedModel),
+                    isThinkingModeEnabled = ProviderManager.getMnnThinkingEnabled(ctx, selectedModel)
+                )
+            }
             return
         }
 
-        supportsThinkingMode = false
-        val model = overrideModel ?: ProviderManager.getModel(activity, activeId)
-        currentModel = model
-        currentModelDisplay = "${shortenModelName(model).ifEmpty { "未选择模型" }} \u02C7"
-        val selectedModels = ProviderManager.getSelectedModels(activity, activeId)
-        modelList = if (selectedModels.isEmpty()) {
+        val model = overrideModel ?: ProviderManager.getModel(ctx, activeId)
+        val selectedModels = ProviderManager.getSelectedModels(ctx, activeId)
+        val list = if (selectedModels.isEmpty()) {
             if (model.isNotEmpty()) listOf(model) else emptyList()
         } else {
-            if (model.isNotEmpty() && model !in selectedModels) {
-                listOf(model) + selectedModels
-            } else selectedModels
+            if (model.isNotEmpty() && model !in selectedModels) listOf(model) + selectedModels
+            else selectedModels
+        }
+        _uiState.update {
+            it.copy(
+                supportsThinkingMode = false,
+                currentModel = model,
+                currentModelDisplay = "${shortenModelName(model).ifEmpty { "未选择模型" }} \u02C7",
+                modelList = list
+            )
         }
     }
 
-    fun selectModel(model: String) {
-        val activity = _activity ?: return
+    private fun selectModel(model: String) {
         val activeId = ProviderManager.getActiveId() ?: return
         overrideModel = model
-        val key = ProviderManager.getApiKey(activity, activeId) ?: ""
-        val baseUrl = ProviderManager.getBaseUrl(activity, activeId)
-        ProviderManager.saveConfig(activity, activeId, key, baseUrl, model)
+        val key = ProviderManager.getApiKey(ctx, activeId) ?: ""
+        val baseUrl = ProviderManager.getBaseUrl(ctx, activeId)
+        ProviderManager.saveConfig(ctx, activeId, key, baseUrl, model)
         refreshModelSelector()
     }
 
-    fun setThinkingMode(enabled: Boolean) {
-        val activity = _activity ?: return
-        if (!supportsThinkingMode || currentModel.isEmpty()) return
-        isThinkingModeEnabled = enabled
-        ProviderManager.setMnnThinkingEnabled(activity, currentModel, enabled)
+    private fun setThinkingMode(enabled: Boolean) {
+        val state = _uiState.value
+        if (!state.supportsThinkingMode || state.currentModel.isEmpty()) return
+        _uiState.update { it.copy(isThinkingModeEnabled = enabled) }
+        ProviderManager.setMnnThinkingEnabled(ctx, state.currentModel, enabled)
         val client = clientRouter.getClient(MnnChatClient.PROVIDER_ID) as? MnnChatClient
         client?.updateThinking(enabled)
     }
 
-    fun shortenModelName(model: String): String = model.substringAfterLast("/")
-
-    fun closeWorkspace() {
-        val activity = _activity ?: return
-        if (ProviderManager.isAgentMode(activity)) {
-            ProviderManager.setLastConversationId(activity, currentConversationId ?: "")
-            val uriStr = ProviderManager.getWorkspaceUri(activity)
+    private fun closeWorkspace() {
+        if (ProviderManager.isAgentMode(ctx)) {
+            ProviderManager.setLastConversationId(ctx, currentConversationId ?: "")
+            val uriStr = ProviderManager.getWorkspaceUri(ctx)
             if (uriStr.isNotEmpty()) {
                 try {
                     val uri = android.net.Uri.parse(uriStr)
-                    activity.contentResolver.releasePersistableUriPermission(
+                    ctx.contentResolver.releasePersistableUriPermission(
                         uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     )
                 } catch (_: Exception) {}
             }
-            ProviderManager.setWorkspacePath(activity, "")
-            ProviderManager.setWorkspaceUri(activity, "")
+            ProviderManager.setWorkspacePath(ctx, "")
+            ProviderManager.setWorkspaceUri(ctx, "")
         }
-        ProviderManager.setAgentMode(activity, false)
-        ProviderManager.setLastSession(activity, false)
-        val intent = Intent(activity, LauncherActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        activity.startActivity(intent)
-        activity.finish()
+        ProviderManager.setAgentMode(ctx, false)
+        ProviderManager.setLastSession(ctx, false)
+        _uiState.update { it.copy(navigationEvent = NavigationEvent.Launcher) }
     }
 
-    fun startNewConversation() {
+    private fun startNewConversation() {
         savePartialIfGenerating()
         currentConversationId = null
         messageHistory.clear()
         chatStateManager.clearAll()
     }
 
-    fun loadConversation(conversationId: String) {
+    private fun loadConversation(conversationId: String) {
         savePartialIfGenerating()
         viewModelScope.launch(Dispatchers.IO) {
             val info = conversationRepo.getConversation(conversationId)
@@ -466,8 +476,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val usageList = conversationRepo.getUsageList(conversationId)
             withContext(Dispatchers.Main) {
                 if (info == null) {
-                    val activity = _activity ?: return@withContext
-                    Toast.makeText(activity, "对话不存在", Toast.LENGTH_SHORT).show()
+                    showToast("对话不存在")
                     return@withContext
                 }
                 currentConversationId = conversationId
@@ -509,9 +518,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 requestScrollToBottom()
             }
-            val activity = _activity ?: return@launch
-            if (ProviderManager.isSnapshotEnabled(activity)
-                && ProviderManager.getSnapshotStorage(activity) == com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE
+            if (ProviderManager.isSnapshotEnabled(ctx)
+                && ProviderManager.getSnapshotStorage(ctx) == com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE
             ) {
                 tryOfferStartupRecovery(conversationId)
             }
@@ -610,9 +618,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     i++
                 }
-                line.isBlank() -> {
-                    i++
-                }
+                line.isBlank() -> i++
                 else -> {
                     blocks.add(ContentBlock.SystemLog(line))
                     i++
@@ -622,7 +628,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return blocks
     }
 
-    fun deleteConversation(info: ConversationInfo) {
+    private fun deleteConversation(info: ConversationInfo) {
         viewModelScope.launch(Dispatchers.IO) {
             conversationRepo.deleteConversation(info.id)
             if (info.id == currentConversationId) {
@@ -630,8 +636,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
-    private var currentLocalModelId: String? = null
 
     private fun getOrCreateClient(config: ActiveProviderConfig): ChatClient {
         if (config.apiType == ApiType.LOCAL) {
@@ -658,61 +662,54 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         currentLocalModelId = null
 
-        val client: ChatClient
-        run {
-            val provider = ProviderManager.getProvider(config.providerId)
-            val activity = _activity!!
-            val clientConfig = ChatClientConfig(
-                providerId = config.providerId,
-                providerName = provider?.name ?: config.providerId,
-                apiKey = config.apiKey,
-                baseUrl = config.baseUrl,
-                apiType = config.apiType,
-                chatPath = config.chatPath,
-                vertexEnabled = config.vertexEnabled,
-                vertexProjectId = config.vertexProjectId,
-                vertexLocation = config.vertexLocation,
-                vertexServiceAccountJson = config.vertexServiceAccountJson,
-                requestTimeoutMs = ProviderManager.getRequestTimeout(activity).toLong() * 1000,
-                connectTimeoutMs = ProviderManager.getConnectTimeout(activity).toLong() * 1000,
-                socketTimeoutMs = ProviderManager.getSocketTimeout(activity).toLong() * 1000
-            )
-            client = ChatClientFactory.create(clientConfig)
-            val llmProvider = client.provider
-            val modelMeta = ModelRegistry.find(config.model)
-            contextManager = if (modelMeta != null) ContextManager.fromModel(modelMeta)
-            else ContextManager.forModel(config.model, llmProvider)
-        }
+        val provider = ProviderManager.getProvider(config.providerId)
+        val clientConfig = ChatClientConfig(
+            providerId = config.providerId,
+            providerName = provider?.name ?: config.providerId,
+            apiKey = config.apiKey,
+            baseUrl = config.baseUrl,
+            apiType = config.apiType,
+            chatPath = config.chatPath,
+            vertexEnabled = config.vertexEnabled,
+            vertexProjectId = config.vertexProjectId,
+            vertexLocation = config.vertexLocation,
+            vertexServiceAccountJson = config.vertexServiceAccountJson,
+            requestTimeoutMs = ProviderManager.getRequestTimeout(ctx).toLong() * 1000,
+            connectTimeoutMs = ProviderManager.getConnectTimeout(ctx).toLong() * 1000,
+            socketTimeoutMs = ProviderManager.getSocketTimeout(ctx).toLong() * 1000
+        )
+        val client = ChatClientFactory.create(clientConfig)
+        val llmProvider = client.provider
+        val modelMeta = ModelRegistry.find(config.model)
+        contextManager = if (modelMeta != null) ContextManager.fromModel(modelMeta)
+        else ContextManager.forModel(config.model, llmProvider)
 
         clientRouter.register(config.providerId, client)
         currentProviderId = config.providerId
         return client
     }
 
-    fun sendMessage(message: String) {
-        val activity = _activity ?: return
+    private fun sendMessage(message: String) {
         val config = ProviderManager.getActiveConfig()
         if (config == null) {
-            Toast.makeText(activity, "请先在设置中配置模型供应商", Toast.LENGTH_SHORT).show()
-            activity.startActivity(Intent(activity, SettingsActivity::class.java))
+            showToast("请先在设置中配置模型供应商")
+            _uiState.update { it.copy(navigationEvent = NavigationEvent.Settings) }
             return
         }
         val actualModel = overrideModel ?: config.model
         if (actualModel.isEmpty()) {
             if (config.apiType == ApiType.LOCAL) {
-                Toast.makeText(activity, "请先下载并选择本地模型", Toast.LENGTH_SHORT).show()
+                showToast("请先下载并选择本地模型")
             } else {
-                Toast.makeText(activity, "请先选择模型", Toast.LENGTH_SHORT).show()
-                activity.startActivity(Intent(activity, ProviderConfigActivity::class.java).apply {
-                    putExtra("provider_id", config.providerId)
-                    putExtra("tab", 1)
-                })
+                showToast("请先选择模型")
+                _uiState.update {
+                    it.copy(navigationEvent = NavigationEvent.ProviderConfig(config.providerId, tab = 1))
+                }
             }
             return
         }
 
-        isGenerating = true
-        userScrolledUp = false
+        _uiState.update { it.copy(isGenerating = true, userScrolledUp = false) }
         ChatStopSignal.reset()
         val now = ChatExecutor.formatTime(System.currentTimeMillis())
         chatStateManager.addUserMessage(message, now)
@@ -721,7 +718,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val userMsg = ChatMessage.user(message)
 
         val checkpointRecovery = CheckpointRecovery(
-            activity = activity,
+            activity = ctx,
             chatStateManager = chatStateManager,
             messageHistory = messageHistory,
             conversationRepo = conversationRepo,
@@ -732,7 +729,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         val executor = ChatExecutor(
-            context = activity,
+            context = ctx,
             chatStateManager = chatStateManager,
             conversationRepo = conversationRepo,
             contextCollector = { contextCollector },
@@ -760,7 +757,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             },
             onUpdateButtonState = { isCompressing ->
                 if (!isCompressing) {
-                    isGenerating = false
+                    _uiState.update { it.copy(isGenerating = false) }
                     currentJob = null
                 }
             }
@@ -771,18 +768,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun stopGenerating() {
+    private fun stopGenerating() {
         ChatStopSignal.requestStop()
         currentJob?.cancel()
-        isGenerating = false
+        _uiState.update { it.copy(isGenerating = false) }
     }
 
-    /**
-     * 如果当前正在生成回复，保存已生成的部分内容到数据库。
-     * 用于切换对话、新建对话、App 进后台等场景。
-     */
     private fun savePartialIfGenerating() {
-        if (!isGenerating) return
+        if (!_uiState.value.isGenerating) return
         val convId = currentConversationId ?: return
         val partialText = chatStateManager.getPartialContent()
         val logContent = chatStateManager.getLogContent()
@@ -803,9 +796,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun tryOfferStartupRecovery(conversationId: String) {
-        val activity = _activity ?: return
         val checkpointRecovery = CheckpointRecovery(
-            activity = activity,
+            activity = ctx,
             chatStateManager = chatStateManager,
             messageHistory = messageHistory,
             conversationRepo = conversationRepo,
@@ -818,10 +810,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun tryCompressHistory(client: ChatClient, model: String) {
-        val activity = _activity ?: return
         val strategy = CompressionStrategyBuilder.build(AppConfig.configRepo(), contextManager) ?: return
 
-        // 有阈值检查的策略先判断是否需要压缩
         when (strategy) {
             is HistoryCompressionStrategy.TokenBudget -> {
                 if (!strategy.shouldCompress(messageHistory)) return
@@ -881,10 +871,5 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } finally {
             session.close()
         }
-    }
-
-    fun openSettings() {
-        val activity = _activity ?: return
-        activity.startActivity(Intent(activity, SettingsActivity::class.java))
     }
 }

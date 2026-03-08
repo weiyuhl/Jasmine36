@@ -28,7 +28,6 @@ dependencies {
     api(project(":jasmine-core:agent:agent-mcp"))
     api(project(":jasmine-core:config:config-manager"))
     api(project(":jasmine-core:conversation:conversation-storage"))
-    implementation(project(":jasmine-core:termux:termux-environment"))
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -21,7 +21,7 @@ object AppConfig {
     
     fun initialize(context: Context) {
         if (_configRepo == null) {
-            _configRepo = SharedPreferencesConfigRepository(context.applicationContext)
+            _configRepo = EncryptedConfigRepository(context.applicationContext)
         }
         if (_providerRegistry == null) {
             _providerRegistry = ProviderRegistry(configRepo()).apply {

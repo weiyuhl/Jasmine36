@@ -102,10 +102,11 @@ fun ChatMessageList(
         contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp),
         modifier = modifier.fillMaxSize()
     ) {
-        itemsIndexed(items, key = { index, item ->
+        itemsIndexed(items, key = { _, item ->
+            // ✅ 优化 key：使用内容哈希而非 index，提高重组性能
             when (item) {
-                is ChatItem.UserMessage -> "user_$index"
-                is ChatItem.AiMessage -> "ai_$index"
+                is ChatItem.UserMessage -> "user_${item.time}_${item.content.hashCode()}"
+                is ChatItem.AiMessage -> "ai_${item.time}_${item.blocks.hashCode()}"
                 is ChatItem.TypingIndicator -> "typing"
             }
         }) { _, item ->

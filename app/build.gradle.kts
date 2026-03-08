@@ -137,6 +137,9 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation("androidx.compose.material3:material3")
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
+    implementation(libs.navigation.compose)
     debugImplementation(libs.compose.ui.tooling)
 
     // Coroutines（UI 层需要协程来调用框架）
@@ -145,6 +148,9 @@ dependencies {
 
     // DocumentFile（导入/导出模型时访问 SAF 目录）
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // 安全加密库（保护 API 密钥等敏感数据）
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -1,6 +1,5 @@
 package com.lhzkml.jasmine
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,7 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.components.*
-import com.lhzkml.jasmine.mnn.MnnManagementActivity
+import com.lhzkml.jasmine.ui.navigation.Routes
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import com.lhzkml.jasmine.core.prompt.llm.SystemPromptManager
@@ -68,7 +67,8 @@ class SettingsActivity : ComponentActivity() {
 fun SettingsScreen(
     onBack: () -> Unit,
     conversationRepo: ConversationRepository,
-    onRefreshCallbackSet: ((()->Unit) -> Unit)? = null
+    onRefreshCallbackSet: ((()->Unit) -> Unit)? = null,
+    onNavigate: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -151,17 +151,13 @@ fun SettingsScreen(
                 SettingsItem(
                     title = "模型供应商",
                     value = getProviderStatus(context),
-                    onClick = {
-                        context.startActivity(Intent(context, ProviderListActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.PROVIDER_LIST) }
                 )
                 SettingsItem(
                     title = "本地 MNN",
                     subtitle = "管理本地 LLM 推理模型",
                     value = "进入管理",
-                    onClick = {
-                        context.startActivity(Intent(context, MnnManagementActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.MNN_MANAGEMENT) }
                 )
 
                 // ─── 二、模型参数 ───
@@ -169,32 +165,24 @@ fun SettingsScreen(
                     title = "Token 管理",
                     subtitle = "限制每条回复的长度",
                     value = getMaxTokensInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, TokenManagementActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.TOKEN_MANAGEMENT) }
                 )
                 SettingsItem(
                     title = "采样参数",
                     subtitle = "控制 AI 回复的随机性和多样性",
                     value = getSamplingParamsInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, SamplingParamsConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.SAMPLING_PARAMS) }
                 )
                 SettingsItem(
                     title = "系统提示词",
                     value = getSystemPromptPreview(context),
-                    onClick = {
-                        context.startActivity(Intent(context, SystemPromptConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.SYSTEM_PROMPT) }
                 )
                 SettingsItem(
                     title = "RAG 知识库",
                     subtitle = "向量检索增强上下文",
                     value = getRagInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, com.lhzkml.jasmine.rag.RagConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.RAG_CONFIG) }
                 )
 
                 // ─── Rules ───
@@ -202,9 +190,7 @@ fun SettingsScreen(
                     title = "Rules 规则",
                     subtitle = "个人规则 · 项目规则",
                     value = getRulesPreview(context),
-                    onClick = {
-                        context.startActivity(Intent(context, RulesActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.RULES) }
                 )
             }
 
@@ -224,32 +210,22 @@ fun SettingsScreen(
                     SettingsItem(
                         title = "Agent 工具预设",
                         value = getAgentToolPresetInfo(context),
-                        onClick = {
-                            context.startActivity(Intent(context, ToolConfigActivity::class.java).apply {
-                                putExtra(ToolConfigActivity.EXTRA_AGENT_PRESET, true)
-                            })
-                        }
+                        onClick = { onNavigate(Routes.TOOL_CONFIG_AGENT) }
                     )
                     SettingsItem(
                         title = "Agent 策略",
                         value = getAgentStrategyInfo(context),
-                        onClick = {
-                            context.startActivity(Intent(context, AgentStrategyActivity::class.java))
-                        }
+                        onClick = { onNavigate(Routes.AGENT_STRATEGY) }
                     )
                     SettingsItem(
                         title = "MCP 工具",
                         value = getMcpInfo(context),
-                        onClick = {
-                            context.startActivity(Intent(context, McpServerActivity::class.java))
-                        }
+                        onClick = { onNavigate(Routes.MCP_SERVER) }
                     )
                     SettingsItem(
                         title = "Shell 命令策略",
                         value = getShellPolicyInfo(context),
-                        onClick = {
-                            context.startActivity(Intent(context, ShellPolicyActivity::class.java))
-                        }
+                        onClick = { onNavigate(Routes.SHELL_POLICY) }
                     )
                 }
             }
@@ -259,44 +235,32 @@ fun SettingsScreen(
                 SettingsItem(
                     title = "智能上下文压缩",
                     value = getCompressionInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, CompressionConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.COMPRESSION_CONFIG) }
                 )
                 SettingsItem(
                     title = "超时与续传",
                     value = getTimeoutInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, TimeoutConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.TIMEOUT_CONFIG) }
                 )
                 SettingsItem(
                     title = "执行追踪",
                     value = getTraceInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, TraceConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.TRACE_CONFIG) }
                 )
                 SettingsItem(
                     title = "任务规划",
                     value = getPlannerInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, PlannerConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.PLANNER_CONFIG) }
                 )
                 SettingsItem(
                     title = "执行快照",
                     value = getSnapshotInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, SnapshotConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.SNAPSHOT_CONFIG) }
                 )
                 SettingsItem(
                     title = "事件处理器",
                     value = getEventHandlerInfo(context),
-                    onClick = {
-                        context.startActivity(Intent(context, EventHandlerConfigActivity::class.java))
-                    }
+                    onClick = { onNavigate(Routes.EVENT_HANDLER_CONFIG) }
                 )
             }
 
@@ -305,9 +269,7 @@ fun SettingsScreen(
                 title = "关于",
                 subtitle = "应用与依赖版本信息",
                 value = "查看",
-                onClick = {
-                    context.startActivity(Intent(context, AboutActivity::class.java))
-                }
+                onClick = { onNavigate(Routes.ABOUT) }
             )
             
         }

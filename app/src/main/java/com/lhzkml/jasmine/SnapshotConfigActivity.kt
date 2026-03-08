@@ -46,14 +46,14 @@ class SnapshotConfigActivity : ComponentActivity() {
                         }
                     },
                     onClearCheckpoints = { /* 由 SnapshotConfigScreen 内部处理 */ },
-                    onPerformClear = {
+                    onPerformClear = { afterClear ->
                         val snapshotDir = getExternalFilesDir("snapshots")
                         if (snapshotDir != null && snapshotDir.exists()) {
                             snapshotDir.deleteRecursively()
                             snapshotDir.mkdirs()
                         }
                         Toast.makeText(this, "已清除", Toast.LENGTH_SHORT).show()
-                        recreate()
+                        afterClear()
                     },
                     getCheckpointCount = { getCheckpointCountText() }
                 )
@@ -87,7 +87,7 @@ fun SnapshotConfigScreen(
     onBack: () -> Unit,
     onViewCheckpoints: () -> Unit,
     onClearCheckpoints: () -> Unit,
-    onPerformClear: () -> Unit = {},
+    onPerformClear: ((() -> Unit) -> Unit) = { it() },
     getCheckpointCount: () -> String
 ) {
     val config = AppConfig.configRepo()
@@ -412,7 +412,7 @@ fun SnapshotConfigScreen(
                     CustomTextButton(
                         onClick = {
                             showClearConfirmDialog = false
-                            onPerformClear()
+                            onPerformClear { checkpointCount = getCheckpointCount() }
                         },
                         colors = CustomButtonDefaults.textButtonColors(contentColor = Color(0xFFE53935))
                     ) { CustomText("删除", fontSize = 14.sp) }

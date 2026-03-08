@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -34,6 +33,14 @@ import com.lhzkml.jasmine.ui.components.*
 
 class ProviderListActivity : ComponentActivity() {
 
+    private val addProviderLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            /* 添加成功，ProviderListScreen 通过 onResume 刷新 */
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -43,6 +50,15 @@ class ProviderListActivity : ComponentActivity() {
                     startActivity(Intent(this, ProviderConfigActivity::class.java).apply {
                         putExtra("provider_id", providerId)
                     })
+                },
+                onNavigateToEmbedding = {
+                    startActivity(Intent(this, com.lhzkml.jasmine.rag.EmbeddingConfigActivity::class.java))
+                },
+                onNavigateToMnnManagement = {
+                    startActivity(Intent(this, com.lhzkml.jasmine.mnn.MnnManagementActivity::class.java))
+                },
+                onNavigateToAddCustomProvider = {
+                    addProviderLauncher.launch(Intent(this, AddCustomProviderActivity::class.java))
                 }
             )
         }
@@ -53,7 +69,10 @@ class ProviderListActivity : ComponentActivity() {
 @Composable
 fun ProviderListScreen(
     onBack: () -> Unit,
-    onProviderClick: (String) -> Unit
+    onProviderClick: (String) -> Unit,
+    onNavigateToEmbedding: () -> Unit = {},
+    onNavigateToMnnManagement: () -> Unit = {},
+    onNavigateToAddCustomProvider: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val config = AppConfig.configRepo()
@@ -61,15 +80,18 @@ fun ProviderListScreen(
     
     var refreshTrigger by remember { mutableStateOf(0) }
     var providerToDelete by remember { mutableStateOf<ProviderConfig?>(null) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-    val addProviderLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            refreshTrigger++
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                refreshTrigger++
+            }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    
+
     val providers by remember(refreshTrigger) {
         mutableStateOf(registry.providers)
     }
@@ -124,9 +146,7 @@ fun ProviderListScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        context.startActivity(Intent(context, com.lhzkml.jasmine.rag.EmbeddingConfigActivity::class.java))
-                    }
+                    .clickable { onNavigateToEmbedding() }
             ) {
                 ProviderItem(
                     provider = ProviderConfig(
@@ -148,7 +168,7 @@ fun ProviderListScreen(
                         else -> if (ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank()) "远程 API · 已配置" else "未配置"
                     },
                     onSwitchChange = { },
-                    onClick = { context.startActivity(Intent(context, com.lhzkml.jasmine.rag.EmbeddingConfigActivity::class.java)) },
+                    onClick = { onNavigateToEmbedding() },
                     onDelete = null,
                     showSwitch = false
                 )
@@ -183,9 +203,7 @@ fun ProviderListScreen(
                     },
                     onClick = {
                         if (isLocal) {
-                            context.startActivity(
-                                Intent(context, com.lhzkml.jasmine.mnn.MnnManagementActivity::class.java)
-                            )
+                            onNavigateToMnnManagement()
                         } else {
                             onProviderClick(provider.id)
                         }
@@ -204,9 +222,7 @@ fun ProviderListScreen(
                 .background(Color.White)
         ) {
             CustomButton(
-                onClick = {
-                    addProviderLauncher.launch(Intent(context, AddCustomProviderActivity::class.java))
-                },
+                onClick = { onNavigateToAddCustomProvider() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)

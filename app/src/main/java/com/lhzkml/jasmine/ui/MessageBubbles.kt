@@ -111,6 +111,11 @@ fun AiContentBlocks(blocks: List<ContentBlock>, isStreaming: Boolean) {
     val context = LocalContext.current
     val mdRenderer = remember(context) { MarkdownRenderer(context) }
 
+    // ✅ 缓存渲染结果，避免每次重组都重新渲染
+    val renderedContent = remember(blocks, isStreaming) {
+        renderContentBlocksCached(blocks, mdRenderer, isStreaming)
+    }
+
     AndroidView(
         factory = { ctx ->
             TextView(ctx).apply {
@@ -120,14 +125,27 @@ fun AiContentBlocks(blocks: List<ContentBlock>, isStreaming: Boolean) {
             }
         },
         update = { tv ->
-            val rendered = renderContentBlocks(blocks, tv, mdRenderer, isStreaming)
-            tv.text = rendered
+            tv.text = renderedContent
             if (!isStreaming) {
                 tv.movementMethod = LinkMovementMethod.getInstance()
             }
         },
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+// 缓存渲染结果的辅助函数
+private fun renderContentBlocksCached(
+    blocks: List<ContentBlock>,
+    mdRenderer: MarkdownRenderer,
+    isStreaming: Boolean
+): CharSequence {
+    // 创建临时 TextView 用于渲染
+    val tv = TextView(mdRenderer.context).apply {
+        textSize = 15f
+        setTextColor(android.graphics.Color.parseColor("#FF1A1A1A"))
+    }
+    return renderContentBlocks(blocks, tv, mdRenderer, isStreaming)
 }
 
 private fun renderContentBlocks(
