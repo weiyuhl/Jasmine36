@@ -9,6 +9,7 @@ import com.lhzkml.jasmine.core.agent.graph.graph.PredefinedStrategies
 import com.lhzkml.jasmine.core.agent.graph.graph.ToolCalls
 import com.lhzkml.jasmine.core.agent.graph.graph.ToolSelectionStrategy
 import com.lhzkml.jasmine.core.agent.observe.event.*
+import com.lhzkml.jasmine.core.agent.runtime.AgentRuntimeBuilder
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.agent.observe.trace.Tracing
 import com.lhzkml.jasmine.core.agent.planner.SimpleLLMPlanner
@@ -31,6 +32,7 @@ import com.lhzkml.jasmine.core.prompt.model.Usage
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,12 +40,14 @@ import java.util.Locale
 
 /**
  * 聊天执行器：封装 sendMessage 的后台 IO 逻辑。
- * 从 MainActivity 中提取，降低 Activity 复杂度。
+ * 遵循「I/O 线程分离」：StreamProcessor 在 IO 上处理，StreamUpdate 经 Channel 发往主线程。
  */
 class ChatExecutor(
     private val context: Context,
     private val chatStateManager: ChatStateManager,
     private val conversationRepo: ConversationRepository,
+    /** 非 null 时使用 Channel 模式：在 IO 上处理，发送 StreamUpdate，减少 withContext(Main) 切换 */
+    private val streamUpdateChannel: SendChannel<StreamUpdate>? = null,
     private val contextCollector: () -> SystemContextCollector,
     private val contextManager: () -> ContextManager,
     private val currentConversationId: () -> String?,
@@ -55,7 +59,7 @@ class ChatExecutor(
     private val buildTracing: () -> Tracing?,
     private val setTracing: (Tracing?) -> Unit,
     private val getTracing: () -> Tracing?,
-    private val buildEventHandler: () -> EventHandler?,
+    private val buildEventHandler: (AgentRuntimeBuilder.EventEmitter) -> EventHandler?,
     private val buildPersistence: () -> Persistence?,
     private val getPersistence: () -> Persistence?,
     private val setPersistence: (Persistence?) -> Unit,
@@ -63,10 +67,31 @@ class ChatExecutor(
     private val tryCompressHistory: suspend (ChatClient, String) -> Unit,
     private val onUpdateButtonState: suspend (Boolean) -> Unit
 ) {
+    /** Channel 模式下在 IO 上处理流式数据，主线程仅负责 UI 更新 */
+    private var streamProcessor: StreamProcessor? = null
+
+    /** Channel 模式下获取日志内容（供 savePartial 使用） */
+    fun getLogContent(): String = streamProcessor?.getLogContent() ?: ""
+    fun getBufferedText(): String = streamProcessor?.getBufferedText() ?: ""
+
+    /** I/O 线程处理结果发往主线程：Channel 模式直接 send，否则 withContext(Main) */
+    private suspend fun sendUpdate(update: StreamUpdate) {
+        if (streamUpdateChannel != null) {
+            streamUpdateChannel.send(update)
+        } else {
+            withContext(Dispatchers.Main) { chatStateManager.processStreamUpdate(update) }
+        }
+    }
+
+    private fun createEventEmitter() = AgentRuntimeBuilder.EventEmitter { line ->
+        val proc = streamProcessor
+        if (proc != null) sendUpdate(proc.onSystemLog(line))
+        else withContext(Dispatchers.Main) { chatStateManager.handleSystemLog(line) }
+    }
 
     /**
      * 在 IO 线程执行聊天逻辑（Agent 模式或普通模式）。
-     * 调用方应在协程中调用此方法。
+     * 调用方应在 Dispatchers.IO 上调用此方法。
      */
     suspend fun execute(
         message: String,
@@ -132,9 +157,11 @@ class ChatExecutor(
             var result = ""
             var usage: Usage? = null
 
+            val useChannel = streamUpdateChannel != null
             withContext(Dispatchers.Main) {
-                chatStateManager.startStreaming()
+                chatStateManager.startStreaming(useChannelMode = useChannel)
             }
+            if (useChannel) streamProcessor = StreamProcessor()
 
             setPersistence(buildPersistence())
 
@@ -216,7 +243,7 @@ class ChatExecutor(
                 ErrorType.SERVER_ERROR -> "服务器错误: ${e.message}\n请稍后重试"
                 else -> "错误: ${e.message}"
             }
-            val eventHandler = buildEventHandler()
+            val eventHandler = buildEventHandler(createEventEmitter())
             eventHandler?.fireAgentExecutionFailed(AgentExecutionFailedContext(
                 runId = getTracing()?.newRunId() ?: "",
                 agentId = currentConversationId() ?: "unknown",
@@ -227,7 +254,7 @@ class ChatExecutor(
             }
             tryOfferCheckpointRecovery(e, message)
         } catch (e: Exception) {
-            val eventHandler = buildEventHandler()
+            val eventHandler = buildEventHandler(createEventEmitter())
             eventHandler?.fireAgentExecutionFailed(AgentExecutionFailedContext(
                 runId = getTracing()?.newRunId() ?: "",
                 agentId = currentConversationId() ?: "unknown",
@@ -258,24 +285,22 @@ class ChatExecutor(
         var result = ""
         var usage: Usage? = null
 
+        val proc = streamProcessor
         val listener = object : AgentEventListener {
             override suspend fun onToolCallStart(toolName: String, arguments: String) {
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleToolCall(toolName, arguments)
-                }
+                if (proc != null) sendUpdate(proc.onToolCallStart(toolName, arguments))
+                else withContext(Dispatchers.Main) { chatStateManager.handleToolCall(toolName, arguments) }
             }
             override suspend fun onToolCallResult(toolName: String, result: String) {
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleToolResult(toolName, result)
-                }
+                if (proc != null) sendUpdate(proc.onToolCallResult(toolName, result))
+                else withContext(Dispatchers.Main) { chatStateManager.handleToolResult(toolName, result) }
             }
             override suspend fun onThinking(content: String) {
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleThinking(content)
-                }
+                if (proc != null) sendUpdate(proc.onThinking(content))
+                else withContext(Dispatchers.Main) { chatStateManager.handleThinking(content) }
             }
         }
-        val eventHandler = buildEventHandler()
+        val eventHandler = buildEventHandler(createEventEmitter())
         val executor = ToolExecutor(
             client, registry,
             maxIterations = ProviderManager.getAgentMaxIterations(context),
@@ -345,11 +370,10 @@ class ChatExecutor(
                 planSession.close()
                 planReadSession.close()
 
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handlePlan(
-                        plan.goal + criticInfo,
-                        plan.steps.map { "[${it.type}] ${it.description}" }
-                    )
+                val proc = streamProcessor
+                if (proc != null) sendUpdate(proc.onPlan(plan.goal + criticInfo, plan.steps.map { "[${it.type}] ${it.description}" }))
+                else withContext(Dispatchers.Main) {
+                    chatStateManager.handlePlan(plan.goal + criticInfo, plan.steps.map { "[${it.type}] ${it.description}" })
                 }
 
                 val planPromptText = SimpleLLMPlanner.formatPlanForPrompt(plan)
@@ -362,9 +386,9 @@ class ChatExecutor(
                     listOf(ChatMessage.system(planPromptText)) + trimmedMessages
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleSystemLog("[Plan] [规划跳过: ${e.message}]\n\n")
-                }
+                val proc = streamProcessor
+                if (proc != null) sendUpdate(proc.onSystemLog("[Plan] [规划跳过: ${e.message}]\n\n"))
+                else withContext(Dispatchers.Main) { chatStateManager.handleSystemLog("[Plan] [规划跳过: ${e.message}]\n\n") }
             }
         }
 
@@ -397,21 +421,26 @@ class ChatExecutor(
                     agentPrompt = agentPrompt.withToolChoice(simpleToolChoice)
                 }
 
+                val proc = streamProcessor
                 val streamResult = executor.executeStream(
                     agentPrompt, config.model
                 ) { chunk ->
-                    withContext(Dispatchers.Main) {
-                        chatStateManager.handleChunk(chunk)
-                    }
+                    if (proc != null) sendUpdate(proc.onChunk(chunk))
+                    else withContext(Dispatchers.Main) { chatStateManager.handleChunk(chunk) }
                 }
                 result = streamResult.content
                 usage = streamResult.usage
-                val logContent = withContext(Dispatchers.Main) {
-                    chatStateManager.getLogContent().also {
-                        chatStateManager.finalizeStream(
-                            formatUsageShort(usage),
-                            formatTime(System.currentTimeMillis())
-                        )
+                val usageLine = formatUsageShort(usage)
+                val timeStr = formatTime(System.currentTimeMillis())
+                val logContent = if (proc != null) {
+                    val log = proc.getLogContent()
+                    sendUpdate(StreamUpdate(proc.finalize().blocks, isComplete = true, usageLine = usageLine, time = timeStr))
+                    log
+                } else {
+                    withContext(Dispatchers.Main) {
+                        chatStateManager.getLogContent().also {
+                            chatStateManager.finalizeStream(usageLine, timeStr)
+                        }
                     }
                 }
                 eventHandler?.fireAgentCompleted(AgentCompletedContext(
@@ -430,12 +459,17 @@ class ChatExecutor(
                 )
                 result = graphResult ?: ""
 
-                val logContent = withContext(Dispatchers.Main) {
-                    chatStateManager.getLogContent().also {
-                        chatStateManager.finalizeStream(
-                            "",
-                            formatTime(System.currentTimeMillis())
-                        )
+                val proc = streamProcessor
+                val timeStr = formatTime(System.currentTimeMillis())
+                val logContent = if (proc != null) {
+                    val log = proc.getLogContent()
+                    sendUpdate(StreamUpdate(proc.finalize().blocks, isComplete = true, usageLine = "", time = timeStr))
+                    log
+                } else {
+                    withContext(Dispatchers.Main) {
+                        chatStateManager.getLogContent().also {
+                            chatStateManager.finalizeStream("", timeStr)
+                        }
                     }
                 }
                 eventHandler?.fireAgentCompleted(AgentCompletedContext(
@@ -513,21 +547,22 @@ class ChatExecutor(
         }
         val finalGraphPrompt = if (toolChoice != null) graphPrompt.withToolChoice(toolChoice) else graphPrompt
 
-        withContext(Dispatchers.Main) {
-            chatStateManager.handleGraphLog("┌─ [Graph] 图策略执行 ─────────────\n│ [>] Start\n")
-            chatStateManager.handleGraphLog("└─────────────────────────\n")
+        val proc = streamProcessor
+        val graphLog: suspend (String) -> Unit = { content ->
+            if (proc != null) sendUpdate(proc.onGraphLog(content))
+            else withContext(Dispatchers.Main) { chatStateManager.handleGraphLog(content) }
         }
+        graphLog("┌─ [Graph] 图策略执行 ─────────────\n│ [>] Start\n")
+        graphLog("└─────────────────────────\n")
 
         val chunkCallback: (suspend (String) -> Unit) = { chunk: String ->
-            withContext(Dispatchers.Main) {
-                chatStateManager.handleChunk(chunk)
-            }
+            if (proc != null) sendUpdate(proc.onChunk(chunk))
+            else withContext(Dispatchers.Main) { chatStateManager.handleChunk(chunk) }
         }
 
         val thinkingCallback: (suspend (String) -> Unit) = { text: String ->
-            withContext(Dispatchers.Main) {
-                chatStateManager.handleThinking(text)
-            }
+            if (proc != null) sendUpdate(proc.onThinking(text))
+            else withContext(Dispatchers.Main) { chatStateManager.handleThinking(text) }
         }
 
         val nodeEnterCallback: suspend (String) -> Unit = { nodeName ->
@@ -537,23 +572,17 @@ class ChatExecutor(
                 nodeName.contains("Send", true) -> "[Send]"
                 else -> "[Node]"
             }
-            withContext(Dispatchers.Main) {
-                chatStateManager.handleGraphLog("│ $icon $nodeName ...\n")
-            }
+            graphLog("│ $icon $nodeName ...\n")
         }
 
         val nodeExitCallback: suspend (String, Boolean) -> Unit = { nodeName, success ->
             val status = if (success) "[OK]" else "[FAIL]"
-            withContext(Dispatchers.Main) {
-                chatStateManager.handleGraphLog("│ $status $nodeName 完成\n")
-            }
+            graphLog("│ $status $nodeName 完成\n")
         }
 
         val edgeCallback: suspend (String, String, String) -> Unit = { from, to, label ->
             val labelStr = if (label.isNotEmpty()) " ($label)" else ""
-            withContext(Dispatchers.Main) {
-                chatStateManager.handleGraphLog("│  ↓ $from → $to$labelStr\n")
-            }
+            graphLog("│  ↓ $from → $to$labelStr\n")
         }
 
         return graphAgent.runWithCallbacks(
@@ -562,14 +591,12 @@ class ChatExecutor(
             onChunk = chunkCallback,
             onThinking = thinkingCallback,
             onToolCallStart = { toolName, args ->
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleToolCall(toolName, args)
-                }
+                if (proc != null) sendUpdate(proc.onToolCallStart(toolName, args))
+                else withContext(Dispatchers.Main) { chatStateManager.handleToolCall(toolName, args) }
             },
             onToolCallResult = { toolName, toolResult ->
-                withContext(Dispatchers.Main) {
-                    chatStateManager.handleToolResult(toolName, toolResult)
-                }
+                if (proc != null) sendUpdate(proc.onToolCallResult(toolName, toolResult))
+                else withContext(Dispatchers.Main) { chatStateManager.handleToolResult(toolName, toolResult) }
             },
             onNodeEnter = nodeEnterCallback,
             onNodeExit = nodeExitCallback,
@@ -586,6 +613,7 @@ class ChatExecutor(
     ): Triple<String, Usage?, String> {
         val resumeEnabled = ProviderManager.isStreamResumeEnabled(context)
 
+        val proc = streamProcessor
         val streamResult = if (resumeEnabled) {
             val helper = StreamResumeHelper(
                 maxResumes = ProviderManager.getStreamResumeMaxRetries(context)
@@ -597,46 +625,46 @@ class ChatExecutor(
                 maxTokens = maxTokens,
                 samplingParams = samplingParams,
                 onChunk = { chunk ->
-                    withContext(Dispatchers.Main) {
-                        chatStateManager.handleChunk(chunk)
-                    }
+                    if (proc != null) sendUpdate(proc.onChunk(chunk))
+                    else withContext(Dispatchers.Main) { chatStateManager.handleChunk(chunk) }
                 },
                 onThinking = { text ->
-                    withContext(Dispatchers.Main) {
-                        chatStateManager.handleThinking(text)
-                    }
+                    if (proc != null) sendUpdate(proc.onThinking(text))
+                    else withContext(Dispatchers.Main) { chatStateManager.handleThinking(text) }
                 },
                 onResumeAttempt = { attempt ->
-                    withContext(Dispatchers.Main) {
-                        chatStateManager.handleSystemLog("\n[网络超时，正在续传... 第${attempt}次]\n")
-                    }
+                    if (proc != null) sendUpdate(proc.onSystemLog("\n[网络超时，正在续传... 第${attempt}次]\n"))
+                    else withContext(Dispatchers.Main) { chatStateManager.handleSystemLog("\n[网络超时，正在续传... 第${attempt}次]\n") }
                 }
             )
         } else {
             client.chatStreamWithUsageAndThinking(
                 trimmedMessages, config.model, maxTokens, samplingParams,
                 onChunk = { chunk ->
-                    withContext(Dispatchers.Main) {
-                        chatStateManager.handleChunk(chunk)
-                    }
+                    if (proc != null) sendUpdate(proc.onChunk(chunk))
+                    else withContext(Dispatchers.Main) { chatStateManager.handleChunk(chunk) }
                 },
                 onThinking = { text ->
-                    withContext(Dispatchers.Main) {
-                        chatStateManager.handleThinking(text)
-                    }
+                    if (proc != null) sendUpdate(proc.onThinking(text))
+                    else withContext(Dispatchers.Main) { chatStateManager.handleThinking(text) }
                 }
             )
         }
 
         val result = streamResult.content
         val usage = streamResult.usage
+        val usageLine = formatUsageShort(usage)
+        val timeStr = formatTime(System.currentTimeMillis())
 
-        val logContent = withContext(Dispatchers.Main) {
-            chatStateManager.getLogContent().also {
-                chatStateManager.finalizeStream(
-                    formatUsageShort(usage),
-                    formatTime(System.currentTimeMillis())
-                )
+        val logContent = if (proc != null) {
+            val log = proc.getLogContent()
+            sendUpdate(StreamUpdate(proc.finalize().blocks, isComplete = true, usageLine = usageLine, time = timeStr))
+            log
+        } else {
+            withContext(Dispatchers.Main) {
+                chatStateManager.getLogContent().also {
+                    chatStateManager.finalizeStream(usageLine, timeStr)
+                }
             }
         }
 

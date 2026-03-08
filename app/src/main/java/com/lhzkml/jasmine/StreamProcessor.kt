@@ -182,5 +182,8 @@ class StreamProcessor {
 
 data class StreamUpdate(
     val blocks: List<ContentBlock>,
-    val isComplete: Boolean = false
+    val isComplete: Boolean = false,
+    /** 流式结束时用于 finalizeStream，仅当 isComplete=true 时有效 */
+    val usageLine: String? = null,
+    val time: String? = null
 )

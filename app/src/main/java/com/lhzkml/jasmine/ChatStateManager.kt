@@ -7,6 +7,9 @@ import android.os.Looper
  * Centralized chat state manager.
  * Operates on a MutableList<ChatItem> (backed by SnapshotStateList in Compose).
  * All public methods must be called on the Main thread.
+ *
+ * 遵循「主线程与工作线程分离」：I/O 线程通过 Channel 发送 StreamUpdate，
+ * 主线程仅负责 applyStreamUpdate 更新 UI。
  */
 class ChatStateManager(
     private val items: MutableList<ChatItem>,
@@ -19,14 +22,19 @@ class ChatStateManager(
     private var streamProcessor: StreamProcessor? = null
     private val handler = Handler(Looper.getMainLooper())
     private var pendingStreamRender: Runnable? = null
+    /** 最近应用的 blocks，供 getPartialContent 使用（Channel 模式下无 streamProcessor） */
+    private var lastAppliedBlocks: List<ContentBlock> = emptyList()
 
     fun addUserMessage(content: String, time: String) {
         items.add(ChatItem.UserMessage(content, time))
         onScrollNeeded()
     }
 
-    fun startStreaming() {
-        streamProcessor = StreamProcessor()
+    /**
+     * @param useChannelMode true 时由 I/O 线程通过 Channel 发送 StreamUpdate，不创建 streamProcessor
+     */
+    fun startStreaming(useChannelMode: Boolean = false) {
+        if (!useChannelMode) streamProcessor = StreamProcessor()
         items.add(ChatItem.TypingIndicator)
         onScrollNeeded()
     }
@@ -102,8 +110,7 @@ class ChatStateManager(
     }
 
     fun finalizeStream(usageLine: String, time: String) {
-        val proc = streamProcessor ?: return
-        proc.finalize()
+        streamProcessor?.finalize()
         flushPendingRender()
         removeTypingIndicator()
         val idx = findStreamingAiIndex()
@@ -127,12 +134,26 @@ class ChatStateManager(
     }
 
     /**
+     * 接收来自 I/O 线程的 StreamUpdate（通过 Channel），在主线程调度应用。
+     * 遵循「I/O 线程分离」：处理在 IO，仅 UI 更新在主线程。
+     */
+    fun processStreamUpdate(update: StreamUpdate) {
+        lastAppliedBlocks = update.blocks
+        if (update.isComplete && update.usageLine != null && update.time != null) {
+            flushPendingRender()
+            applyStreamUpdate(update)
+            finalizeStream(update.usageLine!!, update.time!!)
+        } else {
+            scheduleStreamUpdate(update)
+        }
+    }
+
+    /**
      * 获取当前流式回复中已生成的文本内容（用于停止时保存部分回复）。
      * 仅提取 Text 和 Thinking 块的内容。
      */
     fun getPartialContent(): String {
-        val proc = streamProcessor ?: return ""
-        val blocks = proc.currentBlocks()
+        val blocks = streamProcessor?.currentBlocks() ?: lastAppliedBlocks
         return blocks.mapNotNull { block ->
             when (block) {
                 is ContentBlock.Text -> block.content
@@ -171,6 +192,7 @@ class ChatStateManager(
     }
 
     private fun applyStreamUpdate(update: StreamUpdate) {
+        lastAppliedBlocks = update.blocks
         removeTypingIndicator()
         val idx = findStreamingAiIndex()
         if (idx == null) {

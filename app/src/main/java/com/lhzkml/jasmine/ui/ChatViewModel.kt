@@ -45,11 +45,14 @@ import com.lhzkml.jasmine.core.agent.tools.FetchUrlTool
 import com.lhzkml.jasmine.mnn.MnnChatClient
 import com.lhzkml.jasmine.mnn.MnnModelManager
 import com.lhzkml.jasmine.RagStore
+import com.lhzkml.jasmine.StreamUpdate
 import com.lhzkml.jasmine.core.rag.RagConfig
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -100,6 +103,8 @@ class ChatViewModel(
     private val mcpConnectionManager get() = AppConfig.mcpConnectionManager()
 
     private var currentLocalModelId: String? = null
+    /** Channel 模式下持有当前 executor，供 savePartial 获取 getLogContent */
+    private var activeChatExecutor: ChatExecutor? = null
 
     interface LifecycleCallbacks {
         fun finishAndLaunch(intent: Intent)
@@ -315,12 +320,8 @@ class ChatViewModel(
         return runtimeBuilder.buildTracing(ctx.getExternalFilesDir("traces"))
     }
 
-    private fun buildEventHandler(): EventHandler? {
-        return runtimeBuilder.buildEventHandler { line ->
-            withContext(Dispatchers.Main) {
-                chatStateManager.handleSystemLog(line)
-            }
-        }
+    private fun buildEventHandler(emitter: AgentRuntimeBuilder.EventEmitter): EventHandler? {
+        return runtimeBuilder.buildEventHandler(emitter)
     }
 
     private fun buildPersistence(): Persistence? {
@@ -717,6 +718,14 @@ class ChatViewModel(
         val client = getOrCreateClient(config)
         val userMsg = ChatMessage.user(message)
 
+        // I/O 线程分离：Channel 将 StreamUpdate 从 IO 传至主线程，减少 withContext 切换
+        val streamChannel = Channel<StreamUpdate>(Channel.UNLIMITED)
+        viewModelScope.launch(Dispatchers.Main.immediate) {
+            streamChannel.consumeEach { update ->
+                chatStateManager.processStreamUpdate(update)
+            }
+        }
+
         val checkpointRecovery = CheckpointRecovery(
             activity = ctx,
             chatStateManager = chatStateManager,
@@ -732,6 +741,7 @@ class ChatViewModel(
             context = ctx,
             chatStateManager = chatStateManager,
             conversationRepo = conversationRepo,
+            streamUpdateChannel = streamChannel,
             contextCollector = { contextCollector },
             contextManager = { contextManager },
             currentConversationId = { currentConversationId },
@@ -743,7 +753,7 @@ class ChatViewModel(
             buildTracing = { buildTracing() },
             setTracing = { tracing = it },
             getTracing = { tracing },
-            buildEventHandler = { buildEventHandler() },
+            buildEventHandler = { emitter -> buildEventHandler(emitter) },
             buildPersistence = { buildPersistence() },
             getPersistence = { persistence },
             setPersistence = { persistence = it },
@@ -763,8 +773,14 @@ class ChatViewModel(
             }
         )
 
+        activeChatExecutor = executor
         currentJob = viewModelScope.launch(Dispatchers.IO) {
-            executor.execute(message, userMsg, client, config)
+            try {
+                executor.execute(message, userMsg, client, config)
+            } finally {
+                streamChannel.close()
+                activeChatExecutor = null
+            }
         }
     }
 
@@ -778,8 +794,8 @@ class ChatViewModel(
         if (!_uiState.value.isGenerating) return
         val convId = currentConversationId ?: return
         val partialText = chatStateManager.getPartialContent()
-        val logContent = chatStateManager.getLogContent()
-        val bufferedText = chatStateManager.getBufferedText()
+        val logContent = activeChatExecutor?.getLogContent() ?: chatStateManager.getLogContent()
+        val bufferedText = activeChatExecutor?.getBufferedText() ?: chatStateManager.getBufferedText()
         if (partialText.isEmpty()) return
 
         stopGenerating()
