@@ -22,6 +22,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*

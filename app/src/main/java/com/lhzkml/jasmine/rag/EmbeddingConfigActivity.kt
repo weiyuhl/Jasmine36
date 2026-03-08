@@ -29,7 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.lhzkml.jasmine.ui.theme.JasmineTheme
-import com.lhzkml.jasmine.ProviderManager
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.mnn.MnnModelManager
 import com.lhzkml.jasmine.core.rag.embedding.EmbeddingApiClient
 import kotlinx.coroutines.CoroutineScope

@@ -20,7 +20,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.lhzkml.jasmine.AddCustomProviderScreen
 import com.lhzkml.jasmine.AgentStrategyScreen
-import com.lhzkml.jasmine.AppConfig
+import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.CheckpointDetailScreen
 import com.lhzkml.jasmine.CheckpointManagerScreen
 import com.lhzkml.jasmine.CompressionConfigScreen

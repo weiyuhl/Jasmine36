@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
+import com.lhzkml.jasmine.config.AppConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background

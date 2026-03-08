@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.agent.mcp.McpToolDefinition
 import com.lhzkml.jasmine.core.config.McpServerConfig
 import com.lhzkml.jasmine.core.config.McpTransportType

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*

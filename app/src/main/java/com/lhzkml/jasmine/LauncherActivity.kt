@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine
 
 import android.content.Intent
+import com.lhzkml.jasmine.config.ProviderManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity

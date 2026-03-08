@@ -1,6 +1,8 @@
 package com.lhzkml.jasmine
 
 import android.app.Application
+import com.lhzkml.jasmine.config.AppConfig
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.di.appModule
 import com.lhzkml.jasmine.di.viewModelModule
 import org.koin.android.ext.koin.androidContext

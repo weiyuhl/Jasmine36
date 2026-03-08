@@ -1,4 +1,4 @@
-package com.lhzkml.jasmine
+package com.lhzkml.jasmine.config
 
 import android.content.Context
 import com.lhzkml.jasmine.core.agent.runtime.CheckpointService

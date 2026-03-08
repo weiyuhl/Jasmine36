@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.agent.observe.trace.TraceEventCategory
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*

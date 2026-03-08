@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.lhzkml.jasmine.AppConfig
+import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.ChatExecutor
 import com.lhzkml.jasmine.ChatItem
 import com.lhzkml.jasmine.ChatStopSignal
@@ -13,7 +13,7 @@ import com.lhzkml.jasmine.ChatStateManager
 import com.lhzkml.jasmine.CheckpointRecovery
 import com.lhzkml.jasmine.ContentBlock
 import com.lhzkml.jasmine.DialogHandlers
-import com.lhzkml.jasmine.ProviderManager
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.agent.observe.event.EventHandler
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.agent.observe.trace.Tracing

@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
-import com.lhzkml.jasmine.ProviderManager
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.theme.*
 import java.text.SimpleDateFormat

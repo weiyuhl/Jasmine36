@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.runtime.CheckpointService
 import com.lhzkml.jasmine.core.agent.runtime.SessionCheckpoints

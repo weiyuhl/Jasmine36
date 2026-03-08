@@ -31,7 +31,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lhzkml.jasmine.ProviderManager
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.RagStore
 import com.lhzkml.jasmine.core.config.RagLibraryConfig
 import com.lhzkml.jasmine.rag.RagLibraryContentActivity

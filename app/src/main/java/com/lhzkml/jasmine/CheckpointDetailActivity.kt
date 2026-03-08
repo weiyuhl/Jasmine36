@@ -1,5 +1,7 @@
 package com.lhzkml.jasmine
 
+import com.lhzkml.jasmine.config.AppConfig
+import com.lhzkml.jasmine.config.ProviderManager
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast

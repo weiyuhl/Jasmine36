@@ -1,6 +1,8 @@
 package com.lhzkml.jasmine
 
 import android.content.Context
+import com.lhzkml.jasmine.config.AppConfig
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository

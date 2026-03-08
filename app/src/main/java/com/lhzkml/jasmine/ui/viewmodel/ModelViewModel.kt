@@ -3,7 +3,7 @@ package com.lhzkml.jasmine.ui.viewmodel
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lhzkml.jasmine.ProviderManager
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.mnn.MnnChatClient
 import com.lhzkml.jasmine.mnn.MnnModelManager

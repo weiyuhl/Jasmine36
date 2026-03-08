@@ -3,7 +3,7 @@ package com.lhzkml.jasmine.mnn
 import android.content.Context
 import android.util.Log
 import com.lhzkml.jasmine.ChatStopSignal
-import com.lhzkml.jasmine.ProviderManager
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
 import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
 import com.lhzkml.jasmine.core.prompt.llm.StreamResult

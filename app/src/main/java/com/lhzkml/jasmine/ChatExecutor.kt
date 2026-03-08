@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine
 
 import android.content.Context
+import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.agent.graph.graph.AgentGraphContext
 import com.lhzkml.jasmine.core.agent.graph.graph.GenericAgentEnvironment
 import com.lhzkml.jasmine.core.agent.graph.graph.GraphAgent

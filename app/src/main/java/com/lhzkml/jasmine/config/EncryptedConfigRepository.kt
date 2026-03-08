@@ -1,7 +1,11 @@
-package com.lhzkml.jasmine
+package com.lhzkml.jasmine.config
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
+import android.widget.Toast
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.lhzkml.jasmine.core.agent.tools.ShellPolicy
 import com.lhzkml.jasmine.core.agent.tools.ShellPolicyConfig
 import com.lhzkml.jasmine.core.agent.observe.event.EventCategory
@@ -11,7 +15,6 @@ import com.lhzkml.jasmine.core.config.*
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
 
-/** RAG 工作区索引默认支持的文件扩展名 */
 private val DEFAULT_RAG_INDEXABLE_EXTENSIONS = setOf(
     "kt", "kts", "java", "py", "ts", "tsx", "js", "jsx", "go", "rs", "rb", "php",
     "c", "cpp", "cc", "cxx", "h", "hpp", "cs", "swift", "m", "mm", "scala", "groovy",
@@ -23,17 +26,48 @@ private val DEFAULT_RAG_INDEXABLE_EXTENSIONS = setOf(
 )
 
 /**
- * 基于 SharedPreferences 的 ConfigRepository 实现
+ * ??????
  *
- * 这是 ConfigRepository 接口的 Android 平台实现，
- * 将所有配置持久化到 SharedPreferences。
+ * ??[SharedPreferencesConfigRepository] ???????
+ * ???? API ????????JSON ????????EncryptedSharedPreferences ????
  */
-class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigRepository {
+class EncryptedConfigRepository(private val ctx: Context) : ConfigRepository {
+
+    private val masterKey = MasterKey.Builder(ctx)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    private val encryptionFailed: Boolean
+    private val encryptedPrefs: SharedPreferences
+
+    init {
+        var failed = false
+        encryptedPrefs = try {
+            EncryptedSharedPreferences.create(
+                ctx,
+                "jasmine_encrypted_prefs",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            failed = true
+            Log.e("EncryptedConfigRepo", "EncryptedSharedPreferences create failed, API key will be stored in plain text", e)
+            try {
+                val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                handler.post {
+                    Toast.makeText(ctx, "Security warning: encrypted storage init failed", Toast.LENGTH_LONG).show()
+                }
+            } catch (_: Exception) { }
+            ctx.getSharedPreferences("jasmine_encrypted_prefs_fallback", Context.MODE_PRIVATE)
+        }
+        encryptionFailed = failed
+    }
 
     private fun prefs(): SharedPreferences =
         ctx.getSharedPreferences("jasmine_providers", Context.MODE_PRIVATE)
 
-    // ========== 供应商管理 ==========
+    // ========== ??????==========
 
     override fun getActiveProviderId(): String? = prefs().getString("active_provider", null)
 
@@ -42,13 +76,13 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     }
 
     override fun getApiKey(providerId: String): String? {
-        val key = prefs().getString("${providerId}_api_key", null)
+        val key = encryptedPrefs.getString("${providerId}_api_key", null)
         return if (key.isNullOrBlank()) null else key
     }
 
     override fun saveProviderCredentials(providerId: String, apiKey: String, baseUrl: String?, model: String?) {
+        encryptedPrefs.edit().putString("${providerId}_api_key", apiKey).apply()
         prefs().edit().apply {
-            putString("${providerId}_api_key", apiKey)
             if (baseUrl != null) putString("${providerId}_base_url", baseUrl)
             if (model != null) putString("${providerId}_model", model)
             apply()
@@ -100,13 +134,13 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     }
 
     override fun getVertexServiceAccountJson(providerId: String): String =
-        prefs().getString("${providerId}_vertex_sa_json", null) ?: ""
+        encryptedPrefs.getString("${providerId}_vertex_sa_json", null) ?: ""
 
     override fun setVertexServiceAccountJson(providerId: String, json: String) {
-        prefs().edit().putString("${providerId}_vertex_sa_json", json).apply()
+        encryptedPrefs.edit().putString("${providerId}_vertex_sa_json", json).apply()
     }
 
-    // 自定义供应商持久化
+    // ??????????
     override fun loadCustomProviders(): List<ProviderConfig> {
         val json = prefs().getString("custom_providers", null) ?: return emptyList()
         if (json.isEmpty()) return emptyList()
@@ -132,7 +166,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
         prefs().edit().putString("custom_providers", json).apply()
     }
 
-    // ========== LLM 参数 ==========
+    // ========== LLM ?? ==========
 
     override fun getDefaultSystemPrompt(): String =
         prefs().getString("default_system_prompt", null) ?: "You are a helpful assistant."
@@ -142,30 +176,18 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     }
 
     override fun getMaxTokens(): Int = prefs().getInt("max_tokens", 0)
-
-    override fun setMaxTokens(maxTokens: Int) {
-        prefs().edit().putInt("max_tokens", maxTokens).apply()
-    }
+    override fun setMaxTokens(maxTokens: Int) { prefs().edit().putInt("max_tokens", maxTokens).apply() }
 
     override fun getTemperature(): Float = prefs().getFloat("sampling_temperature", -1f)
-
-    override fun setTemperature(value: Float) {
-        prefs().edit().putFloat("sampling_temperature", value).apply()
-    }
+    override fun setTemperature(value: Float) { prefs().edit().putFloat("sampling_temperature", value).apply() }
 
     override fun getTopP(): Float = prefs().getFloat("sampling_top_p", -1f)
-
-    override fun setTopP(value: Float) {
-        prefs().edit().putFloat("sampling_top_p", value).apply()
-    }
+    override fun setTopP(value: Float) { prefs().edit().putFloat("sampling_top_p", value).apply() }
 
     override fun getTopK(): Int = prefs().getInt("sampling_top_k", -1)
+    override fun setTopK(value: Int) { prefs().edit().putInt("sampling_top_k", value).apply() }
 
-    override fun setTopK(value: Int) {
-        prefs().edit().putInt("sampling_top_k", value).apply()
-    }
-
-    // ========== 超时设置 ==========
+    // ========== ???? ==========
 
     override fun getRequestTimeout(): Int = prefs().getInt("timeout_request", 0)
     override fun setRequestTimeout(seconds: Int) { prefs().edit().putInt("timeout_request", seconds).apply() }
@@ -178,7 +200,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun getStreamResumeMaxRetries(): Int = prefs().getInt("stream_resume_max_retries", 3)
     override fun setStreamResumeMaxRetries(value: Int) { prefs().edit().putInt("stream_resume_max_retries", value.coerceIn(1, 10)).apply() }
 
-    // ========== 工具设置 ==========
+    // ========== ???? ==========
 
     override fun isToolsEnabled(): Boolean = prefs().getBoolean("tools_enabled", false)
     override fun setToolsEnabled(enabled: Boolean) { prefs().edit().putBoolean("tools_enabled", enabled).apply() }
@@ -199,10 +221,10 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
         prefs().edit().putString("agent_tool_preset", tools.joinToString(",")).apply()
     }
 
-    override fun getBrightDataKey(): String = prefs().getString("brightdata_api_key", null) ?: ""
-    override fun setBrightDataKey(key: String) { prefs().edit().putString("brightdata_api_key", key).apply() }
+    override fun getBrightDataKey(): String = encryptedPrefs.getString("brightdata_api_key", null) ?: ""
+    override fun setBrightDataKey(key: String) { encryptedPrefs.edit().putString("brightdata_api_key", key).apply() }
 
-    // ========== Shell 策略 ==========
+    // ========== Shell ?? ==========
 
     override fun getShellPolicy(): ShellPolicy {
         val name = prefs().getString("shell_policy", null) ?: return ShellPolicy.MANUAL
@@ -222,14 +244,13 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     }
     override fun setShellWhitelist(list: List<String>) { prefs().edit().putString("shell_whitelist", list.joinToString("\n")).apply() }
 
-    // ========== MCP 设置 ==========
+    // ========== MCP ?? ==========
 
     override fun isMcpEnabled(): Boolean = prefs().getBoolean("mcp_enabled", false)
     override fun setMcpEnabled(enabled: Boolean) { prefs().edit().putBoolean("mcp_enabled", enabled).apply() }
 
     override fun getMcpServers(): List<McpServerConfig> {
-        val raw = prefs().getString("mcp_servers_v2", null)
-        if (raw == null) return emptyList()
+        val raw = prefs().getString("mcp_servers_v2", null) ?: return emptyList()
         return try {
             raw.split("|||").filter { it.isNotBlank() }.map { entry ->
                 val parts = entry.split(":::")
@@ -268,7 +289,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
         if (index in servers.indices) { servers[index] = server; setMcpServers(servers) }
     }
 
-    // ========== Agent 策略 ==========
+    // ========== Agent ?? ==========
 
     override fun getAgentStrategy(): AgentStrategyType {
         val name = prefs().getString("agent_strategy", null) ?: return AgentStrategyType.SIMPLE_LOOP
@@ -311,7 +332,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun getMaxToolResultLength(): Int = prefs().getInt("max_tool_result_length", 8000)
     override fun setMaxToolResultLength(value: Int) { prefs().edit().putInt("max_tool_result_length", value).apply() }
 
-    // ========== 追踪设置 ==========
+    // ========== ???? ==========
 
     override fun isTraceEnabled(): Boolean = prefs().getBoolean("trace_enabled", false)
     override fun setTraceEnabled(enabled: Boolean) { prefs().edit().putBoolean("trace_enabled", enabled).apply() }
@@ -328,7 +349,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
         prefs().edit().putString("trace_event_filter", categories.joinToString(",") { it.name }).apply()
     }
 
-    // ========== 规划设置 ==========
+    // ========== ???? ==========
 
     override fun isPlannerEnabled(): Boolean = prefs().getBoolean("planner_enabled", false)
     override fun setPlannerEnabled(enabled: Boolean) { prefs().edit().putBoolean("planner_enabled", enabled).apply() }
@@ -337,7 +358,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun isPlannerCriticEnabled(): Boolean = prefs().getBoolean("planner_critic_enabled", false)
     override fun setPlannerCriticEnabled(enabled: Boolean) { prefs().edit().putBoolean("planner_critic_enabled", enabled).apply() }
 
-    // ========== 快照设置 ==========
+    // ========== ???? ==========
 
     override fun isSnapshotEnabled(): Boolean = prefs().getBoolean("snapshot_enabled", false)
     override fun setSnapshotEnabled(enabled: Boolean) { prefs().edit().putBoolean("snapshot_enabled", enabled).apply() }
@@ -357,7 +378,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     }
     override fun setSnapshotRollbackStrategy(strategy: RollbackStrategy) { prefs().edit().putString("snapshot_rollback_strategy", strategy.name).apply() }
 
-    // ========== 事件处理器 ==========
+    // ========== ??????==========
 
     override fun isEventHandlerEnabled(): Boolean = prefs().getBoolean("event_handler_enabled", false)
     override fun setEventHandlerEnabled(enabled: Boolean) { prefs().edit().putBoolean("event_handler_enabled", enabled).apply() }
@@ -372,7 +393,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
         prefs().edit().putString("event_handler_filter", categories.joinToString(",") { it.name }).apply()
     }
 
-    // ========== 压缩设置 ==========
+    // ========== ???? ==========
 
     override fun isCompressionEnabled(): Boolean = prefs().getBoolean("compression_enabled", false)
     override fun setCompressionEnabled(enabled: Boolean) { prefs().edit().putBoolean("compression_enabled", enabled).apply() }
@@ -394,7 +415,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun getCompressionKeepRecentRounds(): Int = prefs().getInt("compression_keep_recent_rounds", 4)
     override fun setCompressionKeepRecentRounds(value: Int) { prefs().edit().putInt("compression_keep_recent_rounds", value).apply() }
 
-    // ========== Rules 规则 ==========
+    // ========== Rules ?? ==========
 
     override fun getPersonalRules(): String =
         prefs().getString("personal_rules", null) ?: ""
@@ -405,17 +426,15 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
 
     override fun getProjectRules(workspacePath: String): String {
         if (workspacePath.isBlank()) return ""
-        val key = "project_rules_$workspacePath"
-        return prefs().getString(key, null) ?: ""
+        return prefs().getString("project_rules_$workspacePath", null) ?: ""
     }
 
     override fun setProjectRules(workspacePath: String, rules: String) {
         if (workspacePath.isBlank()) return
-        val key = "project_rules_$workspacePath"
-        prefs().edit().putString(key, rules).apply()
+        prefs().edit().putString("project_rules_$workspacePath", rules).apply()
     }
 
-    // ========== RAG 知识库 ==========
+    // ========== RAG ????==========
 
     override fun isRagEnabled(): Boolean = prefs().getBoolean("rag_enabled", false)
     override fun setRagEnabled(enabled: Boolean) { prefs().edit().putBoolean("rag_enabled", enabled).apply() }
@@ -423,26 +442,27 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
     override fun setRagTopK(value: Int) { prefs().edit().putInt("rag_top_k", value.coerceIn(1, 32)).apply() }
     override fun getRagEmbeddingBaseUrl(): String = prefs().getString("rag_embedding_base_url", null) ?: ""
     override fun setRagEmbeddingBaseUrl(url: String) { prefs().edit().putString("rag_embedding_base_url", url).apply() }
-    override fun getRagEmbeddingApiKey(): String = prefs().getString("rag_embedding_api_key", null) ?: ""
-    override fun setRagEmbeddingApiKey(key: String) { prefs().edit().putString("rag_embedding_api_key", key).apply() }
+
+    override fun getRagEmbeddingApiKey(): String = encryptedPrefs.getString("rag_embedding_api_key", null) ?: ""
+    override fun setRagEmbeddingApiKey(key: String) { encryptedPrefs.edit().putString("rag_embedding_api_key", key).apply() }
+
     override fun getRagEmbeddingModel(): String = prefs().getString("rag_embedding_model", null) ?: "text-embedding-3-small"
     override fun setRagEmbeddingModel(model: String) { prefs().edit().putString("rag_embedding_model", model).apply() }
     override fun getRagEmbeddingUseLocal(): Boolean = prefs().getBoolean("rag_embedding_use_local", false)
     override fun setRagEmbeddingUseLocal(useLocal: Boolean) { prefs().edit().putBoolean("rag_embedding_use_local", useLocal).apply() }
     override fun getRagEmbeddingModelPath(): String = prefs().getString("rag_embedding_model_path", null) ?: ""
     override fun setRagEmbeddingModelPath(path: String) { prefs().edit().putString("rag_embedding_model_path", path).apply() }
+
     override fun getRagLibraries(): List<RagLibraryConfig> {
         val raw = prefs().getString("rag_libraries", null) ?: return listOf(
-            RagLibraryConfig("default", "默认库", "通用知识")
+            RagLibraryConfig("default", "default", "general")
         )
         return raw.split("|||").filter { it.isNotBlank() }.mapNotNull { entry ->
             val parts = entry.split(":::")
             if (parts.size >= 2) RagLibraryConfig(
-                id = parts[0],
-                name = parts[1],
-                description = parts.getOrElse(2) { "" }
+                id = parts[0], name = parts[1], description = parts.getOrElse(2) { "" }
             ) else null
-        }.ifEmpty { listOf(RagLibraryConfig("default", "默认库", "通用知识")) }
+        }.ifEmpty { listOf(RagLibraryConfig("default", "default", "general")) }
     }
     override fun setRagLibraries(libraries: List<RagLibraryConfig>) {
         val raw = libraries.joinToString("|||") { "${it.id}:::${it.name}:::${it.description}" }
@@ -466,7 +486,7 @@ class SharedPreferencesConfigRepository(private val ctx: Context) : ConfigReposi
         prefs().edit().putString("rag_indexable_extensions", value).apply()
     }
 
-    // ========== Agent 模式 ==========
+    // ========== Agent ?? ==========
 
     override fun isAgentMode(): Boolean = prefs().getBoolean("agent_mode", false)
     override fun setAgentMode(enabled: Boolean) { prefs().edit().putBoolean("agent_mode", enabled).apply() }

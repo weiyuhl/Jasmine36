@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy
 import com.lhzkml.jasmine.core.config.SnapshotStorageType
 import com.lhzkml.jasmine.ui.theme.*
