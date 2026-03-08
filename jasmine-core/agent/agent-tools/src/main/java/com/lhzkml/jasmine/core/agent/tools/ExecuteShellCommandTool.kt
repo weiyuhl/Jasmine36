@@ -8,6 +8,7 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.lhzkml.jasmine.core.termux.TermuxEnvironment
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -75,19 +76,27 @@ data class ShellPolicyConfig(
  * @param confirmationHandler 确认回调，返回 true 允许执行，false 拒绝
  * @param policyConfig Shell 命令执行策略配置，控制哪些命令需要确认
  * @param basePath 工作目录限制（安全沙箱），null 表示不限制
+ * @param termuxEnvironmentProvider Termux 环境提供者（可选，延迟初始化）
  */
 class ExecuteShellCommandTool(
     private val confirmationHandler: suspend (command: String, purpose: String, workingDirectory: String?) -> Boolean = { _, _, _ -> true },
     private val policyConfig: ShellPolicyConfig = ShellPolicyConfig(),
-    private val basePath: String? = null
+    private val basePath: String? = null,
+    private val termuxEnvironmentProvider: (() -> TermuxEnvironment?)? = null
 ) : Tool() {
+
+    private val termuxEnvironment: TermuxEnvironment? by lazy { termuxEnvironmentProvider?.invoke() }
+
+    private val hasTermux = termuxEnvironment?.isInstalled == true
 
     override val descriptor = ToolDescriptor(
         name = "execute_shell_command",
         description = "Executes a shell command with optional working directory and timeout. " +
             "Returns command output and exit code. Each call runs in a new isolated shell, " +
             "so directory changes (cd) do NOT persist. Use workingDirectory parameter instead. " +
-            "You MUST provide a clear 'purpose' explaining WHY you are running this command.",
+            "You MUST provide a clear 'purpose' explaining WHY you are running this command." +
+            if (hasTermux) " Set useTermux=true to run in Termux environment with full Linux tools " +
+                "(bash, apt, python, git, gcc, curl, etc.)." else "",
         requiredParameters = listOf(
             ToolParameterDescriptor("command", "The shell command to execute (e.g. 'git status', 'ls -la')", ToolParameterType.StringType),
             ToolParameterDescriptor("purpose", "A brief explanation of why this command is being executed and what you expect to achieve (e.g. 'Check current git branch to determine deployment target')", ToolParameterType.StringType)
@@ -96,7 +105,8 @@ class ExecuteShellCommandTool(
             ToolParameterDescriptor("description", "Clear, concise description of what this command does in 5-10 words", ToolParameterType.StringType),
             ToolParameterDescriptor("timeoutSeconds", "Maximum time to wait for completion before returning partial output. Default 60. The command continues running in background if it exceeds this", ToolParameterType.IntegerType),
             ToolParameterDescriptor("workingDirectory", "Absolute path where the command runs. Default: workspace root", ToolParameterType.StringType),
-            ToolParameterDescriptor("background", "If true, immediately returns without waiting for completion (for dev servers, watchers). Default false", ToolParameterType.BooleanType)
+            ToolParameterDescriptor("background", "If true, immediately returns without waiting for completion (for dev servers, watchers). Default false", ToolParameterType.BooleanType),
+            ToolParameterDescriptor("useTermux", "If true, runs the command inside Termux environment with full Linux tools (bash, apt, python, git, gcc, etc.). Default false", ToolParameterType.BooleanType)
         )
     )
 
@@ -110,12 +120,17 @@ class ExecuteShellCommandTool(
         val timeoutSeconds = obj["timeoutSeconds"]?.jsonPrimitive?.int ?: 60
         val workingDirectory = obj["workingDirectory"]?.jsonPrimitive?.content
         val background = obj["background"]?.jsonPrimitive?.boolean ?: false
+        val useTermux = obj["useTermux"]?.jsonPrimitive?.boolean ?: false
 
         if (policyConfig.needsConfirmation(command)) {
             val approved = confirmationHandler(command, purpose, workingDirectory)
             if (!approved) {
                 return "Command execution denied: $command\nPurpose: $purpose"
             }
+        }
+
+        if (useTermux) {
+            return executeTermux(command, purpose, description, timeoutSeconds, workingDirectory, background)
         }
 
         val workDir = if (workingDirectory != null) {
@@ -225,6 +240,41 @@ class ExecuteShellCommandTool(
             } else ""
         } catch (_: Exception) {
             ""
+        }
+    }
+    
+    private suspend fun executeTermux(
+        command: String,
+        purpose: String,
+        description: String?,
+        timeoutSeconds: Int,
+        workingDirectory: String?,
+        background: Boolean
+    ): String {
+        val env = termuxEnvironment
+            ?: return "Error: Termux environment is not configured. Please install it first."
+        
+        if (!env.isInstalled) {
+            return "Error: Termux environment is not installed. Please install it in Settings."
+        }
+        
+        return try {
+            val result = env.executeCommand(
+                command = command,
+                workingDirectory = workingDirectory,
+                timeoutSeconds = timeoutSeconds,
+                background = background
+            )
+            buildString {
+                appendLine("Purpose: $purpose")
+                description?.let { appendLine("Description: $it") }
+                appendLine("Environment: Termux (Linux)")
+                appendLine("Command: $command")
+                if (result.output.isNotEmpty()) appendLine(result.output)
+                if (!result.timedOut) appendLine("Exit code: ${result.exitCode}")
+            }.trimEnd()
+        } catch (e: Exception) {
+            "Error: Termux command failed: ${e.message}"
         }
     }
 }

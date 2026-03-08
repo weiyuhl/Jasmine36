@@ -24,6 +24,7 @@ android {
 dependencies {
     api(project(":jasmine-core:prompt:prompt-llm"))
     api(project(":jasmine-core:agent:agent-observe"))
+    implementation(project(":jasmine-core:termux:termux-environment"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.okhttp)

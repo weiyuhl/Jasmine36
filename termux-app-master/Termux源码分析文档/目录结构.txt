@@ -1,0 +1,25 @@
+Termux源码分析文档/
+│
+├── 00-阅读指南.md                    (4.5 KB)  - 文档导航和学习建议
+├── 01-Termux核心原理.md              (13.8 KB) - PTY + 终端协议解析
+├── 02-Linux环境实现原理.md           (14.2 KB) - Android 就是 Linux 的真相
+├── 03-Bootstrap集成方式.md           (11.5 KB) - Bootstrap 如何嵌入 APK
+├── 04-工作流程实例.md                (15.7 KB) - 完整的执行流程示例
+├── 05-源码路径导航.md                (14.3 KB) - 源码文件路径完整导航
+├── 目录结构.txt                      (本文件)  - 文档目录树
+│
+└── Bootstrap文件/
+    ├── bootstrap-aarch64.zip         (29.13 MB) - ARM64 架构
+    ├── bootstrap-arm.zip             (26.19 MB) - ARM32 架构
+    ├── bootstrap-i686.zip            (28.35 MB) - x86 架构
+    ├── bootstrap-x86_64.zip          (28.99 MB) - x86_64 架构
+    ├── README.md                     (7.2 KB)   - Bootstrap 文件说明
+    └── 下载记录.md                   (6.8 KB)   - 下载信息和记录
+
+总计:
+- 文档: 6 个 Markdown 文件 (约 74 KB)
+- Bootstrap: 4 个 ZIP 文件 (112.66 MB)
+- 说明: 3 个辅助文件 (约 19 KB)
+
+文档总大小: 约 113 MB
+创建时间: 2026年3月8日
