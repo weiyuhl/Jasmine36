@@ -3,8 +3,8 @@ package com.lhzkml.jasmine.mnn
 import android.content.Context
 import android.util.Log
 import com.lhzkml.jasmine.ChatStopSignal
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.prompt.llm.ChatClient
+import com.lhzkml.jasmine.repository.ModelSelectionRepository
 import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
 import com.lhzkml.jasmine.core.prompt.llm.StreamResult
 import com.lhzkml.jasmine.core.prompt.model.BalanceInfo
@@ -27,10 +27,15 @@ import kotlinx.coroutines.withContext
 /**
  * 本地 MNN 模型的 ChatClient 实现。
  * 将 MnnLlmSession 适配为 ChatClient 接口，使本地推理能融入现有聊天流程。
+ * 
+ * 修复说明：
+ * - 使用 ModelSelectionRepository 替代 ProviderManager 获取 Thinking 配置
  */
 class MnnChatClient(
     private val context: Context,
-    private val modelId: String
+    private val modelId: String,
+    private val modelSelectionRepository: ModelSelectionRepository = 
+        com.lhzkml.jasmine.config.AppConfig.modelSelectionRepository()
 ) : ChatClient {
 
     companion object {
@@ -51,7 +56,7 @@ class MnnChatClient(
             ?: throw IllegalStateException("本地模型 $targetId 不存在，请先下载")
 
         val defaults = MnnModelManager.getGlobalDefaults(context) ?: MnnModelManager.defaultGlobalConfig()
-        val enableThinking = ProviderManager.getMnnThinkingEnabled(context, targetId)
+        val enableThinking = modelSelectionRepository.isThinkingEnabled(targetId)
         val mnnConfig = MnnConfig(
             maxNewTokens = defaults.maxNewTokens ?: 2048,
             temperature = defaults.temperature ?: 0.6f,
@@ -195,7 +200,7 @@ class MnnChatClient(
      */
     fun updateThinking(thinking: Boolean) {
         session?.updateThinking(thinking)
-        ProviderManager.setMnnThinkingEnabled(context, modelId, thinking)
+        modelSelectionRepository.setThinkingEnabled(modelId, thinking)
     }
 
     override fun close() {

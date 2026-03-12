@@ -1,8 +1,9 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.ProviderManager
 import androidx.activity.ComponentActivity
+import com.lhzkml.jasmine.repository.*
+import org.koin.android.ext.android.inject
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,6 +41,23 @@ class SettingsActivity : ComponentActivity() {
 
     private lateinit var conversationRepo: ConversationRepository
     private var refreshCallback: (() -> Unit)? = null
+    
+    // Repository 注入
+    private val toolSettingsRepository: ToolSettingsRepository by inject()
+    private val ragConfigRepository: RagConfigRepository by inject()
+    private val mcpRepository: McpRepository by inject()
+    private val shellPolicyRepository: ShellPolicyRepository by inject()
+    private val compressionSettingsRepository: CompressionSettingsRepository by inject()
+    private val traceSettingsRepository: TraceSettingsRepository by inject()
+    private val plannerSettingsRepository: PlannerSettingsRepository by inject()
+    private val snapshotSettingsRepository: SnapshotSettingsRepository by inject()
+    private val eventHandlerSettingsRepository: EventHandlerSettingsRepository by inject()
+    private val timeoutSettingsRepository: TimeoutSettingsRepository by inject()
+    private val llmSettingsRepository: LlmSettingsRepository by inject()
+    private val agentStrategyRepository: AgentStrategyRepository by inject()
+    private val rulesRepository: RulesRepository by inject()
+    private val providerRepository: ProviderRepository by inject()
+    private val sessionRepository: SessionRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,7 +69,22 @@ class SettingsActivity : ComponentActivity() {
                 conversationRepo = conversationRepo,
                 onRefreshCallbackSet = { callback ->
                     refreshCallback = callback
-                }
+                },
+                toolSettingsRepository = toolSettingsRepository,
+                ragConfigRepository = ragConfigRepository,
+                mcpRepository = mcpRepository,
+                shellPolicyRepository = shellPolicyRepository,
+                compressionSettingsRepository = compressionSettingsRepository,
+                traceSettingsRepository = traceSettingsRepository,
+                plannerSettingsRepository = plannerSettingsRepository,
+                snapshotSettingsRepository = snapshotSettingsRepository,
+                eventHandlerSettingsRepository = eventHandlerSettingsRepository,
+                timeoutSettingsRepository = timeoutSettingsRepository,
+                llmSettingsRepository = llmSettingsRepository,
+                agentStrategyRepository = agentStrategyRepository,
+                rulesRepository = rulesRepository,
+                providerRepository = providerRepository,
+                sessionRepository = sessionRepository
             )
         }
     }
@@ -69,19 +102,34 @@ fun SettingsScreen(
     onBack: () -> Unit,
     conversationRepo: ConversationRepository,
     onRefreshCallbackSet: ((()->Unit) -> Unit)? = null,
-    onNavigate: (String) -> Unit = {}
+    onNavigate: (String) -> Unit = {},
+    toolSettingsRepository: ToolSettingsRepository,
+    ragConfigRepository: RagConfigRepository,
+    mcpRepository: McpRepository,
+    shellPolicyRepository: ShellPolicyRepository,
+    compressionSettingsRepository: CompressionSettingsRepository,
+    traceSettingsRepository: TraceSettingsRepository,
+    plannerSettingsRepository: PlannerSettingsRepository,
+    snapshotSettingsRepository: SnapshotSettingsRepository,
+    eventHandlerSettingsRepository: EventHandlerSettingsRepository,
+    timeoutSettingsRepository: TimeoutSettingsRepository,
+    llmSettingsRepository: LlmSettingsRepository,
+    agentStrategyRepository: AgentStrategyRepository,
+    rulesRepository: RulesRepository,
+    providerRepository: ProviderRepository,
+    sessionRepository: SessionRepository
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     
-    var toolsEnabled by remember { mutableStateOf(ProviderManager.isToolsEnabled(context)) }
+    var toolsEnabled by remember { mutableStateOf(toolSettingsRepository.isToolsEnabled()) }
     
     // 状态刷新触发器
     var refreshTrigger by remember { mutableStateOf(0) }
     
     // 刷新函数
     val refresh: () -> Unit = {
-        toolsEnabled = ProviderManager.isToolsEnabled(context)
+        toolsEnabled = toolSettingsRepository.isToolsEnabled()
         refreshTrigger++
     }
     
@@ -151,7 +199,7 @@ fun SettingsScreen(
                 // ─── 一、模型与供应商 ───
                 SettingsItem(
                     title = "模型供应商",
-                    value = getProviderStatus(context),
+                    value = getProviderStatusRepo(providerRepository),
                     onClick = { onNavigate(Routes.PROVIDER_LIST) }
                 )
                 SettingsItem(
@@ -165,24 +213,24 @@ fun SettingsScreen(
                 SettingsItem(
                     title = "Token 管理",
                     subtitle = "限制每条回复的长度",
-                    value = getMaxTokensInfo(context),
+                    value = getMaxTokensInfoRepo(llmSettingsRepository),
                     onClick = { onNavigate(Routes.TOKEN_MANAGEMENT) }
                 )
                 SettingsItem(
                     title = "采样参数",
                     subtitle = "控制 AI 回复的随机性和多样性",
-                    value = getSamplingParamsInfo(context),
+                    value = getSamplingParamsInfoRepo(llmSettingsRepository),
                     onClick = { onNavigate(Routes.SAMPLING_PARAMS) }
                 )
                 SettingsItem(
                     title = "系统提示词",
-                    value = getSystemPromptPreview(context),
+                    value = getSystemPromptPreviewRepo(llmSettingsRepository),
                     onClick = { onNavigate(Routes.SYSTEM_PROMPT) }
                 )
                 SettingsItem(
                     title = "RAG 知识库",
                     subtitle = "向量检索增强上下文",
-                    value = getRagInfo(context),
+                    value = getRagInfoRepo(ragConfigRepository),
                     onClick = { onNavigate(Routes.RAG_CONFIG) }
                 )
 
@@ -190,7 +238,7 @@ fun SettingsScreen(
                 SettingsItem(
                     title = "Rules 规则",
                     subtitle = "个人规则 · 项目规则",
-                    value = getRulesPreview(context),
+                    value = getRulesPreviewRepo(rulesRepository, sessionRepository),
                     onClick = { onNavigate(Routes.RULES) }
                 )
             }
@@ -202,7 +250,7 @@ fun SettingsScreen(
                 checked = toolsEnabled,
                 onCheckedChange = { checked ->
                     toolsEnabled = checked
-                    ProviderManager.setToolsEnabled(context, checked)
+                    toolSettingsRepository.setToolsEnabled(checked)
                     refreshTrigger++
                 }
             )
@@ -210,22 +258,22 @@ fun SettingsScreen(
                 key(refreshTrigger) {
                     SettingsItem(
                         title = "Agent 工具预设",
-                        value = getAgentToolPresetInfo(context),
+                        value = getAgentToolPresetInfoRepo(toolSettingsRepository),
                         onClick = { onNavigate(Routes.TOOL_CONFIG_AGENT) }
                     )
                     SettingsItem(
                         title = "Agent 策略",
-                        value = getAgentStrategyInfo(context),
+                        value = getAgentStrategyInfoRepo(agentStrategyRepository),
                         onClick = { onNavigate(Routes.AGENT_STRATEGY) }
                     )
                     SettingsItem(
                         title = "MCP 工具",
-                        value = getMcpInfo(context),
+                        value = getMcpInfoRepo(mcpRepository),
                         onClick = { onNavigate(Routes.MCP_SERVER) }
                     )
                     SettingsItem(
                         title = "Shell 命令策略",
-                        value = getShellPolicyInfo(context),
+                        value = getShellPolicyInfoRepo(shellPolicyRepository),
                         onClick = { onNavigate(Routes.SHELL_POLICY) }
                     )
                 }
@@ -235,32 +283,32 @@ fun SettingsScreen(
             key(refreshTrigger) {
                 SettingsItem(
                     title = "智能上下文压缩",
-                    value = getCompressionInfo(context),
+                    value = getCompressionInfoRepo(compressionSettingsRepository),
                     onClick = { onNavigate(Routes.COMPRESSION_CONFIG) }
                 )
                 SettingsItem(
                     title = "超时与续传",
-                    value = getTimeoutInfo(context),
+                    value = getTimeoutInfoRepo(timeoutSettingsRepository),
                     onClick = { onNavigate(Routes.TIMEOUT_CONFIG) }
                 )
                 SettingsItem(
                     title = "执行追踪",
-                    value = getTraceInfo(context),
+                    value = getTraceInfoRepo(traceSettingsRepository),
                     onClick = { onNavigate(Routes.TRACE_CONFIG) }
                 )
                 SettingsItem(
                     title = "任务规划",
-                    value = getPlannerInfo(context),
+                    value = getPlannerInfoRepo(plannerSettingsRepository),
                     onClick = { onNavigate(Routes.PLANNER_CONFIG) }
                 )
                 SettingsItem(
                     title = "执行快照",
-                    value = getSnapshotInfo(context),
+                    value = getSnapshotInfoRepo(snapshotSettingsRepository),
                     onClick = { onNavigate(Routes.SNAPSHOT_CONFIG) }
                 )
                 SettingsItem(
                     title = "事件处理器",
-                    value = getEventHandlerInfo(context),
+                    value = getEventHandlerInfoRepo(eventHandlerSettingsRepository),
                     onClick = { onNavigate(Routes.EVENT_HANDLER_CONFIG) }
                 )
             }
@@ -375,53 +423,50 @@ fun SettingsSwitchItem(
 }
 
 // 辅助函数
-private fun getRagInfo(context: android.content.Context): String {
-    if (!ProviderManager.isRagEnabled(context)) return "已关闭"
-    val topK = ProviderManager.getRagTopK(context)
-    val useLocal = ProviderManager.getRagEmbeddingUseLocal(context)
+fun getRagInfoRepo(ragRepo: RagConfigRepository): String {
+    if (!ragRepo.isRagEnabled()) return "已关闭"
+    val topK = ragRepo.getRagTopK()
+    val useLocal = ragRepo.getRagEmbeddingUseLocal()
     val hasConfig = if (useLocal) {
-        ProviderManager.getRagEmbeddingModelPath(context).isNotBlank()
+        ragRepo.getRagEmbeddingModelPath().isNotBlank()
     } else {
-        ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank() &&
-            ProviderManager.getRagEmbeddingApiKey(context).isNotBlank()
+        ragRepo.getRagEmbeddingBaseUrl().isNotBlank() &&
+            ragRepo.getRagEmbeddingApiKey().isNotBlank()
     }
     return if (hasConfig) "TopK $topK · 已配置" else "未配置"
 }
 
-private fun getProviderStatus(context: android.content.Context): String {
-    val config = ProviderManager.getActiveConfig()
-    return if (config != null) {
-        val provider = ProviderManager.getAllProviders().find { it.id == config.providerId }
-        provider?.name ?: config.providerId
+fun getProviderStatusRepo(providerRepo: ProviderRepository): String {
+    val activeId = providerRepo.getActiveProviderId()
+    return if (activeId != null) {
+        val provider = providerRepo.getProvider(activeId)
+        provider?.name ?: activeId
     } else {
         "未配置"
     }
 }
 
-private fun getAgentToolPresetInfo(context: android.content.Context): String {
-    val preset = ProviderManager.getAgentToolPreset(context)
+fun getAgentToolPresetInfoRepo(toolRepo: ToolSettingsRepository): String {
+    val preset = toolRepo.getEnabledTools()
     return if (preset.isEmpty()) "全部工具已启用（默认）" else "已启用 ${preset.size} 个工具"
 }
 
-private fun getAgentStrategyInfo(context: android.content.Context): String {
-    val strategy = ProviderManager.getAgentStrategy(context)
+fun getAgentStrategyInfoRepo(strategyRepo: AgentStrategyRepository): String {
+    val strategy = strategyRepo.getAgentStrategy()
     return when (strategy) {
         com.lhzkml.jasmine.core.config.AgentStrategyType.SIMPLE_LOOP -> "简单循环（ToolExecutor）"
         com.lhzkml.jasmine.core.config.AgentStrategyType.SINGLE_RUN_GRAPH -> "图策略（GraphAgent）"
     }
 }
 
-private fun getMcpInfo(context: android.content.Context): String {
-    if (!ProviderManager.isMcpEnabled(context)) {
-        return "已关闭"
-    }
-    val servers = ProviderManager.getMcpServers(context)
+fun getMcpInfoRepo(mcpRepo: McpRepository): String {
+    val servers = mcpRepo.getMcpServers()
     val enabledCount = servers.count { it.enabled }
     return if (servers.isEmpty()) "已开启 · 未配置服务器" else "已配置 ${servers.size} 个 · 启用 $enabledCount 个"
 }
 
-private fun getShellPolicyInfo(context: android.content.Context): String {
-    val policy = ProviderManager.getShellPolicy(context)
+fun getShellPolicyInfoRepo(shellRepo: ShellPolicyRepository): String {
+    val policy = shellRepo.getShellPolicy()
     return when (policy) {
         com.lhzkml.jasmine.core.agent.tools.ShellPolicy.MANUAL -> "手动确认"
         com.lhzkml.jasmine.core.agent.tools.ShellPolicy.BLACKLIST -> "黑名单模式"
@@ -429,41 +474,37 @@ private fun getShellPolicyInfo(context: android.content.Context): String {
     }
 }
 
-private fun getCompressionInfo(context: android.content.Context): String {
-    if (!ProviderManager.isCompressionEnabled(context)) {
-        return "已关闭"
-    }
-    val strategy = ProviderManager.getCompressionStrategy(context)
+fun getCompressionInfoRepo(compRepo: CompressionSettingsRepository): String {
+    if (!compRepo.isCompressionEnabled()) return "已关闭"
+    val strategy = compRepo.getCompressionStrategy()
     return when (strategy) {
         com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.TOKEN_BUDGET -> {
-            val maxTokens = ProviderManager.getCompressionMaxTokens(context)
-            val threshold = ProviderManager.getCompressionThreshold(context)
+            val maxTokens = compRepo.getCompressionMaxTokens()
+            val threshold = compRepo.getCompressionThreshold()
             val tokenStr = if (maxTokens > 0) "${maxTokens}" else "跟随模型"
             "Token 预算 · $tokenStr · 阈值 ${threshold}%"
         }
         com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.WHOLE_HISTORY -> "整体压缩"
         com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.LAST_N -> {
-            val n = ProviderManager.getCompressionLastN(context)
+            val n = compRepo.getCompressionLastN()
             "保留最后 ${n} 条"
         }
         com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.CHUNKED -> {
-            val size = ProviderManager.getCompressionChunkSize(context)
+            val size = compRepo.getCompressionChunkSize()
             "分块压缩 · 每块 ${size} 条"
         }
         com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType.PROGRESSIVE -> {
-            val rounds = ProviderManager.getCompressionKeepRecentRounds(context)
-            val threshold = ProviderManager.getCompressionThreshold(context)
+            val rounds = compRepo.getCompressionKeepRecentRounds()
+            val threshold = compRepo.getCompressionThreshold()
             "渐进式 · 保留 ${rounds} 轮 · 阈值 ${threshold}%"
         }
     }
 }
 
-private fun getTraceInfo(context: android.content.Context): String {
-    if (!ProviderManager.isTraceEnabled(context)) {
-        return "已关闭"
-    }
-    val file = ProviderManager.isTraceFileEnabled(context)
-    val filter = ProviderManager.getTraceEventFilter(context)
+fun getTraceInfoRepo(traceRepo: TraceSettingsRepository): String {
+    if (!traceRepo.isTraceEnabled()) return "已关闭"
+    val file = traceRepo.isTraceFileEnabled()
+    val filter = traceRepo.getTraceEventFilter()
     val outputParts = mutableListOf<String>()
     outputParts.add("Android Log")
     if (file) outputParts.add("文件输出")
@@ -471,23 +512,19 @@ private fun getTraceInfo(context: android.content.Context): String {
     return "${outputParts.joinToString(" · ")} · $filterStr"
 }
 
-private fun getPlannerInfo(context: android.content.Context): String {
-    if (!ProviderManager.isPlannerEnabled(context)) {
-        return "已关闭"
-    }
-    val maxIter = ProviderManager.getPlannerMaxIterations(context)
-    val critic = ProviderManager.isPlannerCriticEnabled(context)
+fun getPlannerInfoRepo(plannerRepo: PlannerSettingsRepository): String {
+    if (!plannerRepo.isPlannerEnabled()) return "已关闭"
+    val maxIter = plannerRepo.getPlannerMaxIterations()
+    val critic = plannerRepo.isPlannerCriticEnabled()
     val criticStr = if (critic) "Critic 评估" else "无 Critic"
     return "迭代 $maxIter 次 · $criticStr"
 }
 
-private fun getSnapshotInfo(context: android.content.Context): String {
-    if (!ProviderManager.isSnapshotEnabled(context)) {
-        return "已关闭"
-    }
-    val storage = ProviderManager.getSnapshotStorage(context)
-    val auto = ProviderManager.isSnapshotAutoCheckpoint(context)
-    val rollback = ProviderManager.getSnapshotRollbackStrategy(context)
+fun getSnapshotInfoRepo(snapshotRepo: SnapshotSettingsRepository): String {
+    if (!snapshotRepo.isSnapshotEnabled()) return "已关闭"
+    val storage = snapshotRepo.getSnapshotStorage()
+    val auto = snapshotRepo.isSnapshotAutoCheckpoint()
+    val rollback = snapshotRepo.getSnapshotRollbackStrategy()
     val storageName = when (storage) {
         com.lhzkml.jasmine.core.config.SnapshotStorageType.MEMORY -> "内存存储"
         com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE -> "文件存储"
@@ -501,19 +538,17 @@ private fun getSnapshotInfo(context: android.content.Context): String {
     return "$storageName · $autoStr · $rollbackName"
 }
 
-private fun getEventHandlerInfo(context: android.content.Context): String {
-    if (!ProviderManager.isEventHandlerEnabled(context)) {
-        return "已关闭"
-    }
-    val filter = ProviderManager.getEventHandlerFilter(context)
+fun getEventHandlerInfoRepo(eventRepo: EventHandlerSettingsRepository): String {
+    if (!eventRepo.isEventHandlerEnabled()) return "已关闭"
+    val filter = eventRepo.getEventHandlerFilter()
     return if (filter.isEmpty()) "全部事件" else "${filter.size} 类事件"
 }
 
-private fun getTimeoutInfo(context: android.content.Context): String {
-    val reqTimeout = ProviderManager.getRequestTimeout(context)
-    val socketTimeout = ProviderManager.getSocketTimeout(context)
-    val connectTimeout = ProviderManager.getConnectTimeout(context)
-    val resumeEnabled = ProviderManager.isStreamResumeEnabled(context)
+fun getTimeoutInfoRepo(timeoutRepo: TimeoutSettingsRepository): String {
+    val reqTimeout = timeoutRepo.getRequestTimeout()
+    val socketTimeout = timeoutRepo.getSocketTimeout()
+    val connectTimeout = timeoutRepo.getConnectTimeout()
+    val resumeEnabled = timeoutRepo.isStreamResumeEnabled()
     
     val parts = mutableListOf<String>()
     if (reqTimeout > 0) parts.add("请求 ${reqTimeout}s")
@@ -525,20 +560,20 @@ private fun getTimeoutInfo(context: android.content.Context): String {
     return "$timeoutStr · $resumeStr"
 }
 
-private fun getMaxTokensInfo(context: android.content.Context): String {
-    val maxTokens = ProviderManager.getMaxTokens(context)
+fun getMaxTokensInfoRepo(llmRepo: LlmSettingsRepository): String {
+    val maxTokens = llmRepo.getMaxTokens()
     return if (maxTokens > 0) "$maxTokens" else "不限制"
 }
 
-private fun getSystemPromptPreview(context: android.content.Context): String {
-    val prompt = ProviderManager.getDefaultSystemPrompt(context)
+fun getSystemPromptPreviewRepo(llmRepo: LlmSettingsRepository): String {
+    val prompt = llmRepo.getDefaultSystemPrompt()
     return if (prompt.length > 30) prompt.substring(0, 30) + "..." else prompt
 }
 
-private fun getSamplingParamsInfo(context: android.content.Context): String {
-    val temperature = ProviderManager.getTemperature(context)
-    val topP = ProviderManager.getTopP(context)
-    val topK = ProviderManager.getTopK(context)
+fun getSamplingParamsInfoRepo(llmRepo: LlmSettingsRepository): String {
+    val temperature = llmRepo.getTemperature()
+    val topP = llmRepo.getTopP()
+    val topK = llmRepo.getTopK()
     
     val parts = mutableListOf<String>()
     if (temperature >= 0f) {
@@ -554,13 +589,10 @@ private fun getSamplingParamsInfo(context: android.content.Context): String {
     return if (parts.isEmpty()) "全部使用默认值" else parts.joinToString(" · ")
 }
 
-private fun formatNumber(n: Int): String =
-    com.lhzkml.jasmine.core.config.FormatUtils.formatTokensWithUnit(n)
-
-private fun getRulesPreview(context: android.content.Context): String {
-    val personal = ProviderManager.getPersonalRules(context)
-    val wsPath = ProviderManager.getWorkspacePath(context)
-    val project = if (wsPath.isNotBlank()) ProviderManager.getProjectRules(context, wsPath) else ""
+fun getRulesPreviewRepo(rulesRepo: RulesRepository, sessionRepo: SessionRepository): String {
+    val personal = rulesRepo.getPersonalRules()
+    val wsPath = sessionRepo.getWorkspacePath()
+    val project = if (wsPath.isNotBlank()) rulesRepo.getProjectRules(wsPath) else ""
 
     val hasPersonal = personal.isNotBlank()
     val hasProject = project.isNotBlank()

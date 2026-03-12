@@ -6,6 +6,8 @@ import com.lhzkml.jasmine.core.agent.runtime.FileCheckpointService
 import com.lhzkml.jasmine.core.agent.runtime.McpConnectionManager
 import com.lhzkml.jasmine.core.config.ConfigRepository
 import com.lhzkml.jasmine.core.config.ProviderRegistry
+import com.lhzkml.jasmine.repository.DefaultModelSelectionRepository
+import com.lhzkml.jasmine.repository.ModelSelectionRepository
 
 /**
  * 应用配置管理器
@@ -13,6 +15,8 @@ import com.lhzkml.jasmine.core.config.ProviderRegistry
  * 提供全局的 ConfigRepository、ProviderRegistry、McpConnectionManager、CheckpointService 实例。
  */
 object AppConfig {
+    
+    private var _modelSelectionRepository: ModelSelectionRepository? = null
     
     private var _configRepo: ConfigRepository? = null
     private var _providerRegistry: ProviderRegistry? = null
@@ -37,6 +41,9 @@ object AppConfig {
                 _checkpointService = FileCheckpointService(snapshotDir)
             }
         }
+        if (_modelSelectionRepository == null) {
+            _modelSelectionRepository = DefaultModelSelectionRepository(context.applicationContext, configRepo())
+        }
     }
     
     fun configRepo(): ConfigRepository {
@@ -53,5 +60,9 @@ object AppConfig {
 
     fun checkpointService(): CheckpointService? {
         return _checkpointService
+    }
+    
+    fun modelSelectionRepository(): ModelSelectionRepository {
+        return _modelSelectionRepository ?: throw IllegalStateException("AppConfig not initialized. Call initialize() first.")
     }
 }

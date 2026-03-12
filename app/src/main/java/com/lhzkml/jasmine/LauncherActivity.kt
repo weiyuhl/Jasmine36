@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.content.Intent
-import com.lhzkml.jasmine.config.ProviderManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -67,7 +66,7 @@ class LauncherActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        ProviderManager.initialize(this)
+        // 注意：ProviderManager 已在 JasmineApplication 中初始化，无需在此重复初始化
 
         // 恢复上次的模式：如果上次没有主动退出，直接跳转到 MainActivity
         val hasLastSession = sessionRepository.hasLastSession()

@@ -1,6 +1,7 @@
 package com.lhzkml.jasmine.di
 
 import com.lhzkml.jasmine.config.AppConfig
+import com.lhzkml.jasmine.core.config.ConfigRepository
 import com.lhzkml.jasmine.repository.*
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
@@ -9,13 +10,23 @@ import org.koin.dsl.module
  * Repository 依赖注入模块
  *
  * 按阶段组织，从简单到复杂
+ * 
+ * 修复说明：
+ * - ConfigRepository 统一通过 DI 注入，避免直接使用 AppConfig.configRepo()
+ * - 这样便于单元测试和依赖管理
  */
 val repositoryModule = module {
+    
+    // ========== ConfigRepository 注入 ==========
+    
+    single<ConfigRepository> {
+        AppConfig.configRepo()
+    }
     
     // ========== 阶段四：最简单的 Repository ==========
     
     single<TimeoutSettingsRepository> {
-        DefaultTimeoutSettingsRepository(AppConfig.configRepo())
+        DefaultTimeoutSettingsRepository(get())
     }
     
     single<AboutRepository> {
@@ -25,45 +36,45 @@ val repositoryModule = module {
     // ========== 阶段三：设置类 Repository ==========
     
     single<SnapshotSettingsRepository> {
-        DefaultSnapshotSettingsRepository(AppConfig.configRepo())
+        DefaultSnapshotSettingsRepository(get())
     }
     
     single<PlannerSettingsRepository> {
-        DefaultPlannerSettingsRepository(AppConfig.configRepo())
+        DefaultPlannerSettingsRepository(get())
     }
     
     single<AgentStrategyRepository> {
-        DefaultAgentStrategyRepository(AppConfig.configRepo())
+        DefaultAgentStrategyRepository(get())
     }
     
     single<ToolSettingsRepository> {
-        DefaultToolSettingsRepository(AppConfig.configRepo())
+        DefaultToolSettingsRepository(get())
     }
     
     single<EventHandlerSettingsRepository> {
-        DefaultEventHandlerSettingsRepository(AppConfig.configRepo())
+        DefaultEventHandlerSettingsRepository(get())
     }
     
     single<ShellPolicyRepository> {
-        DefaultShellPolicyRepository(AppConfig.configRepo())
+        DefaultShellPolicyRepository(get())
     }
     
     single<RulesRepository> {
-        DefaultRulesRepository(AppConfig.configRepo())
+        DefaultRulesRepository(get())
     }
     
     single<TraceSettingsRepository> {
-        DefaultTraceSettingsRepository(AppConfig.configRepo())
+        DefaultTraceSettingsRepository(get())
     }
     
     single<CompressionSettingsRepository> {
-        DefaultCompressionSettingsRepository(AppConfig.configRepo())
+        DefaultCompressionSettingsRepository(get())
     }
     
     // ========== 阶段二：功能域 Repository ==========
     
     single<RagConfigRepository> {
-        DefaultRagConfigRepository(AppConfig.configRepo())
+        DefaultRagConfigRepository(get())
     }
     
     single<RagLibraryRepository> {
@@ -72,7 +83,7 @@ val repositoryModule = module {
     
     single<McpRepository> {
         DefaultMcpRepository(
-            configRepo = AppConfig.configRepo(),
+            configRepo = get(),
             mcpConnectionManager = AppConfig.mcpConnectionManager()
         )
     }
@@ -88,7 +99,7 @@ val repositoryModule = module {
     // ========== 阶段一：核心 Repository ==========
     
     single<SessionRepository> {
-        DefaultSessionRepository(AppConfig.configRepo())
+        DefaultSessionRepository(get())
     }
     
     single<ChatConversationRepository> {
@@ -97,7 +108,7 @@ val repositoryModule = module {
     
     single<ProviderRepository> {
         DefaultProviderRepository(
-            configRepo = AppConfig.configRepo(),
+            configRepo = get(),
             providerRegistry = AppConfig.providerRegistry()
         )
     }
@@ -105,11 +116,11 @@ val repositoryModule = module {
     single<ModelSelectionRepository> {
         DefaultModelSelectionRepository(
             context = androidContext(),
-            configRepo = AppConfig.configRepo()
+            configRepo = get()
         )
     }
     
     single<LlmSettingsRepository> {
-        DefaultLlmSettingsRepository(AppConfig.configRepo())
+        DefaultLlmSettingsRepository(get())
     }
 }

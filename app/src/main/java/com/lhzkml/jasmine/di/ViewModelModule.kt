@@ -8,6 +8,9 @@ import org.koin.dsl.module
  * Koin ViewModel 模块
  *
  * ChatViewModel 注入 ConversationRepository，单元测试时可替换为 Mock。
+ * 
+ * 修复说明：
+ * - 添加 ConfigRepository 注入（用于 CompressionStrategyBuilder）
  */
 val viewModelModule = module {
 
@@ -27,7 +30,8 @@ val viewModelModule = module {
             compressionSettingsRepository = get(),
             snapshotSettingsRepository = get(),
             plannerSettingsRepository = get(),
-            checkpointRepository = get()
+            checkpointRepository = get(),
+            configRepo = get()
         )
     }
 }

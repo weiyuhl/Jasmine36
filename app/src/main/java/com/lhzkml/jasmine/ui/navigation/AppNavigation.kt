@@ -89,11 +89,42 @@ fun AppNavigation(
         }
 
         composable(Routes.SETTINGS) {
+            val toolSettingsRepository: com.lhzkml.jasmine.repository.ToolSettingsRepository = koinInject()
+            val ragConfigRepository: com.lhzkml.jasmine.repository.RagConfigRepository = koinInject()
+            val mcpRepository: com.lhzkml.jasmine.repository.McpRepository = koinInject()
+            val shellPolicyRepository: com.lhzkml.jasmine.repository.ShellPolicyRepository = koinInject()
+            val compressionSettingsRepository: com.lhzkml.jasmine.repository.CompressionSettingsRepository = koinInject()
+            val traceSettingsRepository: com.lhzkml.jasmine.repository.TraceSettingsRepository = koinInject()
+            val plannerSettingsRepository: com.lhzkml.jasmine.repository.PlannerSettingsRepository = koinInject()
+            val snapshotSettingsRepository: com.lhzkml.jasmine.repository.SnapshotSettingsRepository = koinInject()
+            val eventHandlerSettingsRepository: com.lhzkml.jasmine.repository.EventHandlerSettingsRepository = koinInject()
+            val timeoutSettingsRepository: com.lhzkml.jasmine.repository.TimeoutSettingsRepository = koinInject()
+            val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository = koinInject()
+            val agentStrategyRepository: com.lhzkml.jasmine.repository.AgentStrategyRepository = koinInject()
+            val rulesRepository: com.lhzkml.jasmine.repository.RulesRepository = koinInject()
+            val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository = koinInject()
+            val sessionRepository: com.lhzkml.jasmine.repository.SessionRepository = koinInject()
+            
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 conversationRepo = conversationRepo,
                 onRefreshCallbackSet = null,
-                onNavigate = { navController.navigate(it) }
+                onNavigate = { navController.navigate(it) },
+                toolSettingsRepository = toolSettingsRepository,
+                ragConfigRepository = ragConfigRepository,
+                mcpRepository = mcpRepository,
+                shellPolicyRepository = shellPolicyRepository,
+                compressionSettingsRepository = compressionSettingsRepository,
+                traceSettingsRepository = traceSettingsRepository,
+                plannerSettingsRepository = plannerSettingsRepository,
+                snapshotSettingsRepository = snapshotSettingsRepository,
+                eventHandlerSettingsRepository = eventHandlerSettingsRepository,
+                timeoutSettingsRepository = timeoutSettingsRepository,
+                llmSettingsRepository = llmSettingsRepository,
+                agentStrategyRepository = agentStrategyRepository,
+                rulesRepository = rulesRepository,
+                providerRepository = providerRepository,
+                sessionRepository = sessionRepository
             )
         }
 

@@ -2,7 +2,6 @@ package com.lhzkml.jasmine
 
 import android.app.Application
 import com.lhzkml.jasmine.config.AppConfig
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.di.appModule
 import com.lhzkml.jasmine.di.repositoryModule
 import com.lhzkml.jasmine.di.viewModelModule
@@ -13,7 +12,7 @@ class JasmineApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         AppConfig.initialize(this)
-        ProviderManager.initialize(this)
+        // 注意：ProviderManager 已被 Repository 替代，无需在此初始化
         RagStore.initialize(this)
         startKoin {
             androidContext(this@JasmineApplication)

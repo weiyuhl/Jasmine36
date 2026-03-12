@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.ChatExecutor
 import com.lhzkml.jasmine.ChatExecutorConfig
 import com.lhzkml.jasmine.ChatItem
@@ -14,7 +13,6 @@ import com.lhzkml.jasmine.ChatStateManager
 import com.lhzkml.jasmine.CheckpointRecovery
 import com.lhzkml.jasmine.ContentBlock
 import com.lhzkml.jasmine.DialogHandlers
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.agent.observe.event.EventHandler
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.agent.observe.trace.Tracing
@@ -43,6 +41,7 @@ import com.lhzkml.jasmine.core.prompt.model.ChatMessage
 import com.lhzkml.jasmine.core.prompt.model.Prompt
 import com.lhzkml.jasmine.core.agent.tools.WebSearchTool
 import com.lhzkml.jasmine.core.agent.tools.FetchUrlTool
+import com.lhzkml.jasmine.core.config.ConfigRepository
 import com.lhzkml.jasmine.mnn.MnnChatClient
 import com.lhzkml.jasmine.mnn.MnnModelManager
 import com.lhzkml.jasmine.RagStore
@@ -82,7 +81,8 @@ class ChatViewModel(
     private val compressionSettingsRepository: com.lhzkml.jasmine.repository.CompressionSettingsRepository,
     private val snapshotSettingsRepository: com.lhzkml.jasmine.repository.SnapshotSettingsRepository,
     private val plannerSettingsRepository: com.lhzkml.jasmine.repository.PlannerSettingsRepository,
-    private val checkpointRepository: com.lhzkml.jasmine.repository.CheckpointRepository
+    private val checkpointRepository: com.lhzkml.jasmine.repository.CheckpointRepository,
+    private val configRepo: ConfigRepository
 ) : AndroidViewModel(application) {
 
     private val ctx: Context get() = getApplication()
@@ -115,7 +115,6 @@ class ChatViewModel(
     private var eventHandler: EventHandler? = null
     private var persistence: Persistence? = null
     private var contextCollector = SystemContextCollector()
-    private val configRepo = AppConfig.configRepo()
     private val runtimeBuilder = AgentRuntimeBuilder(configRepo)
     private val toolRegistryBuilder = ToolRegistryBuilder(configRepo)
     private val mcpConnectionManager get() = mcpRepository.getConnectionManager()

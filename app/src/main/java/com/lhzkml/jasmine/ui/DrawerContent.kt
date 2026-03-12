@@ -18,9 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.conversation.storage.ConversationInfo
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.ui.components.CustomText
+import com.lhzkml.jasmine.repository.ProviderRepository
 import com.lhzkml.jasmine.ui.theme.*
+import org.koin.compose.koinInject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -108,14 +109,26 @@ fun RightDrawerContent(
     }
 }
 
+/**
+ * 获取 Provider 显示名称的辅助函数
+ * 
+ * @param providerRepository ProviderRepository 实例
+ * @param providerId Provider ID
+ * @return Provider 名称，如果未找到则返回 ID
+ */
+fun getProviderDisplayName(providerRepository: ProviderRepository, providerId: String): String {
+    return providerRepository.getAllProviders()
+        .find { it.id == providerId }?.name ?: providerId
+}
+
 @Composable
 fun ConversationItem(
     info: ConversationInfo,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    providerRepository: ProviderRepository = koinInject()
 ) {
-    val providerName = ProviderManager.getAllProviders()
-        .find { it.id == info.providerId }?.name ?: info.providerId
+    val providerName = getProviderDisplayName(providerRepository, info.providerId)
     val dateStr = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
         .format(Date(info.updatedAt))
 

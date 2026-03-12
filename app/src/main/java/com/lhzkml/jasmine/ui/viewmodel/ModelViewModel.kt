@@ -3,11 +3,12 @@ package com.lhzkml.jasmine.ui.viewmodel
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.mnn.MnnChatClient
 import com.lhzkml.jasmine.mnn.MnnModelManager
 import com.lhzkml.jasmine.core.prompt.llm.ChatClientRouter
+import com.lhzkml.jasmine.repository.ProviderRepository
+import com.lhzkml.jasmine.repository.ModelSelectionRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -21,10 +22,15 @@ import kotlinx.coroutines.launch
  * - 本地/远程模型切换
  * 
  * 从原 ChatViewModel 中拆分出来，专注于模型相关逻辑
+ * 
+ * 修复说明：
+ * - 使用 ProviderRepository 和 ModelSelectionRepository 替代 ProviderManager
  */
 class ModelViewModel(
     private val context: Context,
-    private val clientRouter: ChatClientRouter
+    private val clientRouter: ChatClientRouter,
+    private val providerRepository: ProviderRepository,
+    private val modelSelectionRepository: ModelSelectionRepository
 ) : ViewModel() {
 
     // 模型列表
@@ -56,7 +62,7 @@ class ModelViewModel(
      */
     fun refreshModelSelector() {
         viewModelScope.launch {
-            val activeId = ProviderManager.getActiveId()
+            val activeId = providerRepository.getActiveProviderId()
             if (activeId == null) {
                 _currentModelDisplay.value = "未配置"
                 _modelList.value = emptyList()
@@ -65,7 +71,7 @@ class ModelViewModel(
                 return@launch
             }
 
-            val provider = ProviderManager.getProvider(activeId)
+            val provider = providerRepository.getProvider(activeId)
             if (provider?.apiType == ApiType.LOCAL) {
                 refreshLocalModels(activeId)
             } else {
@@ -82,7 +88,7 @@ class ModelViewModel(
         val localModelIds = localModels.map { it.modelId }
         _modelList.value = localModelIds
 
-        val model = overrideModel ?: ProviderManager.getModel(context, providerId)
+        val model = overrideModel ?: providerRepository.getModel(providerId)
         val selectedModel = if (model.isNotEmpty() && model in localModelIds) model
             else localModelIds.firstOrNull() ?: ""
 
@@ -93,7 +99,7 @@ class ModelViewModel(
         _currentModel.value = selectedModel
         _currentModelDisplay.value = "${shortenModelName(selectedModel).ifEmpty { "请下载模型" }} \u02C7"
         _supportsThinkingMode.value = MnnModelManager.isSupportThinkingSwitch(context, selectedModel)
-        _isThinkingModeEnabled.value = ProviderManager.getMnnThinkingEnabled(context, selectedModel)
+        _isThinkingModeEnabled.value = modelSelectionRepository.isThinkingEnabled(selectedModel)
     }
 
     /**
@@ -101,11 +107,11 @@ class ModelViewModel(
      */
     private fun refreshRemoteModels(providerId: String) {
         _supportsThinkingMode.value = false
-        val model = overrideModel ?: ProviderManager.getModel(context, providerId)
+        val model = overrideModel ?: providerRepository.getModel(providerId)
         _currentModel.value = model
         _currentModelDisplay.value = "${shortenModelName(model).ifEmpty { "未选择模型" }} \u02C7"
 
-        val selectedModels = ProviderManager.getSelectedModels(context, providerId)
+        val selectedModels = providerRepository.getSelectedModels(providerId)
         _modelList.value = if (selectedModels.isEmpty()) {
             if (model.isNotEmpty()) listOf(model) else emptyList()
         } else {
@@ -120,11 +126,11 @@ class ModelViewModel(
      */
     fun selectModel(model: String) {
         viewModelScope.launch {
-            val activeId = ProviderManager.getActiveId() ?: return@launch
+            val activeId = providerRepository.getActiveProviderId() ?: return@launch
             overrideModel = model
-            val key = ProviderManager.getApiKey(context, activeId) ?: ""
-            val baseUrl = ProviderManager.getBaseUrl(context, activeId)
-            ProviderManager.saveConfig(context, activeId, key, baseUrl, model)
+            val key = providerRepository.getApiKey(activeId) ?: ""
+            val baseUrl = providerRepository.getBaseUrl(activeId)
+            providerRepository.saveProviderCredentials(activeId, key, baseUrl, model)
             refreshModelSelector()
         }
     }
@@ -136,7 +142,7 @@ class ModelViewModel(
         viewModelScope.launch {
             if (!_supportsThinkingMode.value || _currentModel.value.isEmpty()) return@launch
             _isThinkingModeEnabled.value = enabled
-            ProviderManager.setMnnThinkingEnabled(context, _currentModel.value, enabled)
+            modelSelectionRepository.setThinkingEnabled(_currentModel.value, enabled)
             
             // 更新 MNN 客户端
             val client = clientRouter.getClient(MnnChatClient.PROVIDER_ID) as? MnnChatClient
