@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.content.Context
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.agent.graph.graph.AgentGraphContext
 import com.lhzkml.jasmine.core.agent.graph.graph.GenericAgentEnvironment
 import com.lhzkml.jasmine.core.agent.graph.graph.GraphAgent
@@ -44,6 +43,7 @@ import java.util.Locale
  */
 class ChatExecutor(
     private val context: Context,
+    private val config: ChatExecutorConfig,
     private val chatStateManager: ChatStateManager,
     private val conversationRepo: ConversationRepository,
     /** 非 null 时使用 Channel 模式：在 IO 上处理，发送 StreamUpdate，减少 withContext(Main) 切换 */
@@ -97,13 +97,13 @@ class ChatExecutor(
         message: String,
         userMsg: ChatMessage,
         client: ChatClient,
-        config: ActiveProviderConfig
+        providerConfig: ActiveProviderConfig
     ) {
         try {
-            val toolsEnabled = ProviderManager.isToolsEnabled(context)
+            val toolsEnabled = config.toolsEnabled
 
             val registry = if (toolsEnabled) {
-                val r = buildToolRegistry(client, config.model)
+                val r = buildToolRegistry(client, providerConfig.model)
                 loadMcpTools(r)
                 r
             } else null
@@ -112,22 +112,21 @@ class ChatExecutor(
 
             if (currentConversationId() == null) {
                 val title = if (message.length > 20) message.substring(0, 20) + "..." else message
-                val basePrompt = ProviderManager.getDefaultSystemPrompt(context)
+                val basePrompt = config.defaultSystemPrompt
                 val systemPrompt = contextCollector().buildSystemPrompt(basePrompt, currentUserMessage = message)
                 val convId = conversationRepo.createConversation(
                     title = title,
-                    providerId = config.providerId,
-                    model = config.model,
+                    providerId = providerConfig.providerId,
+                    model = providerConfig.model,
                     systemPrompt = systemPrompt,
-                    workspacePath = if (ProviderManager.isAgentMode(context))
-                        ProviderManager.getWorkspacePath(context) else ""
+                    workspacePath = if (config.isAgentMode) config.workspacePath else ""
                 )
                 setConversationId(convId)
                 val systemMsg = ChatMessage.system(systemPrompt)
                 messageHistory.add(systemMsg)
                 conversationRepo.addMessage(convId, systemMsg)
             } else {
-                val basePrompt = ProviderManager.getDefaultSystemPrompt(context)
+                val basePrompt = config.defaultSystemPrompt
                 val updatedSystemPrompt = contextCollector().buildSystemPrompt(basePrompt, currentUserMessage = message)
                 if (messageHistory.isNotEmpty() && messageHistory[0].role == "system") {
                     messageHistory[0] = ChatMessage.system(updatedSystemPrompt)
@@ -142,15 +141,15 @@ class ChatExecutor(
 
             val trimmedMessages = contextManager().trimMessages(messageHistory.toList())
 
-            val maxTokensVal = ProviderManager.getMaxTokens(context)
+            val maxTokensVal = config.maxTokens
             val maxTokens = if (maxTokensVal > 0) maxTokensVal else 8192
 
-            val tempVal = ProviderManager.getTemperature(context)
-            val topPVal = ProviderManager.getTopP(context)
-            val topKVal = ProviderManager.getTopK(context)
+            val tempVal = config.temperature
+            val topPVal = config.topP
+            val topKVal = config.topK
             val samplingParams = com.lhzkml.jasmine.core.prompt.model.SamplingParams(
-                temperature = if (tempVal >= 0f) tempVal.toDouble() else null,
-                topP = if (topPVal >= 0f) topPVal.toDouble() else null,
+                temperature = if (tempVal >= 0.0) tempVal else null,
+                topP = if (topPVal >= 0.0) topPVal else null,
                 topK = if (topKVal >= 0) topKVal else null
             )
 
@@ -168,7 +167,7 @@ class ChatExecutor(
             val logContent: String
             if (toolsEnabled && registry != null) {
                 val agentResult = executeAgentMode(
-                    message, client, config, registry, trimmedMessages,
+                    message, client, providerConfig, registry, trimmedMessages,
                     maxTokens, samplingParams
                 )
                 result = agentResult.first
@@ -176,7 +175,7 @@ class ChatExecutor(
                 logContent = agentResult.third
             } else {
                 val chatResult = executeChatMode(
-                    client, config, trimmedMessages, maxTokens, samplingParams
+                    client, providerConfig, trimmedMessages, maxTokens, samplingParams
                 )
                 result = chatResult.first
                 usage = chatResult.second
@@ -203,14 +202,14 @@ class ChatExecutor(
             if (usage != null) {
                 conversationRepo.recordUsage(
                     conversationId = currentConversationId()!!,
-                    providerId = config.providerId,
-                    model = config.model,
+                    providerId = providerConfig.providerId,
+                    model = providerConfig.model,
                     usage = usage
                 )
             }
 
-            if (ProviderManager.isCompressionEnabled(context)) {
-                tryCompressHistory(client, config.model)
+            if (config.compressionEnabled) {
+                tryCompressHistory(client, providerConfig.model)
             }
         } catch (_: CancellationException) {
             // 用户主动停止 — 保存已生成的部分内容
@@ -276,7 +275,7 @@ class ChatExecutor(
     private suspend fun executeAgentMode(
         message: String,
         client: ChatClient,
-        config: ActiveProviderConfig,
+        providerConfig: ActiveProviderConfig,
         registry: ToolRegistry,
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
@@ -303,22 +302,22 @@ class ChatExecutor(
         val eventHandler = buildEventHandler(createEventEmitter())
         val executor = ToolExecutor(
             client, registry,
-            maxIterations = ProviderManager.getAgentMaxIterations(context),
+            maxIterations = config.agentMaxIterations,
             eventListener = listener,
             eventHandler = eventHandler,
             tracing = getTracing(),
-            maxToolResultLength = ProviderManager.getMaxToolResultLength(context)
+            maxToolResultLength = config.maxToolResultLength
         )
         val agentRunId = getTracing()?.newRunId() ?: java.util.UUID.randomUUID().toString()
         eventHandler?.fireAgentStarting(AgentStartingContext(
             runId = agentRunId,
             agentId = currentConversationId() ?: "unknown",
-            model = config.model,
+            model = providerConfig.model,
             toolCount = registry.descriptors().size
         ))
 
         var messagesWithPlan: List<ChatMessage>? = null
-        if (ProviderManager.isPlannerEnabled(context)) {
+        if (config.plannerEnabled) {
             try {
                 val planPrompt = Prompt.build("planner") {
                     for (msg in trimmedMessages) {
@@ -329,13 +328,13 @@ class ChatExecutor(
                         }
                     }
                 }
-                val planSession = LLMWriteSession(client, config.model, planPrompt)
-                val planReadSession = com.lhzkml.jasmine.core.prompt.llm.LLMReadSession(client, config.model, planPrompt)
+                val planSession = LLMWriteSession(client, providerConfig.model, planPrompt)
+                val planReadSession = com.lhzkml.jasmine.core.prompt.llm.LLMReadSession(client, providerConfig.model, planPrompt)
                 val planContext = AgentGraphContext(
                     agentId = currentConversationId() ?: "planner",
                     runId = agentRunId,
                     client = client,
-                    model = config.model,
+                    model = providerConfig.model,
                     session = planSession,
                     readSession = planReadSession,
                     toolRegistry = registry,
@@ -345,8 +344,8 @@ class ChatExecutor(
                     tracing = getTracing()
                 )
 
-                val maxIter = ProviderManager.getPlannerMaxIterations(context)
-                val useCritic = ProviderManager.isPlannerCriticEnabled(context)
+                val maxIter = config.plannerMaxIterations
+                val useCritic = config.plannerCriticEnabled
 
                 val plan: com.lhzkml.jasmine.core.agent.planner.SimplePlan
                 var criticInfo = ""
@@ -393,7 +392,7 @@ class ChatExecutor(
         }
 
         val effectiveMessages = messagesWithPlan ?: trimmedMessages
-        val agentStrategy = ProviderManager.getAgentStrategy(context)
+        val agentStrategy = config.agentStrategy
 
         when (agentStrategy) {
             com.lhzkml.jasmine.core.config.AgentStrategyType.SIMPLE_LOOP -> {
@@ -407,13 +406,13 @@ class ChatExecutor(
                     }
                 }.copy(maxTokens = maxTokens, samplingParams = samplingParams)
 
-                val simpleToolChoice = when (ProviderManager.getToolChoiceMode(context)) {
+                val simpleToolChoice = when (config.toolChoiceMode) {
                     com.lhzkml.jasmine.core.config.ToolChoiceMode.DEFAULT -> null
                     com.lhzkml.jasmine.core.config.ToolChoiceMode.AUTO -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Auto
                     com.lhzkml.jasmine.core.config.ToolChoiceMode.REQUIRED -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Required
                     com.lhzkml.jasmine.core.config.ToolChoiceMode.NONE -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.None
                     com.lhzkml.jasmine.core.config.ToolChoiceMode.NAMED -> {
-                        val name = ProviderManager.getToolChoiceNamedTool(context)
+                        val name = config.toolChoiceNamedTool
                         if (name.isNotEmpty()) com.lhzkml.jasmine.core.prompt.model.ToolChoice.Named(name) else null
                     }
                 }
@@ -423,7 +422,7 @@ class ChatExecutor(
 
                 val proc = streamProcessor
                 val streamResult = executor.executeStream(
-                    agentPrompt, config.model
+                    agentPrompt, providerConfig.model
                 ) { chunk ->
                     if (proc != null) sendUpdate(proc.onChunk(chunk))
                     else withContext(Dispatchers.Main) { chatStateManager.handleChunk(chunk) }
@@ -454,7 +453,7 @@ class ChatExecutor(
 
             com.lhzkml.jasmine.core.config.AgentStrategyType.SINGLE_RUN_GRAPH -> {
                 val graphResult = executeGraphStrategy(
-                    message, client, config, registry, effectiveMessages,
+                    message, client, providerConfig, registry, effectiveMessages,
                     maxTokens, samplingParams, agentRunId
                 )
                 result = graphResult ?: ""
@@ -486,28 +485,28 @@ class ChatExecutor(
     private suspend fun executeGraphStrategy(
         message: String,
         client: ChatClient,
-        config: ActiveProviderConfig,
+        providerConfig: ActiveProviderConfig,
         registry: ToolRegistry,
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
         samplingParams: com.lhzkml.jasmine.core.prompt.model.SamplingParams,
         agentRunId: String
     ): String? {
-        val toolCallMode = when (ProviderManager.getGraphToolCallMode(context)) {
+        val toolCallMode = when (config.graphToolCallMode) {
             com.lhzkml.jasmine.core.config.GraphToolCallMode.SEQUENTIAL -> ToolCalls.SEQUENTIAL
             com.lhzkml.jasmine.core.config.GraphToolCallMode.PARALLEL -> ToolCalls.PARALLEL
             com.lhzkml.jasmine.core.config.GraphToolCallMode.SINGLE_RUN_SEQUENTIAL -> ToolCalls.SINGLE_RUN_SEQUENTIAL
         }
 
-        val toolSelStrategy = when (ProviderManager.getToolSelectionStrategy(context)) {
+        val toolSelStrategy = when (config.toolSelectionStrategy) {
             com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.ALL -> ToolSelectionStrategy.ALL
             com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.NONE -> ToolSelectionStrategy.NONE
             com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.BY_NAME -> {
-                val names = ProviderManager.getToolSelectionNames(context)
+                val names = config.toolSelectionNames
                 if (names.isNotEmpty()) ToolSelectionStrategy.ByName(names) else ToolSelectionStrategy.ALL
             }
             com.lhzkml.jasmine.core.config.ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK -> {
-                val desc = ProviderManager.getToolSelectionTaskDesc(context)
+                val desc = config.toolSelectionTaskDesc
                 if (desc.isNotEmpty()) ToolSelectionStrategy.AutoSelectForTask(desc) else ToolSelectionStrategy.ALL
             }
         }
@@ -516,7 +515,7 @@ class ChatExecutor(
 
         val graphAgent = GraphAgent(
             client = client,
-            model = config.model,
+            model = providerConfig.model,
             strategy = strategy,
             toolRegistry = registry,
             tracing = getTracing(),
@@ -534,14 +533,14 @@ class ChatExecutor(
             }
         }.copy(maxTokens = maxTokens, samplingParams = samplingParams)
 
-        val toolChoiceMode = ProviderManager.getToolChoiceMode(context)
+        val toolChoiceMode = config.toolChoiceMode
         val toolChoice: com.lhzkml.jasmine.core.prompt.model.ToolChoice? = when (toolChoiceMode) {
             com.lhzkml.jasmine.core.config.ToolChoiceMode.DEFAULT -> null
             com.lhzkml.jasmine.core.config.ToolChoiceMode.AUTO -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Auto
             com.lhzkml.jasmine.core.config.ToolChoiceMode.REQUIRED -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.Required
             com.lhzkml.jasmine.core.config.ToolChoiceMode.NONE -> com.lhzkml.jasmine.core.prompt.model.ToolChoice.None
             com.lhzkml.jasmine.core.config.ToolChoiceMode.NAMED -> {
-                val name = ProviderManager.getToolChoiceNamedTool(context)
+                val name = config.toolChoiceNamedTool
                 if (name.isNotEmpty()) com.lhzkml.jasmine.core.prompt.model.ToolChoice.Named(name) else null
             }
         }
@@ -606,22 +605,22 @@ class ChatExecutor(
 
     private suspend fun executeChatMode(
         client: ChatClient,
-        config: ActiveProviderConfig,
+        providerConfig: ActiveProviderConfig,
         trimmedMessages: List<ChatMessage>,
         maxTokens: Int,
         samplingParams: com.lhzkml.jasmine.core.prompt.model.SamplingParams
     ): Triple<String, Usage?, String> {
-        val resumeEnabled = ProviderManager.isStreamResumeEnabled(context)
+        val resumeEnabled = config.streamResumeEnabled
 
         val proc = streamProcessor
         val streamResult = if (resumeEnabled) {
             val helper = StreamResumeHelper(
-                maxResumes = ProviderManager.getStreamResumeMaxRetries(context)
+                maxResumes = config.streamResumeMaxRetries
             )
             helper.streamWithResume(
                 client = client,
                 messages = trimmedMessages,
-                model = config.model,
+                model = providerConfig.model,
                 maxTokens = maxTokens,
                 samplingParams = samplingParams,
                 onChunk = { chunk ->
@@ -639,7 +638,7 @@ class ChatExecutor(
             )
         } else {
             client.chatStreamWithUsageAndThinking(
-                trimmedMessages, config.model, maxTokens, samplingParams,
+                trimmedMessages, providerConfig.model, maxTokens, samplingParams,
                 onChunk = { chunk ->
                     if (proc != null) sendUpdate(proc.onChunk(chunk))
                     else withContext(Dispatchers.Main) { chatStateManager.handleChunk(chunk) }

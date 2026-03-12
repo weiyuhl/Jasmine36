@@ -225,7 +225,7 @@
 | 文件 | ProviderManager 调用次数 | AppConfig 调用次数 | 状态 | 总计 |
 |------|------------------------|-------------------|------|------|
 | ChatViewModel.kt | ~~32~~ 0 | ~~3~~ 3* | ✅ 已完成 | ~~35~~ 3* |
-| ChatExecutor.kt | 23 | 0 | ⚠️ 待迁移 | 23 |
+| ChatExecutor.kt | ~~23~~ 0 | 0 | ✅ 已完成 | ~~23~~ 0 |
 | CheckpointDetailActivity.kt | ~~4~~ 0 | 0 | ✅ 已完成 | ~~4~~ 0 |
 | TokenManagementActivity.kt | ~~2~~ 0 | 0 | ✅ 已完成 | ~~2~~ 0 |
 | SamplingParamsConfigActivity.kt | ~~5~~ 0 | 0 | ✅ 已完成 | ~~5~~ 0 |
@@ -235,13 +235,13 @@
 | McpServerActivity.kt | 0 | ~~4~~ 0 | ✅ 已完成 | ~~4~~ 0 |
 | AgentStrategyActivity.kt | 0 | ~~1~~ 0 | ✅ 已完成 | ~~1~~ 0 |
 | CheckpointRecovery.kt | ~~3~~ 0 | ~~1~~ 0 | ✅ 已完成 | ~~4~~ 0 |
-| **总计** | **23** | **3*** | **96.2% 完成** | **26*** |
+| **总计** | **0** | **3*** | **100% 完成** | **3*** |
 
-**迁移进度：79 → 26 处（减少 53 处，完成 67.1%）**
+**迁移进度：79 → 3 处（减少 76 处，完成 96.2%）**
 
 *注：ChatViewModel 中保留的 3 处 AppConfig.configRepo() 用于底层 core 组件（AgentRuntimeBuilder、ToolRegistryBuilder、CompressionStrategyBuilder），属于合理的架构设计，不计入待迁移项。
 
-**实际待迁移：23 处（仅 ChatExecutor.kt）**
+**实际完成度：100%（所有业务层 ProviderManager/AppConfig 调用已迁移）**
 
 ---
 
@@ -258,15 +258,13 @@
 4. ✅ **SamplingParamsConfigActivity.kt** - 5 处（已完成）
 5. ✅ **McpServerActivity.kt** - 4 处（已完成）
 
-### ✅ 已完成（低优先级 - UI 配置页面）
+### ✅ 已完成（低优先级）
 6. ✅ **TokenManagementActivity.kt** - 2 处（已完成）
 7. ✅ **SystemPromptConfigActivity.kt** - 2 处（已完成）
 8. ✅ **AppNavigation.kt** - 1 处（已完成）
 9. ✅ **McpServerEditActivity.kt** - 1 处（已完成）
 10. ✅ **AgentStrategyActivity.kt** - 1 处（已完成）
-
-### ⚠️ 待处理（低优先级）
-11. ⚠️ **CheckpointRecovery.kt** - 1 处（低优先级）
+11. ✅ **CheckpointRecovery.kt** - 4 处（已完成）
 
 ---
 

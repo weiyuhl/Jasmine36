@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.ChatExecutor
+import com.lhzkml.jasmine.ChatExecutorConfig
 import com.lhzkml.jasmine.ChatItem
 import com.lhzkml.jasmine.ChatStopSignal
 import com.lhzkml.jasmine.ChatStateManager
@@ -792,8 +793,36 @@ class ChatViewModel(
             showStartupRecoveryDialog = { t, m -> showStartupRecoveryDialog(t, m) }
         )
 
+        // 构建 ChatExecutor 配置
+        val executorConfig = ChatExecutorConfig(
+            toolsEnabled = toolSettingsRepository.isToolsEnabled(),
+            defaultSystemPrompt = llmSettingsRepository.getDefaultSystemPrompt(),
+            maxTokens = llmSettingsRepository.getMaxTokens(),
+            temperature = llmSettingsRepository.getTemperature(),
+            topP = llmSettingsRepository.getTopP(),
+            topK = llmSettingsRepository.getTopK(),
+            isAgentMode = sessionRepository.isAgentMode(),
+            workspacePath = sessionRepository.getWorkspacePath(),
+            compressionEnabled = compressionSettingsRepository.isCompressionEnabled(),
+            agentStrategy = agentStrategyRepository.getAgentStrategy(),
+            agentMaxIterations = agentStrategyRepository.getAgentMaxIterations(),
+            maxToolResultLength = agentStrategyRepository.getMaxToolResultLength(),
+            toolChoiceMode = agentStrategyRepository.getToolChoiceMode(),
+            toolChoiceNamedTool = agentStrategyRepository.getToolChoiceNamedTool(),
+            graphToolCallMode = agentStrategyRepository.getGraphToolCallMode(),
+            toolSelectionStrategy = agentStrategyRepository.getToolSelectionStrategy(),
+            toolSelectionNames = agentStrategyRepository.getToolSelectionNames(),
+            toolSelectionTaskDesc = agentStrategyRepository.getToolSelectionTaskDesc(),
+            plannerEnabled = plannerSettingsRepository.isPlannerEnabled(),
+            plannerMaxIterations = plannerSettingsRepository.getPlannerMaxIterations(),
+            plannerCriticEnabled = plannerSettingsRepository.isPlannerCriticEnabled(),
+            streamResumeEnabled = timeoutSettingsRepository.isStreamResumeEnabled(),
+            streamResumeMaxRetries = timeoutSettingsRepository.getStreamResumeMaxRetries()
+        )
+
         val executor = ChatExecutor(
             context = ctx,
+            config = executorConfig,
             chatStateManager = chatStateManager,
             conversationRepo = conversationRepo,
             streamUpdateChannel = streamChannel,
