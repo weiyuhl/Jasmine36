@@ -34,8 +34,11 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.lhzkml.jasmine.repository.CheckpointRepository
+import org.koin.android.ext.android.inject
 
 class CheckpointDetailActivity : ComponentActivity() {
+    private val checkpointRepository: CheckpointRepository by inject()
 
     companion object {
         const val EXTRA_AGENT_ID = "agent_id"
@@ -43,8 +46,6 @@ class CheckpointDetailActivity : ComponentActivity() {
         const val RESULT_DELETED = 100
         const val RESULT_RESTORED = 101
     }
-
-    private val checkpointService: CheckpointService? get() = AppConfig.checkpointService()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,7 +62,7 @@ class CheckpointDetailActivity : ComponentActivity() {
             CheckpointDetailScreen(
                 agentId = agentId,
                 checkpointId = checkpointId,
-                service = checkpointService,
+                repository = checkpointRepository,
                 onBack = { finish() },
                 onRestored = {
                     setResult(RESULT_RESTORED)
@@ -81,7 +82,7 @@ class CheckpointDetailActivity : ComponentActivity() {
 fun CheckpointDetailScreen(
     agentId: String,
     checkpointId: String,
-    service: CheckpointService?,
+    repository: CheckpointRepository,
     onBack: () -> Unit,
     onRestored: (Intent) -> Unit,
     onDeleted: () -> Unit
@@ -94,7 +95,7 @@ fun CheckpointDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val cp = withContext(Dispatchers.IO) { service?.getCheckpoint(agentId, checkpointId) }
+        val cp = repository.getCheckpoint(agentId, checkpointId)
         if (cp == null) {
             Toast.makeText(context, "检查点不存在", Toast.LENGTH_SHORT).show()
             onBack()
@@ -234,11 +235,11 @@ fun CheckpointDetailScreen(
                                         workspacePath = if (ProviderManager.isAgentMode(context))
                                             ProviderManager.getWorkspacePath(context) else ""
                                     )
-                                    val rebuiltHistory = service?.rebuildHistory(
+                                    val rebuiltHistory = repository.rebuildHistory(
                                         agentId = agentId,
                                         upToCheckpointId = cp.checkpointId,
                                         systemPrompt = systemPrompt
-                                    ) ?: emptyList()
+                                    )
                                     for (msg in rebuiltHistory) {
                                         repo.addMessage(cid, msg)
                                     }
@@ -279,7 +280,7 @@ fun CheckpointDetailScreen(
                     onClick = {
                         showDeleteDialog = false
                         scope.launch {
-                            withContext(Dispatchers.IO) { service?.deleteCheckpoint(agentId, cp.checkpointId) }
+                            repository.deleteCheckpoint(agentId, cp.checkpointId)
                             Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
                             onDeleted()
                         }

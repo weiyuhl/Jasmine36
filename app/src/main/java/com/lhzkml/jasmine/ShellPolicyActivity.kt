@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.AppConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -23,19 +22,23 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.tools.ShellPolicy
+import com.lhzkml.jasmine.repository.ShellPolicyRepository
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.JasmineTheme
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class ShellPolicyActivity : ComponentActivity() {
+    private val repository: ShellPolicyRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 ShellPolicyScreen(
+                    repository = repository,
                     onBack = { finish() }
                 )
             }
@@ -44,19 +47,20 @@ class ShellPolicyActivity : ComponentActivity() {
 }
 
 @Composable
-fun ShellPolicyScreen(onBack: () -> Unit) {
-    val config = AppConfig.configRepo()
-    
-    var selectedPolicy by remember { mutableStateOf(config.getShellPolicy()) }
-    var blacklistText by remember { mutableStateOf(config.getShellBlacklist().joinToString("\n")) }
-    var whitelistText by remember { mutableStateOf(config.getShellWhitelist().joinToString("\n")) }
+fun ShellPolicyScreen(
+    repository: ShellPolicyRepository,
+    onBack: () -> Unit
+) {
+    var selectedPolicy by remember { mutableStateOf(repository.getShellPolicy()) }
+    var blacklistText by remember { mutableStateOf(repository.getShellBlacklist().joinToString("\n")) }
+    var whitelistText by remember { mutableStateOf(repository.getShellWhitelist().joinToString("\n")) }
     
     DisposableEffect(Unit) {
         onDispose {
             val blacklist = blacklistText.lines().filter { it.isNotBlank() }
             val whitelist = whitelistText.lines().filter { it.isNotBlank() }
-            config.setShellBlacklist(blacklist)
-            config.setShellWhitelist(whitelist)
+            repository.setShellBlacklist(blacklist)
+            repository.setShellWhitelist(whitelist)
         }
     }
     
@@ -121,7 +125,7 @@ fun ShellPolicyScreen(onBack: () -> Unit) {
                                 selected = selectedPolicy == ShellPolicy.MANUAL,
                                 onClick = {
                                     selectedPolicy = ShellPolicy.MANUAL
-                                    config.setShellPolicy(ShellPolicy.MANUAL)
+                                    repository.setShellPolicy(ShellPolicy.MANUAL)
                                 }
                             )
                             .padding(vertical = 4.dp),
@@ -131,7 +135,7 @@ fun ShellPolicyScreen(onBack: () -> Unit) {
                             selected = selectedPolicy == ShellPolicy.MANUAL,
                             onClick = {
                                 selectedPolicy = ShellPolicy.MANUAL
-                                config.setShellPolicy(ShellPolicy.MANUAL)
+                                repository.setShellPolicy(ShellPolicy.MANUAL)
                             }
                         )
                         CustomText(
@@ -149,7 +153,7 @@ fun ShellPolicyScreen(onBack: () -> Unit) {
                                 selected = selectedPolicy == ShellPolicy.BLACKLIST,
                                 onClick = {
                                     selectedPolicy = ShellPolicy.BLACKLIST
-                                    config.setShellPolicy(ShellPolicy.BLACKLIST)
+                                    repository.setShellPolicy(ShellPolicy.BLACKLIST)
                                 }
                             )
                             .padding(vertical = 4.dp),
@@ -159,7 +163,7 @@ fun ShellPolicyScreen(onBack: () -> Unit) {
                             selected = selectedPolicy == ShellPolicy.BLACKLIST,
                             onClick = {
                                 selectedPolicy = ShellPolicy.BLACKLIST
-                                config.setShellPolicy(ShellPolicy.BLACKLIST)
+                                repository.setShellPolicy(ShellPolicy.BLACKLIST)
                             }
                         )
                         CustomText(
@@ -177,7 +181,7 @@ fun ShellPolicyScreen(onBack: () -> Unit) {
                                 selected = selectedPolicy == ShellPolicy.WHITELIST,
                                 onClick = {
                                     selectedPolicy = ShellPolicy.WHITELIST
-                                    config.setShellPolicy(ShellPolicy.WHITELIST)
+                                    repository.setShellPolicy(ShellPolicy.WHITELIST)
                                 }
                             )
                             .padding(vertical = 4.dp),
@@ -187,7 +191,7 @@ fun ShellPolicyScreen(onBack: () -> Unit) {
                             selected = selectedPolicy == ShellPolicy.WHITELIST,
                             onClick = {
                                 selectedPolicy = ShellPolicy.WHITELIST
-                                config.setShellPolicy(ShellPolicy.WHITELIST)
+                                repository.setShellPolicy(ShellPolicy.WHITELIST)
                             }
                         )
                         CustomText(

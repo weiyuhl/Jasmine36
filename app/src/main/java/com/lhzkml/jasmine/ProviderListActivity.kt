@@ -24,15 +24,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.core.config.ProviderConfig
-import com.lhzkml.jasmine.config.AppConfig
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.ui.theme.Accent
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
 import com.lhzkml.jasmine.ui.components.*
+import com.lhzkml.jasmine.repository.ProviderRepository
+import com.lhzkml.jasmine.repository.RagConfigRepository
+import org.koin.android.ext.android.inject
 
 class ProviderListActivity : ComponentActivity() {
+    private val providerRepository: ProviderRepository by inject()
+    private val ragRepository: RagConfigRepository by inject()
 
     private val addProviderLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -46,6 +49,8 @@ class ProviderListActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ProviderListScreen(
+                repository = providerRepository,
+                ragRepository = ragRepository,
                 onBack = { finish() },
                 onProviderClick = { providerId ->
                     startActivity(Intent(this, ProviderConfigActivity::class.java).apply {
@@ -69,6 +74,8 @@ class ProviderListActivity : ComponentActivity() {
 
 @Composable
 fun ProviderListScreen(
+    repository: ProviderRepository,
+    ragRepository: RagConfigRepository,
     onBack: () -> Unit,
     onProviderClick: (String) -> Unit,
     onNavigateToEmbedding: () -> Unit = {},
@@ -76,8 +83,6 @@ fun ProviderListScreen(
     onNavigateToAddCustomProvider: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val config = AppConfig.configRepo()
-    val registry = AppConfig.providerRegistry()
     
     var refreshTrigger by remember { mutableStateOf(0) }
     var providerToDelete by remember { mutableStateOf<ProviderConfig?>(null) }
@@ -94,11 +99,11 @@ fun ProviderListScreen(
     }
 
     val providers by remember(refreshTrigger) {
-        mutableStateOf(registry.providers)
+        mutableStateOf(repository.getAllProviders())
     }
     
     val activeId by remember(refreshTrigger) {
-        mutableStateOf(config.getActiveProviderId())
+        mutableStateOf(repository.getActiveProviderId())
     }
     
     Column(
@@ -160,13 +165,13 @@ fun ProviderListScreen(
                     ),
                     isActive = false,
                     hasKey = run {
-                        val useLocal = ProviderManager.getRagEmbeddingUseLocal(context)
-                        if (useLocal) ProviderManager.getRagEmbeddingModelPath(context).isNotBlank()
-                        else ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank() && ProviderManager.getRagEmbeddingApiKey(context).isNotBlank()
+                        val useLocal = ragRepository.getRagEmbeddingUseLocal()
+                        if (useLocal) ragRepository.getRagEmbeddingModelPath().isNotBlank()
+                        else ragRepository.getRagEmbeddingBaseUrl().isNotBlank() && ragRepository.getRagEmbeddingApiKey().isNotBlank()
                     },
                     model = when {
-                        ProviderManager.getRagEmbeddingUseLocal(context) -> if (ProviderManager.getRagEmbeddingModelPath(context).isNotBlank()) "本地 MNN · 已配置" else "未配置"
-                        else -> if (ProviderManager.getRagEmbeddingBaseUrl(context).isNotBlank()) "远程 API · 已配置" else "未配置"
+                        ragRepository.getRagEmbeddingUseLocal() -> if (ragRepository.getRagEmbeddingModelPath().isNotBlank()) "本地 MNN · 已配置" else "未配置"
+                        else -> if (ragRepository.getRagEmbeddingBaseUrl().isNotBlank()) "远程 API · 已配置" else "未配置"
                     },
                     onSwitchChange = { },
                     onClick = { onNavigateToEmbedding() },
@@ -179,25 +184,25 @@ fun ProviderListScreen(
                 ProviderItem(
                     provider = provider,
                     isActive = provider.id == activeId,
-                    hasKey = isLocal || config.getApiKey(provider.id) != null,
-                    model = if (isLocal) "本地推理" else registry.getModel(provider.id),
+                    hasKey = isLocal || repository.getApiKey(provider.id) != null,
+                    model = if (isLocal) "本地推理" else repository.getModel(provider.id),
                     onSwitchChange = { checked ->
                         if (checked) {
                             if (isLocal) {
-                                config.setActiveProviderId(provider.id)
+                                repository.setActiveProviderId(provider.id)
                                 refreshTrigger++
                             } else {
-                                val key = config.getApiKey(provider.id)
+                                val key = repository.getApiKey(provider.id)
                                 if (key == null) {
                                     onProviderClick(provider.id)
                                 } else {
-                                    config.setActiveProviderId(provider.id)
+                                    repository.setActiveProviderId(provider.id)
                                     refreshTrigger++
                                 }
                             }
                         } else {
-                            if (config.getActiveProviderId() == provider.id) {
-                                config.setActiveProviderId("")
+                            if (repository.getActiveProviderId() == provider.id) {
+                                repository.setActiveProviderId("")
                                 refreshTrigger++
                             }
                         }
@@ -245,10 +250,10 @@ fun ProviderListScreen(
             provider = provider,
             onDismiss = { providerToDelete = null },
             onConfirm = {
-                if (config.getActiveProviderId() == provider.id) {
-                    config.setActiveProviderId("")
+                if (repository.getActiveProviderId() == provider.id) {
+                    repository.setActiveProviderId("")
                 }
-                val success = registry.unregisterProviderPersistent(provider.id)
+                val success = repository.unregisterProvider(provider.id)
                 if (success) {
                     Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
                     refreshTrigger++

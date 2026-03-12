@@ -25,22 +25,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy
 import com.lhzkml.jasmine.core.config.SnapshotStorageType
+import com.lhzkml.jasmine.repository.SnapshotSettingsRepository
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class SnapshotConfigActivity : ComponentActivity() {
+    private val repository: SnapshotSettingsRepository by inject()
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 SnapshotConfigScreen(
+                    repository = repository,
                     onBack = { finish() },
                     onViewCheckpoints = {
-                        val config = AppConfig.configRepo()
-                        if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
+                        if (repository.getSnapshotStorage() != SnapshotStorageType.FILE) {
                             Toast.makeText(this, "内存存储模式下无法查看检查点，请切换到文件存储", Toast.LENGTH_SHORT).show()
                         } else {
                             startActivity(Intent(this, CheckpointManagerActivity::class.java))
@@ -63,8 +66,7 @@ class SnapshotConfigActivity : ComponentActivity() {
     }
 
     private fun getCheckpointCountText(): String {
-        val config = AppConfig.configRepo()
-        return if (config.getSnapshotStorage() == SnapshotStorageType.FILE) {
+        return if (repository.getSnapshotStorage() == SnapshotStorageType.FILE) {
             val snapshotDir = getExternalFilesDir("snapshots")
             if (snapshotDir != null && snapshotDir.exists()) {
                 val agentDirs = snapshotDir.listFiles()?.filter { it.isDirectory } ?: emptyList()
@@ -85,20 +87,19 @@ class SnapshotConfigActivity : ComponentActivity() {
 
 @Composable
 fun SnapshotConfigScreen(
+    repository: SnapshotSettingsRepository,
     onBack: () -> Unit,
     onViewCheckpoints: () -> Unit,
     onClearCheckpoints: () -> Unit,
     onPerformClear: ((() -> Unit) -> Unit) = { it() },
     getCheckpointCount: () -> String
 ) {
-    val config = AppConfig.configRepo()
-    
-    var enabled by remember { mutableStateOf(config.isSnapshotEnabled()) }
+    var enabled by remember { mutableStateOf(repository.isSnapshotEnabled()) }
     var showMemoryInfoDialog by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
-    var storageType by remember { mutableStateOf(config.getSnapshotStorage()) }
-    var autoCheckpoint by remember { mutableStateOf(config.isSnapshotAutoCheckpoint()) }
-    var rollbackStrategy by remember { mutableStateOf(config.getSnapshotRollbackStrategy()) }
+    var storageType by remember { mutableStateOf(repository.getSnapshotStorage()) }
+    var autoCheckpoint by remember { mutableStateOf(repository.isSnapshotAutoCheckpoint()) }
+    var rollbackStrategy by remember { mutableStateOf(repository.getSnapshotRollbackStrategy()) }
     var checkpointCount by remember { mutableStateOf(getCheckpointCount()) }
 
     // 监听 onResume 事件刷新检查点计数
@@ -117,10 +118,10 @@ fun SnapshotConfigScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            config.setSnapshotEnabled(enabled)
-            config.setSnapshotStorage(storageType)
-            config.setSnapshotAutoCheckpoint(autoCheckpoint)
-            config.setSnapshotRollbackStrategy(rollbackStrategy)
+            repository.setSnapshotEnabled(enabled)
+            repository.setSnapshotStorage(storageType)
+            repository.setSnapshotAutoCheckpoint(autoCheckpoint)
+            repository.setSnapshotRollbackStrategy(rollbackStrategy)
         }
     }
 
@@ -194,7 +195,7 @@ fun SnapshotConfigScreen(
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
-                        config.setSnapshotEnabled(it)
+                        repository.setSnapshotEnabled(it)
                     },
                     checkedThumbColor = Color.White,
                     checkedTrackColor = Accent,
@@ -221,7 +222,7 @@ fun SnapshotConfigScreen(
                     isSelected = storageType == SnapshotStorageType.MEMORY,
                     onClick = { 
                         storageType = SnapshotStorageType.MEMORY
-                        config.setSnapshotStorage(SnapshotStorageType.MEMORY)
+                        repository.setSnapshotStorage(SnapshotStorageType.MEMORY)
                         checkpointCount = getCheckpointCount()
                     }
                 )
@@ -235,7 +236,7 @@ fun SnapshotConfigScreen(
                     isSelected = storageType == SnapshotStorageType.FILE,
                     onClick = { 
                         storageType = SnapshotStorageType.FILE
-                        config.setSnapshotStorage(SnapshotStorageType.FILE)
+                        repository.setSnapshotStorage(SnapshotStorageType.FILE)
                         checkpointCount = getCheckpointCount()
                     }
                 )
@@ -271,7 +272,7 @@ fun SnapshotConfigScreen(
                         checked = autoCheckpoint,
                         onCheckedChange = { 
                             autoCheckpoint = it
-                            config.setSnapshotAutoCheckpoint(it)
+                            repository.setSnapshotAutoCheckpoint(it)
                         },
                         checkedThumbColor = Color.White,
                         checkedTrackColor = Accent,
@@ -299,7 +300,7 @@ fun SnapshotConfigScreen(
                     isSelected = rollbackStrategy == RollbackStrategy.RESTART_FROM_NODE,
                     onClick = { 
                         rollbackStrategy = RollbackStrategy.RESTART_FROM_NODE
-                        config.setSnapshotRollbackStrategy(RollbackStrategy.RESTART_FROM_NODE)
+                        repository.setSnapshotRollbackStrategy(RollbackStrategy.RESTART_FROM_NODE)
                     }
                 )
 
@@ -312,7 +313,7 @@ fun SnapshotConfigScreen(
                     isSelected = rollbackStrategy == RollbackStrategy.SKIP_NODE,
                     onClick = { 
                         rollbackStrategy = RollbackStrategy.SKIP_NODE
-                        config.setSnapshotRollbackStrategy(RollbackStrategy.SKIP_NODE)
+                        repository.setSnapshotRollbackStrategy(RollbackStrategy.SKIP_NODE)
                     }
                 )
 
@@ -325,7 +326,7 @@ fun SnapshotConfigScreen(
                     isSelected = rollbackStrategy == RollbackStrategy.USE_DEFAULT_OUTPUT,
                     onClick = { 
                         rollbackStrategy = RollbackStrategy.USE_DEFAULT_OUTPUT
-                        config.setSnapshotRollbackStrategy(RollbackStrategy.USE_DEFAULT_OUTPUT)
+                        repository.setSnapshotRollbackStrategy(RollbackStrategy.USE_DEFAULT_OUTPUT)
                     }
                 )
 
@@ -372,7 +373,7 @@ fun SnapshotConfigScreen(
                             .border(1.dp, Color(0xFFE53935), RoundedCornerShape(8.dp))
                             .background(Color(0xFFE53935).copy(alpha = 0.06f))
                             .clickable {
-                                if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
+                                if (repository.getSnapshotStorage() != SnapshotStorageType.FILE) {
                                     showMemoryInfoDialog = true
                                 } else {
                                     showClearConfirmDialog = true

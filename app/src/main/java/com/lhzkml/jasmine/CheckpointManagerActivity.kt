@@ -34,10 +34,11 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.lhzkml.jasmine.repository.CheckpointRepository
+import org.koin.android.ext.android.inject
 
 class CheckpointManagerActivity : ComponentActivity() {
-
-    private val checkpointService: CheckpointService? get() = AppConfig.checkpointService()
+    private val checkpointRepository: CheckpointRepository by inject()
 
     private var refreshTrigger = mutableIntStateOf(0)
 
@@ -55,7 +56,7 @@ class CheckpointManagerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             CheckpointManagerScreen(
-                service = checkpointService,
+                repository = checkpointRepository,
                 refreshTrigger = refreshTrigger.intValue,
                 onBack = { finish() },
                 onOpenDetail = { agentId, cp ->
@@ -66,7 +67,7 @@ class CheckpointManagerActivity : ComponentActivity() {
                 },
                 onDeleteSession = { agentId ->
                     kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                        checkpointService?.deleteSession(agentId)
+                        checkpointRepository.deleteSession(agentId)
                         withContext(Dispatchers.Main) {
                             Toast.makeText(this@CheckpointManagerActivity, "会话已清除", Toast.LENGTH_SHORT).show()
                             refreshTrigger.intValue++
@@ -75,7 +76,7 @@ class CheckpointManagerActivity : ComponentActivity() {
                 },
                 onClearAll = {
                     kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                        checkpointService?.clearAll()
+                        checkpointRepository.clearAll()
                         withContext(Dispatchers.Main) {
                             Toast.makeText(this@CheckpointManagerActivity, "已清除", Toast.LENGTH_SHORT).show()
                             refreshTrigger.intValue++
@@ -101,7 +102,7 @@ sealed class CheckpointListItem {
 
 @Composable
 fun CheckpointManagerScreen(
-    service: CheckpointService?,
+    repository: CheckpointRepository,
     refreshTrigger: Int,
     onBack: () -> Unit,
     onOpenDetail: (String, AgentCheckpoint) -> Unit,
@@ -116,28 +117,21 @@ fun CheckpointManagerScreen(
     var sessionToDelete by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(refreshTrigger) {
-        if (service == null) {
-            isEmpty = true; statsText = "暂无检查点"; return@LaunchedEffect
+        val sessions = repository.listAllSessions()
+        val stats = repository.getStats()
+        val list = mutableListOf<CheckpointListItem>()
+        for (session in sessions) {
+            list.add(CheckpointListItem.SessionHeader(session.agentId, session.checkpoints.size))
+            for (cp in session.checkpoints) {
+                list.add(CheckpointListItem.CheckpointEntry(session.agentId, cp))
+            }
         }
-        withContext(Dispatchers.IO) {
-            val sessions = service.listAllSessions()
-            val stats = service.getStats()
-            val list = mutableListOf<CheckpointListItem>()
-            for (session in sessions) {
-                list.add(CheckpointListItem.SessionHeader(session.agentId, session.checkpoints.size))
-                for (cp in session.checkpoints) {
-                    list.add(CheckpointListItem.CheckpointEntry(session.agentId, cp))
-                }
-            }
-            withContext(Dispatchers.Main) {
-                if (list.isEmpty()) {
-                    isEmpty = true; statsText = "暂无检查点"; items = emptyList()
-                } else {
-                    isEmpty = false
-                    statsText = "${stats.totalSessions} 个会话, ${stats.totalCheckpoints} 轮对话检查点"
-                    items = list
-                }
-            }
+        if (list.isEmpty()) {
+            isEmpty = true; statsText = "暂无检查点"; items = emptyList()
+        } else {
+            isEmpty = false
+            statsText = "${stats.totalSessions} 个会话, ${stats.totalCheckpoints} 轮对话检查点"
+            items = list
         }
     }
 

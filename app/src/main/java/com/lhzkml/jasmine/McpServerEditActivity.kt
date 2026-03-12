@@ -35,12 +35,15 @@ import com.lhzkml.jasmine.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.lhzkml.jasmine.repository.McpRepository
+import org.koin.android.ext.android.inject
 
 /**
  * MCP 服务器编辑界面 (Compose 版本)
  * 添加或编辑单个 MCP 服务器配置。
  */
 class McpServerEditActivity : ComponentActivity() {
+    private val mcpRepository: McpRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +53,7 @@ class McpServerEditActivity : ComponentActivity() {
         setContent {
             JasmineTheme {
                 McpServerEditScreen(
+                    repository = mcpRepository,
                     editIndex = editIndex,
                     onCancel = { finish() },
                     onSave = { configChanged ->
@@ -66,6 +70,7 @@ class McpServerEditActivity : ComponentActivity() {
 
 @Composable
 fun McpServerEditScreen(
+    repository: McpRepository,
     editIndex: Int,
     onCancel: () -> Unit,
     onSave: (Boolean) -> Unit  // 参数表示配置是否有变化
@@ -76,7 +81,7 @@ fun McpServerEditScreen(
     // 加载已有配置
     val existingServer = remember {
         if (editIndex >= 0) {
-            val servers = config.getMcpServers()
+            val servers = repository.getMcpServers()
             servers.getOrNull(editIndex)
         } else null
     }
@@ -160,7 +165,7 @@ fun McpServerEditScreen(
                     )
                     
                     if (editIndex >= 0) {
-                        val servers = config.getMcpServers()
+                        val servers = repository.getMcpServers()
                         val oldEnabled = servers.getOrNull(editIndex)?.enabled ?: true
                         config.updateMcpServer(editIndex, serverConfig.copy(enabled = oldEnabled))
                     } else {

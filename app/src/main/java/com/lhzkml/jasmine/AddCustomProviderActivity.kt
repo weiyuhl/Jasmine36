@@ -26,23 +26,27 @@ import com.lhzkml.jasmine.core.config.ProviderConfig
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.ui.components.*
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.repository.ProviderRepository
+import org.koin.android.ext.android.inject
 
 class AddCustomProviderActivity : ComponentActivity() {
+    private val providerRepository: ProviderRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AddCustomProviderScreen(onBack = { finish() })
+            AddCustomProviderScreen(
+                repository = providerRepository,
+                onBack = { finish() }
+            )
         }
     }
 }
 
 @Composable
-fun AddCustomProviderScreen(onBack: () -> Unit) {
+fun AddCustomProviderScreen(repository: ProviderRepository, onBack: () -> Unit) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val config = AppConfig.configRepo()
-    val registry = AppConfig.providerRegistry()
 
     var selectedApiType by remember { mutableStateOf(ApiType.OPENAI) }
     var providerId by remember { mutableStateOf("") }
@@ -74,9 +78,9 @@ fun AddCustomProviderScreen(onBack: () -> Unit) {
                     apiType = selectedApiType,
                     isCustom = true
                 )
-                val success = registry.registerProviderPersistent(provider)
+                val success = repository.registerProvider(provider)
                 if (success) {
-                    config.saveProviderCredentials(provider.id, "", baseUrl.trim(), model.trim())
+                    repository.saveProviderCredentials(provider.id, "", baseUrl.trim(), model.trim())
                     Toast.makeText(context, "添加成功", Toast.LENGTH_SHORT).show()
                     (context as? ComponentActivity)?.setResult(Activity.RESULT_OK)
                     (context as? ComponentActivity)?.finish()

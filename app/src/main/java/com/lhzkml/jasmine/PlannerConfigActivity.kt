@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.AppConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -22,15 +21,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.repository.PlannerSettingsRepository
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class PlannerConfigActivity : ComponentActivity() {
+    
+    private val plannerRepository: PlannerSettingsRepository by inject()
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 PlannerConfigScreen(
+                    repository = plannerRepository,
                     onBack = { finish() }
                 )
             }
@@ -39,12 +44,13 @@ class PlannerConfigActivity : ComponentActivity() {
 }
 
 @Composable
-fun PlannerConfigScreen(onBack: () -> Unit) {
-    val config = AppConfig.configRepo()
-    
-    var enabled by remember { mutableStateOf(config.isPlannerEnabled()) }
-    var maxIterations by remember { mutableStateOf(config.getPlannerMaxIterations().toString()) }
-    var criticEnabled by remember { mutableStateOf(config.isPlannerCriticEnabled()) }
+fun PlannerConfigScreen(
+    repository: PlannerSettingsRepository,
+    onBack: () -> Unit
+) {
+    var enabled by remember { mutableStateOf(repository.isPlannerEnabled()) }
+    var maxIterations by remember { mutableStateOf(repository.getPlannerMaxIterations().toString()) }
+    var criticEnabled by remember { mutableStateOf(repository.isPlannerCriticEnabled()) }
 
     fun getSummary(): String {
         val maxIter = maxIterations.toIntOrNull() ?: 1
@@ -54,10 +60,10 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
 
     DisposableEffect(Unit) {
         onDispose {
-            config.setPlannerEnabled(enabled)
+            repository.setPlannerEnabled(enabled)
             val maxIter = (maxIterations.trim().toIntOrNull() ?: 1).coerceIn(1, 20)
-            config.setPlannerMaxIterations(maxIter)
-            config.setPlannerCriticEnabled(criticEnabled)
+            repository.setPlannerMaxIterations(maxIter)
+            repository.setPlannerCriticEnabled(criticEnabled)
         }
     }
 
@@ -131,7 +137,7 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
-                        config.setPlannerEnabled(it)
+                        repository.setPlannerEnabled(it)
                     },
                     checkedThumbColor = Color.White,
                     checkedTrackColor = Accent,
@@ -170,7 +176,7 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                             maxIterations = it
                             val v = it.trim().toIntOrNull()
                             if (v != null) {
-                                config.setPlannerMaxIterations(v.coerceIn(1, 20))
+                                repository.setPlannerMaxIterations(v.coerceIn(1, 20))
                             }
                         },
                         textStyle = TextStyle(
@@ -226,7 +232,7 @@ fun PlannerConfigScreen(onBack: () -> Unit) {
                         checked = criticEnabled,
                         onCheckedChange = { 
                             criticEnabled = it
-                            config.setPlannerCriticEnabled(it)
+                            repository.setPlannerCriticEnabled(it)
                         },
                         checkedThumbColor = Color.White,
                         checkedTrackColor = Accent,

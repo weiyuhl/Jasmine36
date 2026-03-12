@@ -19,10 +19,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.agent.observe.trace.TraceEventCategory
+import com.lhzkml.jasmine.repository.TraceSettingsRepository
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 /**
  * 追踪配置界面
@@ -30,11 +31,14 @@ import com.lhzkml.jasmine.ui.components.*
  * UI 实时通知由事件处理器(EventHandler)负责。
  */
 class TraceConfigActivity : ComponentActivity() {
+    private val repository: TraceSettingsRepository by inject()
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 TraceConfigScreen(
+                    repository = repository,
                     onBack = { finish() },
                     getTraceDir = { getExternalFilesDir("traces")?.absolutePath ?: "未知路径" }
                 )
@@ -45,15 +49,15 @@ class TraceConfigActivity : ComponentActivity() {
 
 @Composable
 fun TraceConfigScreen(
+    repository: TraceSettingsRepository,
     onBack: () -> Unit,
     getTraceDir: () -> String
 ) {
-    val config = AppConfig.configRepo()
     
-    var enabled by remember { mutableStateOf(config.isTraceEnabled()) }
-    var fileOutputEnabled by remember { mutableStateOf(config.isTraceFileEnabled()) }
+    var enabled by remember { mutableStateOf(repository.isTraceEnabled()) }
+    var fileOutputEnabled by remember { mutableStateOf(repository.isTraceFileEnabled()) }
     
-    val currentFilter = config.getTraceEventFilter()
+    val currentFilter = remember { repository.getTraceEventFilter() }
     var filterAgent by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.AGENT in currentFilter) }
     var filterLLM by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.LLM in currentFilter) }
     var filterTool by remember { mutableStateOf(currentFilter.isEmpty() || TraceEventCategory.TOOL in currentFilter) }
@@ -76,7 +80,7 @@ fun TraceConfigScreen(
         val noneChecked = filters.isEmpty()
         
         val selected = if (allChecked || noneChecked) emptySet() else filters
-        config.setTraceEventFilter(selected)
+        repository.setTraceEventFilter(selected)
     }
 
     fun getConfigSummary(): String {
@@ -85,7 +89,7 @@ fun TraceConfigScreen(
         if (fileOutputEnabled) sb.append(" + 文件")
         
         sb.append("\n过滤: ")
-        val filter = config.getTraceEventFilter()
+        val filter = repository.getTraceEventFilter()
         if (filter.isEmpty()) {
             sb.append("全部事件")
         } else {
@@ -107,8 +111,8 @@ fun TraceConfigScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            config.setTraceEnabled(enabled)
-            config.setTraceFileEnabled(fileOutputEnabled)
+            repository.setTraceEnabled(enabled)
+            repository.setTraceFileEnabled(fileOutputEnabled)
             saveEventFilter()
         }
     }
@@ -183,7 +187,7 @@ fun TraceConfigScreen(
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
-                        config.setTraceEnabled(it)
+                        repository.setTraceEnabled(it)
                     },
                     checkedThumbColor = Color.White,
                     checkedTrackColor = Accent,
@@ -255,7 +259,7 @@ fun TraceConfigScreen(
                         checked = fileOutputEnabled,
                         onCheckedChange = { 
                             fileOutputEnabled = it
-                            config.setTraceFileEnabled(it)
+                            repository.setTraceFileEnabled(it)
                         },
                         checkedThumbColor = Color.White,
                         checkedTrackColor = Accent,

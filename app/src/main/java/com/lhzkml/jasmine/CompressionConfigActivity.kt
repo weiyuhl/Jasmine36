@@ -23,17 +23,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.prompt.llm.CompressionStrategyType
+import com.lhzkml.jasmine.repository.CompressionSettingsRepository
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class CompressionConfigActivity : ComponentActivity() {
+    private val repository: CompressionSettingsRepository by inject()
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 CompressionConfigScreen(
+                    repository = repository,
                     onBack = { finish() }
                 )
             }
@@ -51,48 +55,49 @@ class CompressionConfigActivity : ComponentActivity() {
 }
 
 @Composable
-fun CompressionConfigScreen(onBack: () -> Unit) {
-    val config = AppConfig.configRepo()
-    
-    var enabled by remember { mutableStateOf(config.isCompressionEnabled()) }
-    var selectedStrategy by remember { mutableStateOf(config.getCompressionStrategy()) }
+fun CompressionConfigScreen(
+    repository: CompressionSettingsRepository,
+    onBack: () -> Unit
+) {
+    var enabled by remember { mutableStateOf(repository.isCompressionEnabled()) }
+    var selectedStrategy by remember { mutableStateOf(repository.getCompressionStrategy()) }
     
     var maxTokens by remember { 
-        val value = config.getCompressionMaxTokens()
+        val value = repository.getCompressionMaxTokens()
         mutableStateOf(if (value > 0) value.toString() else "")
     }
-    var threshold by remember { mutableStateOf(config.getCompressionThreshold().toString()) }
-    var lastN by remember { mutableStateOf(config.getCompressionLastN().toString()) }
-    var chunkSize by remember { mutableStateOf(config.getCompressionChunkSize().toString()) }
-    var keepRecentRounds by remember { mutableStateOf(config.getCompressionKeepRecentRounds().toString()) }
+    var threshold by remember { mutableStateOf(repository.getCompressionThreshold().toString()) }
+    var lastN by remember { mutableStateOf(repository.getCompressionLastN().toString()) }
+    var chunkSize by remember { mutableStateOf(repository.getCompressionChunkSize().toString()) }
+    var keepRecentRounds by remember { mutableStateOf(repository.getCompressionKeepRecentRounds().toString()) }
 
     DisposableEffect(Unit) {
         onDispose {
-            config.setCompressionEnabled(enabled)
-            config.setCompressionStrategy(selectedStrategy)
+            repository.setCompressionEnabled(enabled)
+            repository.setCompressionStrategy(selectedStrategy)
             
             when (selectedStrategy) {
                 CompressionStrategyType.TOKEN_BUDGET -> {
                     val maxTokensValue = maxTokens.trim().toIntOrNull() ?: 0
                     val thresholdValue = (threshold.trim().toIntOrNull() ?: 75).coerceIn(1, 99)
-                    config.setCompressionMaxTokens(maxTokensValue)
-                    config.setCompressionThreshold(thresholdValue)
+                    repository.setCompressionMaxTokens(maxTokensValue)
+                    repository.setCompressionThreshold(thresholdValue)
                 }
                 CompressionStrategyType.LAST_N -> {
                     val n = (lastN.trim().toIntOrNull() ?: 10).coerceAtLeast(2)
-                    config.setCompressionLastN(n)
+                    repository.setCompressionLastN(n)
                 }
                 CompressionStrategyType.CHUNKED -> {
                     val size = (chunkSize.trim().toIntOrNull() ?: 20).coerceAtLeast(5)
-                    config.setCompressionChunkSize(size)
+                    repository.setCompressionChunkSize(size)
                 }
                 CompressionStrategyType.PROGRESSIVE -> {
                     val maxTokensValue = maxTokens.trim().toIntOrNull() ?: 0
                     val thresholdValue = (threshold.trim().toIntOrNull() ?: 75).coerceIn(1, 99)
                     val rounds = (keepRecentRounds.trim().toIntOrNull() ?: 4).coerceAtLeast(1)
-                    config.setCompressionMaxTokens(maxTokensValue)
-                    config.setCompressionThreshold(thresholdValue)
-                    config.setCompressionKeepRecentRounds(rounds)
+                    repository.setCompressionMaxTokens(maxTokensValue)
+                    repository.setCompressionThreshold(thresholdValue)
+                    repository.setCompressionKeepRecentRounds(rounds)
                 }
                 CompressionStrategyType.WHOLE_HISTORY -> { }
             }
@@ -169,7 +174,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
-                        config.setCompressionEnabled(it)
+                        repository.setCompressionEnabled(it)
                     },
                     checkedThumbColor = Color.White,
                     checkedTrackColor = Accent,
@@ -196,7 +201,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     isSelected = selectedStrategy == CompressionStrategyType.PROGRESSIVE,
                     onClick = {
                         selectedStrategy = CompressionStrategyType.PROGRESSIVE
-                        config.setCompressionStrategy(CompressionStrategyType.PROGRESSIVE)
+                        repository.setCompressionStrategy(CompressionStrategyType.PROGRESSIVE)
                     }
                 )
 
@@ -209,7 +214,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     isSelected = selectedStrategy == CompressionStrategyType.TOKEN_BUDGET,
                     onClick = { 
                         selectedStrategy = CompressionStrategyType.TOKEN_BUDGET
-                        config.setCompressionStrategy(CompressionStrategyType.TOKEN_BUDGET)
+                        repository.setCompressionStrategy(CompressionStrategyType.TOKEN_BUDGET)
                     }
                 )
 
@@ -222,7 +227,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     isSelected = selectedStrategy == CompressionStrategyType.WHOLE_HISTORY,
                     onClick = { 
                         selectedStrategy = CompressionStrategyType.WHOLE_HISTORY
-                        config.setCompressionStrategy(CompressionStrategyType.WHOLE_HISTORY)
+                        repository.setCompressionStrategy(CompressionStrategyType.WHOLE_HISTORY)
                     }
                 )
 
@@ -235,7 +240,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     isSelected = selectedStrategy == CompressionStrategyType.LAST_N,
                     onClick = { 
                         selectedStrategy = CompressionStrategyType.LAST_N
-                        config.setCompressionStrategy(CompressionStrategyType.LAST_N)
+                        repository.setCompressionStrategy(CompressionStrategyType.LAST_N)
                     }
                 )
 
@@ -248,7 +253,7 @@ fun CompressionConfigScreen(onBack: () -> Unit) {
                     isSelected = selectedStrategy == CompressionStrategyType.CHUNKED,
                     onClick = { 
                         selectedStrategy = CompressionStrategyType.CHUNKED
-                        config.setCompressionStrategy(CompressionStrategyType.CHUNKED)
+                        repository.setCompressionStrategy(CompressionStrategyType.CHUNKED)
                     }
                 )
 

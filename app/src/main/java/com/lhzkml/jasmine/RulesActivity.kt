@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.AppConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -20,37 +19,49 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.repository.RulesRepository
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class RulesActivity : ComponentActivity() {
+    
+    private val rulesRepository: RulesRepository by inject()
+    private val sessionRepository: com.lhzkml.jasmine.repository.SessionRepository by inject()
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
-                RulesScreen(onBack = { finish() })
+                RulesScreen(
+                    rulesRepository = rulesRepository,
+                    sessionRepository = sessionRepository,
+                    onBack = { finish() }
+                )
             }
         }
     }
 }
 
 @Composable
-fun RulesScreen(onBack: () -> Unit) {
-    val config = AppConfig.configRepo()
+fun RulesScreen(
+    rulesRepository: RulesRepository,
+    sessionRepository: com.lhzkml.jasmine.repository.SessionRepository,
+    onBack: () -> Unit
+) {
+    var personalRules by remember { mutableStateOf(rulesRepository.getPersonalRules()) }
 
-    var personalRules by remember { mutableStateOf(config.getPersonalRules()) }
-
-    val wsPath = config.getWorkspacePath()
+    val wsPath = sessionRepository.getWorkspacePath()
     val hasWorkspace = wsPath.isNotBlank()
     var projectRules by remember {
-        mutableStateOf(if (hasWorkspace) config.getProjectRules(wsPath) else "")
+        mutableStateOf(if (hasWorkspace) rulesRepository.getProjectRules(wsPath) else "")
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            config.setPersonalRules(personalRules.trim())
+            rulesRepository.setPersonalRules(personalRules.trim())
             if (hasWorkspace) {
-                config.setProjectRules(wsPath, projectRules.trim())
+                rulesRepository.setProjectRules(wsPath, projectRules.trim())
             }
         }
     }

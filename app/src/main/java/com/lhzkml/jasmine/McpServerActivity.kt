@@ -33,8 +33,11 @@ import com.lhzkml.jasmine.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.lhzkml.jasmine.repository.McpRepository
+import org.koin.android.ext.android.inject
 
 class McpServerActivity : ComponentActivity() {
+    private val mcpRepository: McpRepository by inject()
 
     companion object {
         const val EXTRA_EDIT_INDEX = "edit_index"
@@ -48,6 +51,7 @@ class McpServerActivity : ComponentActivity() {
         setContent {
             JasmineTheme {
                 McpServerScreen(
+                    repository = mcpRepository,
                     onBack = { finish() },
                     onAddServer = {
                         @Suppress("DEPRECATION")
@@ -80,11 +84,9 @@ class McpServerActivity : ComponentActivity() {
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                     refreshCallback?.invoke()
                     
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        AppConfig.mcpConnectionManager().reconnect { 
-                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                                refreshCallback?.invoke()
-                            }
+                    mcpRepository.reconnect { 
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                            refreshCallback?.invoke()
                         }
                     }
                 }
@@ -97,6 +99,7 @@ class McpServerActivity : ComponentActivity() {
 
 @Composable
 fun McpServerScreen(
+    repository: McpRepository,
     onBack: () -> Unit,
     onAddServer: () -> Unit,
     onEditServer: (Int) -> Unit,
@@ -105,19 +108,18 @@ fun McpServerScreen(
     val config = AppConfig.configRepo()
     val scope = rememberCoroutineScope()
     
-    var mcpEnabled by remember { mutableStateOf(config.isMcpEnabled()) }
-    var servers by remember { mutableStateOf(config.getMcpServers()) }
+    var mcpEnabled by remember { mutableStateOf(repository.isMcpEnabled()) }
+    var servers by remember { mutableStateOf(repository.getMcpServers()) }
     var connectionResults by remember { mutableStateOf<Map<Int, ConnectionResult>>(emptyMap()) }
     var connectingServers by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var showDeleteDialog by remember { mutableStateOf<Pair<Int, McpServerConfig>?>(null) }
     var showActionsDialog by remember { mutableStateOf<Pair<Int, McpServerConfig>?>(null) }
     
     val refresh: () -> Unit = {
-        servers = config.getMcpServers()
+        servers = repository.getMcpServers()
         
         scope.launch {
-            val manager = AppConfig.mcpConnectionManager()
-            val cache = manager.getConnectionCache()
+            val cache = repository.getConnectionCache()
             
             val results = mutableMapOf<Int, ConnectionResult>()
             servers.forEachIndexed { index, server ->
@@ -142,8 +144,7 @@ fun McpServerScreen(
     }
     
     LaunchedEffect(Unit) {
-        val manager = AppConfig.mcpConnectionManager()
-        val cache = manager.getConnectionCache()
+        val cache = repository.getConnectionCache()
         
         val results = mutableMapOf<Int, ConnectionResult>()
         val connecting = mutableSetOf<Int>()
@@ -170,10 +171,10 @@ fun McpServerScreen(
         
         if (needsConnect) {
             withContext(Dispatchers.IO) {
-                manager.preconnect()
+                AppConfig.mcpConnectionManager().preconnect()
             }
             
-            val updatedCache = manager.getConnectionCache()
+            val updatedCache = repository.getConnectionCache()
             servers.forEachIndexed { index, server ->
                 val cached = updatedCache[server.name]
                 if (cached != null) {
@@ -258,7 +259,7 @@ fun McpServerScreen(
                     checked = mcpEnabled,
                     onCheckedChange = { enabled ->
                         mcpEnabled = enabled
-                        config.setMcpEnabled(enabled)
+                        repository.setMcpEnabled(enabled)
                     },
                     colors = CustomSwitchDefaults.colors(
                         checkedThumbColor = Color.White,
@@ -299,9 +300,7 @@ fun McpServerScreen(
                                 scope.launch {
                                     connectingServers = connectingServers + index
                                     
-                                    withContext(Dispatchers.IO) {
-                                        AppConfig.mcpConnectionManager().connectSingleServerByName(server.name)
-                                    }
+                                    repository.connectSingleServerByName(server.name)
                                     
                                     val cached = AppConfig.mcpConnectionManager().getServerStatus(server.name)
                                     if (cached != null) {
@@ -361,15 +360,13 @@ fun McpServerScreen(
                         onClick = {
                             showActionsDialog = null
                             config.updateMcpServer(index, server.copy(enabled = !server.enabled))
-                            servers = config.getMcpServers()
+                            servers = repository.getMcpServers()
                             connectionResults = connectionResults - index
                             if (!server.enabled) {
                                 scope.launch {
                                     connectingServers = connectingServers + index
                                     
-                                    withContext(Dispatchers.IO) {
-                                        AppConfig.mcpConnectionManager().connectSingleServerByName(server.copy(enabled = true).name)
-                                    }
+                                    repository.connectSingleServerByName(server.copy(enabled = true).name)
                                     
                                     val cached = AppConfig.mcpConnectionManager().getServerStatus(server.name)
                                     if (cached != null) {
@@ -445,9 +442,9 @@ fun McpServerScreen(
                 CustomTextButton(
                     onClick = {
                         showDeleteDialog = null
-                        AppConfig.mcpConnectionManager().clearServerCache(server.name)
+                        repository.clearServerCache(server.name)
                         config.removeMcpServer(index)
-                        servers = config.getMcpServers()
+                        servers = repository.getMcpServers()
                         connectionResults = emptyMap()
                         connectingServers = emptySet()
                     },

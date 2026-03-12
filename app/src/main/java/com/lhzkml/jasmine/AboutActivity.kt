@@ -21,20 +21,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import com.lhzkml.jasmine.oss.OssLicensesListActivity
+import com.lhzkml.jasmine.repository.AboutRepository
 import com.lhzkml.jasmine.ui.components.CustomHorizontalDivider
 import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.components.CustomTextButton
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
-import com.lhzkml.jasmine.mnn.MnnBridge
+import org.koin.android.ext.android.inject
 
 class AboutActivity : ComponentActivity() {
+
+    private val aboutRepository: AboutRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             AboutScreen(
+                repository = aboutRepository,
                 onBack = { finish() },
                 onNavigateToOssLicenses = {
                     startActivity(Intent(this, OssLicensesListActivity::class.java).apply {
@@ -48,25 +52,14 @@ class AboutActivity : ComponentActivity() {
 
 @Composable
 fun AboutScreen(
+    repository: AboutRepository,
     onBack: () -> Unit,
     onNavigateToOssLicenses: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val appVersion = remember {
-        try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
-        } catch (e: Exception) {
-            BuildConfig.VERSION_NAME
-        }
-    }
-    val jasmineCoreVersion = remember { BuildConfig.JASMINE_CORE_VERSION }
-    val mnnVersion = remember {
-        try {
-            if (MnnBridge.isAvailable()) MnnBridge.getMnnVersion() else "不可用"
-        } catch (e: Exception) {
-            "不可用"
-        }
-    }
+    val appVersion = remember { repository.getAppVersion() }
+    val jasmineCoreVersion = remember { repository.getJasmineCoreVersion() }
+    val mnnVersion = remember { repository.getMnnVersion() }
 
     Column(
         modifier = Modifier

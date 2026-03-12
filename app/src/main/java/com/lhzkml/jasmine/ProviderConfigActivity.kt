@@ -37,19 +37,22 @@ import com.lhzkml.jasmine.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.lhzkml.jasmine.repository.ProviderRepository
+import org.koin.android.ext.android.inject
 
 class ProviderConfigActivity : ComponentActivity() {
+    private val providerRepository: ProviderRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val providerId = intent.getStringExtra("provider_id") ?: run { finish(); return }
-        val registry = AppConfig.providerRegistry()
-        val provider = registry.getProvider(providerId) ?: run { finish(); return }
+        val provider = providerRepository.getProvider(providerId) ?: run { finish(); return }
         val initialTab = intent.getIntExtra("tab", 0).coerceIn(0, 1)
 
         setContent {
             ProviderConfigScreen(
                 provider = provider,
+                repository = providerRepository,
                 initialTab = initialTab,
                 onBack = { finish() }
             )
@@ -60,6 +63,7 @@ class ProviderConfigActivity : ComponentActivity() {
 @Composable
 fun ProviderConfigScreen(
     provider: ProviderConfig,
+    repository: ProviderRepository,
     initialTab: Int,
     onBack: () -> Unit
 ) {
@@ -138,8 +142,8 @@ fun ProviderConfigScreen(
 
         // 内容区域
         when (selectedTab) {
-            0 -> ProviderConfigTab(provider = provider)
-            1 -> ModelListTab(provider = provider)
+            0 -> ProviderConfigTab(provider = provider, repository = repository)
+            1 -> ModelListTab(provider = provider, repository = repository)
         }
     }
 }
@@ -147,24 +151,22 @@ fun ProviderConfigScreen(
 // ==================== 配置 Tab ====================
 
 @Composable
-fun ProviderConfigTab(provider: ProviderConfig) {
+fun ProviderConfigTab(provider: ProviderConfig, repository: ProviderRepository) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val config = AppConfig.configRepo()
-    val registry = AppConfig.providerRegistry()
     val scope = rememberCoroutineScope()
 
-    var apiKey by remember { mutableStateOf(config.getApiKey(provider.id) ?: "") }
-    var baseUrl by remember { mutableStateOf(registry.getBaseUrl(provider.id)) }
+    var apiKey by remember { mutableStateOf(repository.getApiKey(provider.id) ?: "") }
+    var baseUrl by remember { mutableStateOf(repository.getBaseUrl(provider.id)) }
     var chatPath by remember {
-        mutableStateOf(config.getChatPath(provider.id) ?: "")
+        mutableStateOf(repository.getChatPath(provider.id) ?: "")
     }
     var vertexEnabled by remember {
-        mutableStateOf(provider.apiType == ApiType.GEMINI && config.isVertexAIEnabled(provider.id))
+        mutableStateOf(provider.apiType == ApiType.GEMINI && repository.isVertexAIEnabled(provider.id))
     }
-    var vertexProjectId by remember { mutableStateOf(config.getVertexProjectId(provider.id)) }
-    var vertexLocation by remember { mutableStateOf(config.getVertexLocation(provider.id)) }
-    var vertexSaJson by remember { mutableStateOf(config.getVertexServiceAccountJson(provider.id)) }
+    var vertexProjectId by remember { mutableStateOf(repository.getVertexProjectId(provider.id)) }
+    var vertexLocation by remember { mutableStateOf(repository.getVertexLocation(provider.id)) }
+    var vertexSaJson by remember { mutableStateOf<String>(repository.getVertexServiceAccountJson(provider.id)) }
 
     var balanceText by remember { mutableStateOf("") }
     var isQuerying by remember { mutableStateOf(false) }
@@ -337,11 +339,11 @@ fun ProviderConfigTab(provider: ProviderConfig) {
                                 Toast.makeText(context, "服务账号 JSON 格式不正确", Toast.LENGTH_LONG).show(); return@CustomButton
                             }
                         }
-                        config.saveProviderCredentials(provider.id, apiKey.trim(), baseUrl.trim().ifEmpty { null }, null)
-                        config.setVertexAIEnabled(provider.id, true)
-                        config.setVertexProjectId(provider.id, vertexProjectId.trim())
-                        config.setVertexLocation(provider.id, vertexLocation.trim())
-                        config.setVertexServiceAccountJson(provider.id, vertexSaJson.trim())
+                        repository.saveProviderCredentials(provider.id, apiKey.trim(), baseUrl.trim().ifEmpty { null }, null)
+                        repository.setVertexAIEnabled(provider.id, true)
+                        repository.setVertexProjectId(provider.id, vertexProjectId.trim())
+                        repository.setVertexLocation(provider.id, vertexLocation.trim())
+                        repository.setVertexServiceAccountJson(provider.id, vertexSaJson.trim())
                     } else {
                         if (apiKey.isBlank()) {
                             Toast.makeText(context, "请输入 API Key", Toast.LENGTH_SHORT).show(); return@CustomButton
@@ -349,15 +351,15 @@ fun ProviderConfigTab(provider: ProviderConfig) {
                         if (baseUrl.isBlank()) {
                             Toast.makeText(context, "请输入 API 地址", Toast.LENGTH_SHORT).show(); return@CustomButton
                         }
-                        config.saveProviderCredentials(provider.id, apiKey.trim(), baseUrl.trim(), null)
+                        repository.saveProviderCredentials(provider.id, apiKey.trim(), baseUrl.trim(), null)
                         if (provider.apiType == ApiType.GEMINI) {
-                            config.setVertexAIEnabled(provider.id, false)
+                            repository.setVertexAIEnabled(provider.id, false)
                         }
                     }
                     if (chatPath.isNotBlank()) {
-                        config.saveChatPath(provider.id, chatPath.trim())
+                        repository.saveChatPath(provider.id, chatPath.trim())
                     }
-                    config.setActiveProviderId(provider.id)
+                    repository.setActiveProviderId(provider.id)
                     Toast.makeText(context, "已保存并启用 ${provider.name}", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -440,27 +442,25 @@ fun ProviderConfigTab(provider: ProviderConfig) {
 // ==================== 模型列表 Tab ====================
 
 @Composable
-fun ModelListTab(provider: ProviderConfig) {
+fun ModelListTab(provider: ProviderConfig, repository: ProviderRepository) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val config = AppConfig.configRepo()
-    val registry = AppConfig.providerRegistry()
     val scope = rememberCoroutineScope()
 
     var statusText by remember { mutableStateOf("") }
     var models by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
-    val currentModel = remember { registry.getModel(provider.id) }
+    val currentModel = remember { repository.getModel(provider.id) }
     val checkedModels = remember {
-        val saved = config.getSelectedModels(provider.id).toMutableSet()
+        val saved = repository.getSelectedModels(provider.id).toMutableSet()
         if (currentModel.isNotEmpty()) saved.add(currentModel)
         mutableStateOf(saved)
     }
 
     fun fetchModels() {
-        val apiKey = config.getApiKey(provider.id) ?: ""
-        val baseUrl = registry.getBaseUrl(provider.id)
-        val vertexEnabled = provider.apiType == ApiType.GEMINI && config.isVertexAIEnabled(provider.id)
+        val apiKey = repository.getApiKey(provider.id) ?: ""
+        val baseUrl = repository.getBaseUrl(provider.id)
+        val vertexEnabled = provider.apiType == ApiType.GEMINI && repository.isVertexAIEnabled(provider.id)
 
         if (!vertexEnabled && apiKey.isEmpty()) {
             statusText = "请先在配置页输入 API Key"; return
@@ -474,7 +474,7 @@ fun ModelListTab(provider: ProviderConfig) {
 
         isLoading = true
         statusText = "正在获取模型列表..."
-        val chatPath = config.getChatPath(provider.id)
+        val chatPath = repository.getChatPath(provider.id)
         val client = ChatClientFactory.create(ChatClientConfig(
             providerId = provider.id, providerName = provider.name,
             apiKey = apiKey, baseUrl = baseUrl,
@@ -583,13 +583,13 @@ fun ModelListTab(provider: ProviderConfig) {
             CustomButton(
                 onClick = {
                     focusManager.clearFocus()
-                    config.setSelectedModels(provider.id, checkedModels.value.toList())
+                    repository.setSelectedModels(provider.id, checkedModels.value.toList())
                     if (checkedModels.value.isNotEmpty()) {
                         val modelToSave = if (currentModel in checkedModels.value) currentModel else checkedModels.value.first()
-                        config.saveProviderCredentials(
+                        repository.saveProviderCredentials(
                             provider.id,
-                            config.getApiKey(provider.id) ?: "",
-                            registry.getBaseUrl(provider.id),
+                            repository.getApiKey(provider.id) ?: "",
+                            repository.getBaseUrl(provider.id),
                             modelToSave
                         )
                     }

@@ -29,8 +29,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.lhzkml.jasmine.ui.theme.JasmineTheme
-import com.lhzkml.jasmine.config.ProviderManager
-import com.lhzkml.jasmine.mnn.MnnModelManager
+import com.lhzkml.jasmine.repository.RagConfigRepository
+import com.lhzkml.jasmine.repository.MnnModelRepository
 import com.lhzkml.jasmine.core.rag.embedding.EmbeddingApiClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,31 +45,42 @@ import com.lhzkml.jasmine.ui.components.CustomDropdownMenu
 import com.lhzkml.jasmine.ui.components.CustomDropdownMenuItem
 import com.lhzkml.jasmine.ui.theme.*
 import androidx.compose.ui.text.style.TextOverflow
+import org.koin.android.ext.android.inject
 
 class EmbeddingConfigActivity : ComponentActivity() {
+    private val ragRepository: RagConfigRepository by inject()
+    private val mnnRepository: MnnModelRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
-                EmbeddingConfigScreen(onBack = { finish() })
+                EmbeddingConfigScreen(
+                    ragRepository = ragRepository,
+                    mnnRepository = mnnRepository,
+                    onBack = { finish() }
+                )
             }
         }
     }
 }
 
 @Composable
-fun EmbeddingConfigScreen(onBack: () -> Unit) {
+fun EmbeddingConfigScreen(
+    ragRepository: RagConfigRepository,
+    mnnRepository: MnnModelRepository,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
 
-    var useLocal by remember { mutableStateOf(ProviderManager.getRagEmbeddingUseLocal(context)) }
-    var baseUrl by remember { mutableStateOf(ProviderManager.getRagEmbeddingBaseUrl(context)) }
-    var apiKey by remember { mutableStateOf(ProviderManager.getRagEmbeddingApiKey(context)) }
-    var model by remember { mutableStateOf(ProviderManager.getRagEmbeddingModel(context)) }
-    var modelPath by remember { mutableStateOf(ProviderManager.getRagEmbeddingModelPath(context)) }
-    val localModels = remember { MnnModelManager.getLocalModels(context) }
+    var useLocal by remember { mutableStateOf(ragRepository.getRagEmbeddingUseLocal()) }
+    var baseUrl by remember { mutableStateOf(ragRepository.getRagEmbeddingBaseUrl()) }
+    var apiKey by remember { mutableStateOf(ragRepository.getRagEmbeddingApiKey()) }
+    var model by remember { mutableStateOf(ragRepository.getRagEmbeddingModel()) }
+    var modelPath by remember { mutableStateOf(ragRepository.getRagEmbeddingModelPath()) }
+    val localModels = remember { mnnRepository.getLocalModels() }
 
     var apiModels by remember { mutableStateOf<List<String>>(emptyList()) }
     var apiModelsLoading by remember { mutableStateOf(false) }
@@ -99,11 +110,11 @@ fun EmbeddingConfigScreen(onBack: () -> Unit) {
 
     fun save() {
         focusManager.clearFocus()
-        ProviderManager.setRagEmbeddingUseLocal(context, useLocal)
-        ProviderManager.setRagEmbeddingBaseUrl(context, baseUrl.trim())
-        ProviderManager.setRagEmbeddingApiKey(context, apiKey)
-        ProviderManager.setRagEmbeddingModel(context, model.trim().ifBlank { "text-embedding-3-small" })
-        ProviderManager.setRagEmbeddingModelPath(context, modelPath.trim())
+        ragRepository.setRagEmbeddingUseLocal(useLocal)
+        ragRepository.setRagEmbeddingBaseUrl(baseUrl.trim())
+        ragRepository.setRagEmbeddingApiKey(apiKey)
+        ragRepository.setRagEmbeddingModel(model.trim().ifBlank { "text-embedding-3-small" })
+        ragRepository.setRagEmbeddingModelPath(modelPath.trim())
         apiModels = emptyList()
         apiModelsStatus = null
         Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()

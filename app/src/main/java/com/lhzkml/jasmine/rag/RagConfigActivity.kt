@@ -31,11 +31,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.RagStore
 import com.lhzkml.jasmine.core.config.RagLibraryConfig
 import com.lhzkml.jasmine.rag.RagLibraryContentActivity
 import com.lhzkml.jasmine.core.rag.IndexDocument
+import com.lhzkml.jasmine.repository.RagConfigRepository
+import com.lhzkml.jasmine.repository.SessionRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,14 +50,19 @@ import com.lhzkml.jasmine.ui.components.CustomSwitch
 import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.components.CustomTextButton
 import com.lhzkml.jasmine.ui.theme.*
+import org.koin.android.ext.android.inject
 
 class RagConfigActivity : ComponentActivity() {
+    private val ragRepository: RagConfigRepository by inject()
+    private val sessionRepository: SessionRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 RagConfigScreen(
+                    ragRepository = ragRepository,
+                    sessionRepository = sessionRepository,
                     onBack = { finish() },
                     onNavigateToLibraryContent = { id, name -> RagLibraryContentActivity.start(this, id, name) },
                     onNavigateToEmbedding = { startActivity(Intent(this, EmbeddingConfigActivity::class.java)) }
@@ -68,21 +74,23 @@ class RagConfigActivity : ComponentActivity() {
 
 @Composable
 fun RagConfigScreen(
+    ragRepository: RagConfigRepository,
+    sessionRepository: SessionRepository,
     onBack: () -> Unit,
     onNavigateToLibraryContent: (libraryId: String, libraryName: String) -> Unit = { _, _ -> },
     onNavigateToEmbedding: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
-    var enabled by remember { mutableStateOf(ProviderManager.isRagEnabled(context)) }
-    var useLocalEmbedding by remember { mutableStateOf(ProviderManager.getRagEmbeddingUseLocal(context)) }
-    var topK by remember { mutableStateOf(ProviderManager.getRagTopK(context).toString()) }
+    var enabled by remember { mutableStateOf(ragRepository.isRagEnabled()) }
+    var useLocalEmbedding by remember { mutableStateOf(ragRepository.getRagEmbeddingUseLocal()) }
+    var topK by remember { mutableStateOf(ragRepository.getRagTopK().toString()) }
     var isIndexing by remember { mutableStateOf(false) }
     var indexStatus by remember { mutableStateOf<String?>(null) }
     var manualSaveStatus by remember { mutableStateOf<String?>(null) }
 
-    var libraries by remember { mutableStateOf(ProviderManager.getRagLibraries(context)) }
-    var activeIds by remember { mutableStateOf(ProviderManager.getRagActiveLibraryIds(context)) }
+    var libraries by remember { mutableStateOf(ragRepository.getRagLibraries()) }
+    var activeIds by remember { mutableStateOf(ragRepository.getRagActiveLibraryIds()) }
     var showAddLibraryDialog by remember { mutableStateOf(false) }
     var newLibName by remember { mutableStateOf("") }
     var newLibDesc by remember { mutableStateOf("") }
@@ -90,7 +98,7 @@ fun RagConfigScreen(
     var manualTitle by remember { mutableStateOf("") }
     var manualContent by remember { mutableStateOf("") }
     var workspaceTargetLib by remember { mutableStateOf(libraries.firstOrNull()?.id ?: "default") }
-    var indexableExtensions by remember { mutableStateOf(ProviderManager.getRagIndexableExtensions(context).toMutableList().sorted()) }
+    var indexableExtensions by remember { mutableStateOf(ragRepository.getRagIndexableExtensions().toMutableList().sorted()) }
 
     LaunchedEffect(libraries) {
         if (selectedLibForManual !in libraries.map { it.id }) selectedLibForManual = libraries.firstOrNull()?.id ?: "default"
@@ -102,7 +110,7 @@ fun RagConfigScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(context)
+                useLocalEmbedding = ragRepository.getRagEmbeddingUseLocal()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -110,19 +118,19 @@ fun RagConfigScreen(
     }
 
     fun persistLibraries() {
-        ProviderManager.setRagLibraries(context, libraries)
-        ProviderManager.setRagActiveLibraryIds(context, activeIds)
+        ragRepository.setRagLibraries(libraries)
+        ragRepository.setRagActiveLibraryIds(activeIds)
     }
 
     fun persistExtensions() {
-        ProviderManager.setRagIndexableExtensions(context, indexableExtensions.toSet())
+        ragRepository.setRagIndexableExtensions(indexableExtensions.toSet())
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            ProviderManager.setRagEnabled(context, enabled)
-            ProviderManager.setRagEmbeddingUseLocal(context, useLocalEmbedding)
-            ProviderManager.setRagTopK(context, topK.toIntOrNull()?.coerceIn(1, 32) ?: 5)
+            ragRepository.setRagEnabled(enabled)
+            ragRepository.setRagEmbeddingUseLocal(useLocalEmbedding)
+            ragRepository.setRagTopK(topK.toIntOrNull()?.coerceIn(1, 32) ?: 5)
             persistLibraries()
         }
     }
@@ -225,7 +233,7 @@ fun RagConfigScreen(
                                     .border(1.dp, if (useLocalEmbedding == local) Accent else Color.Transparent, RoundedCornerShape(8.dp))
                                     .clickable {
                                         useLocalEmbedding = local
-                                        ProviderManager.setRagEmbeddingUseLocal(context, local)
+                                        ragRepository.setRagEmbeddingUseLocal(local)
                                         RagStore.releaseCachedMnnEmbedding()
                                     },
                                 contentAlignment = Alignment.Center
@@ -415,7 +423,7 @@ fun RagConfigScreen(
                                 CoroutineScope(Dispatchers.Main + SupervisorJob() + exceptionHandler).launch {
                                     val msg = try {
                                         withContext(Dispatchers.IO) {
-                                            saveManualEntry(context, selectedLibForManual, manualTitle.ifBlank { "manual_${System.currentTimeMillis()}" }, manualContent)
+                                            saveManualEntry(context, ragRepository, selectedLibForManual, manualTitle.ifBlank { "manual_${System.currentTimeMillis()}" }, manualContent)
                                         }
                                     } catch (t: Throwable) {
                                         "保存失败: ${t.message ?: t.toString()}"
@@ -519,7 +527,7 @@ fun RagConfigScreen(
                     CustomTextButton(
                         onClick = {
                             if (isIndexing) return@CustomTextButton
-                            val wsPath = ProviderManager.getWorkspacePath(context)
+                            val wsPath = sessionRepository.getWorkspacePath()
                             if (wsPath.isBlank()) {
                                 Toast.makeText(context, "请先在 Agent 模式下选择工作区", Toast.LENGTH_SHORT).show()
                                 return@CustomTextButton
@@ -533,7 +541,7 @@ fun RagConfigScreen(
                             indexStatus = "正在扫描…"
                             CoroutineScope(Dispatchers.Main).launch {
                                 val result = withContext(Dispatchers.IO) {
-                                    runIndexing(context, wsPath, workspaceTargetLib)
+                                    runIndexing(context, ragRepository, wsPath, workspaceTargetLib)
                                 }
                                 isIndexing = false
                                 indexStatus = result
@@ -607,20 +615,21 @@ fun RagConfigScreen(
 
 private suspend fun saveManualEntry(
     context: android.content.Context,
+    ragRepository: RagConfigRepository,
     libraryId: String,
     sourceId: String,
     content: String
 ): String {
     val configProvider = {
         com.lhzkml.jasmine.core.rag.RagConfig(
-            enabled = ProviderManager.isRagEnabled(context),
-            topK = ProviderManager.getRagTopK(context),
-            embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(context),
-            embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(context),
-            embeddingModel = ProviderManager.getRagEmbeddingModel(context),
-            useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(context),
-            embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(context),
-            activeLibraryIds = ProviderManager.getRagActiveLibraryIds(context)
+            enabled = ragRepository.isRagEnabled(),
+            topK = ragRepository.getRagTopK(),
+            embeddingBaseUrl = ragRepository.getRagEmbeddingBaseUrl(),
+            embeddingApiKey = ragRepository.getRagEmbeddingApiKey(),
+            embeddingModel = ragRepository.getRagEmbeddingModel(),
+            useLocalEmbedding = ragRepository.getRagEmbeddingUseLocal(),
+            embeddingModelPath = ragRepository.getRagEmbeddingModelPath(),
+            activeLibraryIds = ragRepository.getRagActiveLibraryIds()
         )
     }
     val indexingService = RagStore.buildIndexingService(configProvider)
@@ -635,25 +644,26 @@ private suspend fun saveManualEntry(
 
 private suspend fun runIndexing(
     context: android.content.Context,
+    ragRepository: RagConfigRepository,
     workspacePath: String,
     libraryId: String = "default"
 ): String {
     val configProvider = {
         com.lhzkml.jasmine.core.rag.RagConfig(
-            enabled = ProviderManager.isRagEnabled(context),
-            topK = ProviderManager.getRagTopK(context),
-            embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(context),
-            embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(context),
-            embeddingModel = ProviderManager.getRagEmbeddingModel(context),
-            useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(context),
-            embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(context),
-            activeLibraryIds = ProviderManager.getRagActiveLibraryIds(context)
+            enabled = ragRepository.isRagEnabled(),
+            topK = ragRepository.getRagTopK(),
+            embeddingBaseUrl = ragRepository.getRagEmbeddingBaseUrl(),
+            embeddingApiKey = ragRepository.getRagEmbeddingApiKey(),
+            embeddingModel = ragRepository.getRagEmbeddingModel(),
+            useLocalEmbedding = ragRepository.getRagEmbeddingUseLocal(),
+            embeddingModelPath = ragRepository.getRagEmbeddingModelPath(),
+            activeLibraryIds = ragRepository.getRagActiveLibraryIds()
         )
     }
     val indexingService = RagStore.buildIndexingService(configProvider)
         ?: return (RagStore.lastEmbeddingFailureReason ?: "请先配置 Embedding（远程 API 或本地 MNN 模型）")
     val root = File(workspacePath)
-    val extensions = ProviderManager.getRagIndexableExtensions(context)
+    val extensions = ragRepository.getRagIndexableExtensions()
     val documents = mutableListOf<IndexDocument>()
     root.walkTopDown()
         .maxDepth(12)

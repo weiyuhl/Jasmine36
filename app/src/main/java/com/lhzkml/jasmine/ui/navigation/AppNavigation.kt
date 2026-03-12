@@ -98,7 +98,11 @@ fun AppNavigation(
         }
 
         composable(Routes.PROVIDER_LIST) {
+            val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository = koinInject()
+            val ragRepository: com.lhzkml.jasmine.repository.RagConfigRepository = koinInject()
             ProviderListScreen(
+                repository = providerRepository,
+                ragRepository = ragRepository,
                 onBack = { navController.popBackStack() },
                 onProviderClick = { navController.navigate(Routes.providerConfig(it)) },
                 onNavigateToEmbedding = { navController.navigate(Routes.EMBEDDING_CONFIG) },
@@ -112,11 +116,12 @@ fun AppNavigation(
             arguments = listOf(navArgument("providerId") { type = NavType.StringType })
         ) { backStackEntry ->
             val providerId = backStackEntry.arguments?.getString("providerId") ?: return@composable
-            val registry = remember { AppConfig.providerRegistry() }
-            val provider = remember(providerId) { registry.getProvider(providerId) }
+            val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository = koinInject()
+            val provider = remember(providerId) { providerRepository.getProvider(providerId) }
             if (provider != null) {
                 ProviderConfigScreen(
                     provider = provider,
+                    repository = providerRepository,
                     initialTab = 0,
                     onBack = { navController.popBackStack() }
                 )
@@ -124,7 +129,9 @@ fun AppNavigation(
         }
 
         composable(Routes.ADD_CUSTOM_PROVIDER) {
+            val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository = koinInject()
             AddCustomProviderScreen(
+                repository = providerRepository,
                 onBack = {
                     navController.previousBackStackEntry?.savedStateHandle?.set("providerAdded", true)
                     navController.popBackStack()
@@ -138,6 +145,7 @@ fun AppNavigation(
             val scope = androidx.compose.runtime.rememberCoroutineScope()
             var pendingExport by remember { mutableStateOf<String?>(null) }
             var progress by remember { mutableStateOf<ExportImportProgress?>(null) }
+            val mnnRepository: com.lhzkml.jasmine.repository.MnnModelRepository = koinInject()
 
             val exportLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.CreateDocument("application/zip")
@@ -244,6 +252,7 @@ fun AppNavigation(
             }
 
             MnnManagementScreen(
+                repository = mnnRepository,
                 onBack = { navController.popBackStack() },
                 onRefreshCallbackSet = null,
                 onExportModel = { modelId ->
@@ -285,7 +294,11 @@ fun AppNavigation(
         }
 
         composable(Routes.RAG_CONFIG) {
+            val ragRepository: com.lhzkml.jasmine.repository.RagConfigRepository = koinInject()
+            val sessionRepository: com.lhzkml.jasmine.repository.SessionRepository = koinInject()
             RagConfigScreen(
+                ragRepository = ragRepository,
+                sessionRepository = sessionRepository,
                 onBack = { navController.popBackStack() },
                 onNavigateToLibraryContent = { libId, libName ->
                     navController.navigate("rag_library_content/$libId?libraryName=${Uri.encode(libName)}")
@@ -303,23 +316,41 @@ fun AppNavigation(
         ) { backStackEntry ->
             val libraryId = backStackEntry.arguments?.getString("libraryId") ?: return@composable
             val libraryName = backStackEntry.arguments?.getString("libraryName") ?: libraryId
+            val ragLibraryRepository: com.lhzkml.jasmine.repository.RagLibraryRepository = koinInject()
+            val ragConfigRepository: com.lhzkml.jasmine.repository.RagConfigRepository = koinInject()
             RagLibraryContentScreen(
                 libraryId = libraryId,
                 libraryName = libraryName,
+                ragLibraryRepository = ragLibraryRepository,
+                ragConfigRepository = ragConfigRepository,
                 onBack = { navController.popBackStack() }
             )
         }
 
         composable(Routes.EMBEDDING_CONFIG) {
-            EmbeddingConfigScreen(onBack = { navController.popBackStack() })
+            val ragRepository: com.lhzkml.jasmine.repository.RagConfigRepository = koinInject()
+            val mnnRepository: com.lhzkml.jasmine.repository.MnnModelRepository = koinInject()
+            EmbeddingConfigScreen(
+                ragRepository = ragRepository,
+                mnnRepository = mnnRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.RULES) {
-            RulesScreen(onBack = { navController.popBackStack() })
+            val rulesRepository: com.lhzkml.jasmine.repository.RulesRepository = koinInject()
+            val sessionRepository: com.lhzkml.jasmine.repository.SessionRepository = koinInject()
+            RulesScreen(
+                rulesRepository = rulesRepository,
+                sessionRepository = sessionRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.TOOL_CONFIG) {
+            val toolRepository: com.lhzkml.jasmine.repository.ToolSettingsRepository = koinInject()
             ToolConfigScreen(
+                repository = toolRepository,
                 isAgentPreset = false,
                 onBack = { navController.popBackStack() },
                 onSave = { navController.popBackStack() }
@@ -327,7 +358,9 @@ fun AppNavigation(
         }
 
         composable(Routes.TOOL_CONFIG_AGENT) {
+            val toolRepository: com.lhzkml.jasmine.repository.ToolSettingsRepository = koinInject()
             ToolConfigScreen(
+                repository = toolRepository,
                 isAgentPreset = true,
                 onBack = { navController.popBackStack() },
                 onSave = { navController.popBackStack() }
@@ -339,7 +372,9 @@ fun AppNavigation(
         }
 
         composable(Routes.MCP_SERVER) {
+            val mcpRepository: com.lhzkml.jasmine.repository.McpRepository = koinInject()
             McpServerScreen(
+                repository = mcpRepository,
                 onBack = { navController.popBackStack() },
                 onAddServer = { navController.navigate(Routes.mcpServerEdit("new")) },
                 onEditServer = { index ->
@@ -358,7 +393,9 @@ fun AppNavigation(
                 "new" -> -1
                 else -> serverId.toIntOrNull() ?: -1
             }
+            val mcpRepository: com.lhzkml.jasmine.repository.McpRepository = koinInject()
             McpServerEditScreen(
+                repository = mcpRepository,
                 editIndex = editIndex,
                 onCancel = { navController.popBackStack() },
                 onSave = { configChanged ->
@@ -369,37 +406,56 @@ fun AppNavigation(
         }
 
         composable(Routes.SHELL_POLICY) {
-            ShellPolicyScreen(onBack = { navController.popBackStack() })
+            val shellPolicyRepository: com.lhzkml.jasmine.repository.ShellPolicyRepository = koinInject()
+            ShellPolicyScreen(
+                repository = shellPolicyRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.COMPRESSION_CONFIG) {
-            CompressionConfigScreen(onBack = { navController.popBackStack() })
+            val compressionRepository: com.lhzkml.jasmine.repository.CompressionSettingsRepository = koinInject()
+            CompressionConfigScreen(
+                repository = compressionRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.TIMEOUT_CONFIG) {
-            TimeoutConfigScreen(onBack = { navController.popBackStack() })
+            val timeoutRepository: com.lhzkml.jasmine.repository.TimeoutSettingsRepository = koinInject()
+            TimeoutConfigScreen(
+                repository = timeoutRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.TRACE_CONFIG) {
+            val traceRepository: com.lhzkml.jasmine.repository.TraceSettingsRepository = koinInject()
             val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
             TraceConfigScreen(
+                repository = traceRepository,
                 onBack = { navController.popBackStack() },
                 getTraceDir = { activity?.getExternalFilesDir("traces")?.absolutePath ?: "未知路径" }
             )
         }
 
         composable(Routes.PLANNER_CONFIG) {
-            PlannerConfigScreen(onBack = { navController.popBackStack() })
+            val plannerRepository: com.lhzkml.jasmine.repository.PlannerSettingsRepository = koinInject()
+            PlannerConfigScreen(
+                repository = plannerRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.SNAPSHOT_CONFIG) {
+            val snapshotRepository: com.lhzkml.jasmine.repository.SnapshotSettingsRepository = koinInject()
             val context = androidx.compose.ui.platform.LocalContext.current
             val activity = context as? ComponentActivity
-            val config = remember { AppConfig.configRepo() }
             SnapshotConfigScreen(
+                repository = snapshotRepository,
                 onBack = { navController.popBackStack() },
                 onViewCheckpoints = {
-                    if (config.getSnapshotStorage() != SnapshotStorageType.FILE) {
+                    if (snapshotRepository.getSnapshotStorage() != SnapshotStorageType.FILE) {
                         Toast.makeText(context, "内存存储模式下无法查看检查点，请切换到文件存储", Toast.LENGTH_SHORT).show()
                     } else {
                         navController.navigate(Routes.CHECKPOINT_MANAGER)
@@ -416,7 +472,7 @@ fun AppNavigation(
                     afterClear()
                 },
                 getCheckpointCount = {
-                    if (config.getSnapshotStorage() == SnapshotStorageType.FILE) {
+                    if (snapshotRepository.getSnapshotStorage() == SnapshotStorageType.FILE) {
                         val snapshotDir = activity?.getExternalFilesDir("snapshots")
                         if (snapshotDir != null && snapshotDir.exists()) {
                             val agentDirs = snapshotDir.listFiles()?.filter { it.isDirectory } ?: emptyList()
@@ -432,7 +488,11 @@ fun AppNavigation(
         }
 
         composable(Routes.EVENT_HANDLER_CONFIG) {
-            EventHandlerConfigScreen(onBack = { navController.popBackStack() })
+            val eventHandlerRepository: com.lhzkml.jasmine.repository.EventHandlerSettingsRepository = koinInject()
+            EventHandlerConfigScreen(
+                repository = eventHandlerRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.CHECKPOINT_MANAGER) { backStackEntry ->
@@ -440,6 +500,7 @@ fun AppNavigation(
             val scope = androidx.compose.runtime.rememberCoroutineScope()
             val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
             val checkpointContext = androidx.compose.ui.platform.LocalContext.current
+            val checkpointRepository: com.lhzkml.jasmine.repository.CheckpointRepository = koinInject()
 
             androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
                 val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -455,7 +516,7 @@ fun AppNavigation(
             }
 
             CheckpointManagerScreen(
-                service = checkpointService,
+                repository = checkpointRepository,
                 refreshTrigger = refreshTrigger,
                 onBack = { navController.popBackStack() },
                 onOpenDetail = { agentId, cp ->
@@ -463,14 +524,14 @@ fun AppNavigation(
                 },
                 onDeleteSession = {
                     scope.launch {
-                        withContext(Dispatchers.IO) { checkpointService?.deleteSession(it) }
+                        checkpointRepository.deleteSession(it)
                         Toast.makeText(checkpointContext, "会话已清除", Toast.LENGTH_SHORT).show()
                         refreshTrigger++
                     }
                 },
                 onClearAll = {
                     scope.launch {
-                        withContext(Dispatchers.IO) { checkpointService?.clearAll() }
+                        checkpointRepository.clearAll()
                         Toast.makeText(checkpointContext, "已清除", Toast.LENGTH_SHORT).show()
                         refreshTrigger++
                     }
@@ -487,10 +548,11 @@ fun AppNavigation(
         ) { backStackEntry ->
             val agentId = backStackEntry.arguments?.getString("agentId") ?: return@composable
             val checkpointId = backStackEntry.arguments?.getString("checkpointId") ?: return@composable
+            val checkpointRepository: com.lhzkml.jasmine.repository.CheckpointRepository = koinInject()
             CheckpointDetailScreen(
                 agentId = agentId,
                 checkpointId = checkpointId,
-                service = checkpointService,
+                repository = checkpointRepository,
                 onBack = { navController.popBackStack() },
                 onRestored = { intent ->
                     navController.popBackStack(Routes.MAIN, false)
@@ -504,16 +566,20 @@ fun AppNavigation(
         }
 
         composable(Routes.ABOUT) {
+            val aboutRepository: com.lhzkml.jasmine.repository.AboutRepository = koinInject()
             AboutScreen(
+                repository = aboutRepository,
                 onBack = { navController.popBackStack() },
                 onNavigateToOssLicenses = { navController.navigate(Routes.OSS_LICENSES_LIST) }
             )
         }
 
         composable(Routes.OSS_LICENSES_LIST) {
+            val aboutRepository: com.lhzkml.jasmine.repository.AboutRepository = koinInject()
             val context = androidx.compose.ui.platform.LocalContext.current
             val title = remember { context.getString(R.string.oss_licenses_title) }
             OssLicensesListScreen(
+                repository = aboutRepository,
                 title = title,
                 onBack = { navController.popBackStack() },
                 onPluginLicenseClick = { entry ->
@@ -552,7 +618,9 @@ fun AppNavigation(
             }
             val directUrl = if (!licenseUrl.isNullOrBlank()) Uri.decode(licenseUrl) else null
 
+            val aboutRepository: com.lhzkml.jasmine.repository.AboutRepository = koinInject()
             OssLicensesDetailScreen(
+                repository = aboutRepository,
                 entryName = name,
                 entry = entry,
                 directLicenseUrl = directUrl,

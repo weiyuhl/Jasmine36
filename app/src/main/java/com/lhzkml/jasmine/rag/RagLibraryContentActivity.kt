@@ -28,7 +28,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.RagStore
 import com.lhzkml.jasmine.core.rag.IndexDocument
 import com.lhzkml.jasmine.core.rag.SourceSummary
@@ -39,8 +38,13 @@ import kotlinx.coroutines.withContext
 import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.components.CustomTextButton
 import com.lhzkml.jasmine.ui.theme.*
+import com.lhzkml.jasmine.repository.RagLibraryRepository
+import com.lhzkml.jasmine.repository.RagConfigRepository
+import org.koin.android.ext.android.inject
 
 class RagLibraryContentActivity : ComponentActivity() {
+    private val ragLibraryRepository: RagLibraryRepository by inject()
+    private val ragConfigRepository: RagConfigRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +56,8 @@ class RagLibraryContentActivity : ComponentActivity() {
                 RagLibraryContentScreen(
                     libraryId = libraryId,
                     libraryName = libraryName,
+                    ragLibraryRepository = ragLibraryRepository,
+                    ragConfigRepository = ragConfigRepository,
                     onBack = { finish() }
                 )
             }
@@ -72,10 +78,12 @@ class RagLibraryContentActivity : ComponentActivity() {
 fun RagLibraryContentScreen(
     libraryId: String,
     libraryName: String,
+    ragLibraryRepository: RagLibraryRepository,
+    ragConfigRepository: RagConfigRepository,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val index = RagStore.getKnowledgeIndex()
+    val index = remember { ragLibraryRepository.getKnowledgeIndex() }
 
     var items by remember { mutableStateOf<List<SourceSummary>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -88,7 +96,7 @@ fun RagLibraryContentScreen(
         if (index == null) return
         isLoading = true
         CoroutineScope(Dispatchers.Main).launch {
-            items = withContext(Dispatchers.IO) { index.listSources(libraryId) }
+            items = ragLibraryRepository.listSources(libraryId)
             isLoading = false
         }
     }
@@ -253,22 +261,22 @@ fun RagLibraryContentScreen(
                     }
                     CoroutineScope(Dispatchers.Main).launch {
                         val msg = withContext(Dispatchers.IO) {
-                            val idx = RagStore.getKnowledgeIndex() ?: return@withContext "索引未初始化"
-                            idx.deleteBySourceId(target.sourceId)
+                            val idx = ragLibraryRepository.getKnowledgeIndex() ?: return@withContext "索引未初始化"
+                            ragLibraryRepository.deleteBySourceId(target.sourceId)
                             val configProvider = {
                                 com.lhzkml.jasmine.core.rag.RagConfig(
-                                    enabled = ProviderManager.isRagEnabled(context),
-                                    topK = ProviderManager.getRagTopK(context),
-                                    embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(context),
-                                    embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(context),
-                                    embeddingModel = ProviderManager.getRagEmbeddingModel(context),
-                                    useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(context),
-                                    embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(context),
-                                    activeLibraryIds = ProviderManager.getRagActiveLibraryIds(context)
+                                    enabled = ragConfigRepository.isRagEnabled(),
+                                    topK = ragConfigRepository.getRagTopK(),
+                                    embeddingBaseUrl = ragConfigRepository.getRagEmbeddingBaseUrl(),
+                                    embeddingApiKey = ragConfigRepository.getRagEmbeddingApiKey(),
+                                    embeddingModel = ragConfigRepository.getRagEmbeddingModel(),
+                                    useLocalEmbedding = ragConfigRepository.getRagEmbeddingUseLocal(),
+                                    embeddingModelPath = ragConfigRepository.getRagEmbeddingModelPath(),
+                                    activeLibraryIds = ragConfigRepository.getRagActiveLibraryIds()
                                 )
                             }
                             val svc = RagStore.buildIndexingService(configProvider)
-                                ?: return@withContext (RagStore.lastEmbeddingFailureReason
+                                ?: return@withContext (ragLibraryRepository.getLastEmbeddingFailureReason()
                                     ?: "请先配置 Embedding（远程 API 或本地 MNN 模型）")
                             val result = svc.indexDocument(IndexDocument(title.ifBlank { target.sourceId }, content, libraryId))
                             if (result.success) "已保存" else "保存失败: ${result.error}"
@@ -303,9 +311,7 @@ fun RagLibraryContentScreen(
             confirmButton = {
                 TextButton(onClick = {
                     CoroutineScope(Dispatchers.Main).launch {
-                        withContext(Dispatchers.IO) {
-                            index?.deleteBySourceId(target.sourceId)
-                        }
+                        ragLibraryRepository.deleteBySourceId(target.sourceId)
                         Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
                         deleteTarget = null
                         loadItems()

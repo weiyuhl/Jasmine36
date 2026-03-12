@@ -68,7 +68,19 @@ import kotlin.coroutines.resume
 
 class ChatViewModel(
     application: Application,
-    private val conversationRepo: ConversationRepository
+    private val conversationRepo: ConversationRepository,
+    private val sessionRepository: com.lhzkml.jasmine.repository.SessionRepository,
+    private val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository,
+    private val modelSelectionRepository: com.lhzkml.jasmine.repository.ModelSelectionRepository,
+    private val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository,
+    private val timeoutSettingsRepository: com.lhzkml.jasmine.repository.TimeoutSettingsRepository,
+    private val toolSettingsRepository: com.lhzkml.jasmine.repository.ToolSettingsRepository,
+    private val agentStrategyRepository: com.lhzkml.jasmine.repository.AgentStrategyRepository,
+    private val ragConfigRepository: com.lhzkml.jasmine.repository.RagConfigRepository,
+    private val mcpRepository: com.lhzkml.jasmine.repository.McpRepository,
+    private val compressionSettingsRepository: com.lhzkml.jasmine.repository.CompressionSettingsRepository,
+    private val snapshotSettingsRepository: com.lhzkml.jasmine.repository.SnapshotSettingsRepository,
+    private val plannerSettingsRepository: com.lhzkml.jasmine.repository.PlannerSettingsRepository
 ) : AndroidViewModel(application) {
 
     private val ctx: Context get() = getApplication()
@@ -103,7 +115,7 @@ class ChatViewModel(
     private var contextCollector = SystemContextCollector()
     private val runtimeBuilder = AgentRuntimeBuilder(AppConfig.configRepo())
     private val toolRegistryBuilder = ToolRegistryBuilder(AppConfig.configRepo())
-    private val mcpConnectionManager get() = AppConfig.mcpConnectionManager()
+    private val mcpConnectionManager get() = mcpRepository.getConnectionManager()
 
     private var currentLocalModelId: String? = null
     /** Channel 模式下持有当前 executor，供 savePartial 获取 getLogContent */
@@ -166,10 +178,10 @@ class ChatViewModel(
         if (intentConvId != null) {
             loadConversation(intentConvId)
         } else {
-            val lastId = ProviderManager.getLastConversationId(context)
-            if (lastId.isNotEmpty()) {
-                val currentWs = if (ProviderManager.isAgentMode(context))
-                    ProviderManager.getWorkspacePath(context) else ""
+            val lastId = sessionRepository.getLastConversationId()
+            if (!lastId.isNullOrEmpty()) {
+                val currentWs = if (sessionRepository.isAgentMode())
+                    sessionRepository.getWorkspacePath() else ""
                 viewModelScope.launch(Dispatchers.IO) {
                     val info = conversationRepo.getConversation(lastId)
                     if (info != null && info.workspacePath == currentWs) {
@@ -193,7 +205,7 @@ class ChatViewModel(
 
     fun onPause() {
         savePartialIfGenerating()
-        ProviderManager.setLastConversationId(ctx, currentConversationId ?: "")
+        sessionRepository.setLastConversationId(currentConversationId)
     }
 
     override fun onCleared() {

@@ -27,8 +27,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import com.lhzkml.jasmine.repository.SessionRepository
+import com.lhzkml.jasmine.repository.ToolSettingsRepository
+import com.lhzkml.jasmine.repository.TraceSettingsRepository
+import com.lhzkml.jasmine.repository.EventHandlerSettingsRepository
+import org.koin.android.ext.android.inject
 
 class LauncherActivity : ComponentActivity() {
+    private val sessionRepository: SessionRepository by inject()
+    private val toolSettingsRepository: ToolSettingsRepository by inject()
+    private val traceSettingsRepository: TraceSettingsRepository by inject()
+    private val eventHandlerSettingsRepository: EventHandlerSettingsRepository by inject()
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -41,15 +50,15 @@ class LauncherActivity : ComponentActivity() {
             )
             val displayPath = resolveTreeUriToPath(it)
             // 设置 Agent 模式 + 工作区
-            ProviderManager.setAgentMode(this, true)
-            ProviderManager.setToolsEnabled(this, true)
-            ProviderManager.setTraceEnabled(this, true)
-            ProviderManager.setEventHandlerEnabled(this, true)
-            ProviderManager.setWorkspacePath(this, displayPath)
-            ProviderManager.setWorkspaceUri(this, it.toString())
+            sessionRepository.setAgentMode(true)
+            toolSettingsRepository.setToolsEnabled(true)
+            traceSettingsRepository.setTraceEnabled(true)
+            eventHandlerSettingsRepository.setEventHandlerEnabled(true)
+            sessionRepository.setWorkspacePath(displayPath)
+            sessionRepository.setWorkspaceUri(it.toString())
 
             Toast.makeText(this, "工作区: $displayPath", Toast.LENGTH_SHORT).show()
-            ProviderManager.setLastSession(this, true)
+            sessionRepository.setLastSession(true)
             startActivity(Intent(this, MainActivity::class.java))
             finish()
         }
@@ -61,7 +70,7 @@ class LauncherActivity : ComponentActivity() {
         ProviderManager.initialize(this)
 
         // 恢复上次的模式：如果上次没有主动退出，直接跳转到 MainActivity
-        val hasLastSession = ProviderManager.hasLastSession(this)
+        val hasLastSession = sessionRepository.hasLastSession()
         if (hasLastSession) {
             startActivity(Intent(this, MainActivity::class.java))
             finish()
@@ -95,11 +104,11 @@ class LauncherActivity : ComponentActivity() {
     }
 
     private fun startChatMode() {
-        ProviderManager.setAgentMode(this, false)
-        ProviderManager.setToolsEnabled(this, false)
-        ProviderManager.setWorkspacePath(this, "")
-        ProviderManager.setWorkspaceUri(this, "")
-        ProviderManager.setLastSession(this, true)
+        sessionRepository.setAgentMode(false)
+        toolSettingsRepository.setToolsEnabled(false)
+        sessionRepository.setWorkspacePath("")
+        sessionRepository.setWorkspaceUri("")
+        sessionRepository.setLastSession(true)
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }

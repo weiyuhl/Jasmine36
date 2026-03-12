@@ -27,14 +27,18 @@ import com.lhzkml.jasmine.R
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
+import org.koin.android.ext.android.inject
 
 class OssLicensesListActivity : ComponentActivity() {
+    
+    private val repository: com.lhzkml.jasmine.repository.AboutRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val title = intent.getStringExtra("title") ?: getString(R.string.oss_licenses_title)
         setContent {
             OssLicensesListScreen(
+                repository = repository,
                 title = title,
                 onBack = { finish() },
                 onPluginLicenseClick = { entry ->
@@ -61,21 +65,15 @@ class OssLicensesListActivity : ComponentActivity() {
 
 @Composable
 fun OssLicensesListScreen(
+    repository: com.lhzkml.jasmine.repository.AboutRepository,
     title: String,
     onBack: () -> Unit,
     onPluginLicenseClick: (OssLicenseEntry) -> Unit,
     onManualLicenseClick: (ManualLicenseEntry) -> Unit
 ) {
-    val context = LocalContext.current
-    val pluginList = remember {
-        OssLicenseLoader.loadLicenseList(context).distinctBy { it.name }
-    }
-    val manualList = remember {
-        OssLicenseLoader.manualLicenses
-    }
-    val hasLicenses = remember {
-        OssLicenseLoader.hasLicenses(context) || manualList.isNotEmpty()
-    }
+    val pluginList = remember { repository.getPluginLicenseList() }
+    val manualList = remember { repository.getManualLicenseList() }
+    val hasLicenses = remember { repository.hasLicenses() }
 
     Column(
         modifier = Modifier

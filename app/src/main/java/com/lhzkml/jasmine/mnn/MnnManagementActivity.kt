@@ -35,10 +35,13 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.lhzkml.jasmine.repository.MnnModelRepository
+import org.koin.android.ext.android.inject
 
 data class ExportImportProgress(val progress: Float, val message: String)
 
 class MnnManagementActivity : ComponentActivity() {
+    private val mnnRepository: MnnModelRepository by inject()
     private var refreshCallback: (() -> Unit)? = null
     private val progressState = mutableStateOf<ExportImportProgress?>(null)
 
@@ -148,6 +151,7 @@ class MnnManagementActivity : ComponentActivity() {
             JasmineTheme {
                 val progress by progressState
                 MnnManagementScreen(
+                    repository = mnnRepository,
                     onBack = { finish() },
                     onRefreshCallbackSet = { refreshCallback = it },
                     onExportModel = { modelId ->
@@ -171,6 +175,7 @@ class MnnManagementActivity : ComponentActivity() {
 
 @Composable
 fun MnnManagementScreen(
+    repository: MnnModelRepository,
     onBack: () -> Unit,
     onRefreshCallbackSet: ((() -> Unit) -> Unit)? = null,
     onExportModel: ((String) -> Unit)? = null,
@@ -180,15 +185,15 @@ fun MnnManagementScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    var models by remember { mutableStateOf(MnnModelManager.getLocalModels(context)) }
-    var showDeleteDialog by remember { mutableStateOf<MnnModelInfo?>(null) }
+    var models by remember { mutableStateOf(repository.getLocalModels()) }
+    var showDeleteDialog by remember { mutableStateOf<MnnModelRepository.LocalModelInfo?>(null) }
     var showSourceDialog by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
     val downloadManager = remember { MnnDownloadManager.getInstance(context) }
     var currentSource by remember { mutableStateOf(downloadManager.getDownloadSource()) }
 
     val refresh: () -> Unit = {
-        models = MnnModelManager.getLocalModels(context)
+        models = repository.getLocalModels()
         currentSource = downloadManager.getDownloadSource()
     }
 
@@ -310,7 +315,7 @@ fun MnnManagementScreen(
             },
             confirmButton = {
                 CustomTextButton(onClick = {
-                    val ok = MnnModelManager.deleteModel(context, model.modelId)
+                    val ok = repository.deleteModel(model.modelId)
                     showDeleteDialog = null
                     if (ok) {
                         refresh()
@@ -419,7 +424,7 @@ fun MnnSourceSelectionDialog(
 
 @Composable
 fun MnnModelItem(
-    model: MnnModelInfo,
+    model: MnnModelRepository.LocalModelInfo,
     onExportClick: (() -> Unit)? = null,
     onDeleteClick: () -> Unit
 ) {
@@ -433,7 +438,13 @@ fun MnnModelItem(
             Column(modifier = Modifier.weight(1f)) {
                 CustomText(model.modelName, fontSize = 15.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
                 Spacer(modifier = Modifier.height(2.dp))
-                CustomText(MnnModelManager.formatSize(model.sizeBytes), fontSize = 12.sp, color = TextSecondary)
+                val sizeText = java.io.File(model.modelPath).let { file ->
+                    if (file.exists()) {
+                        val sizeBytes = file.parentFile?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+                        MnnModelManager.formatSize(sizeBytes)
+                    } else "未知大小"
+                }
+                CustomText(sizeText, fontSize = 12.sp, color = TextSecondary)
             }
             if (onExportClick != null) {
                 CustomTextButton(onClick = onExportClick, contentColor = TextPrimary,

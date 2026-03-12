@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.AppConfig
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,11 +24,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import com.lhzkml.jasmine.repository.ToolSettingsRepository
 import com.lhzkml.jasmine.ui.theme.BgInput
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 /**
  * 工具管理界面
@@ -39,6 +40,7 @@ import com.lhzkml.jasmine.ui.components.*
  * - Agent 预设模式（EXTRA_AGENT_PRESET=true）：管理 agent_tool_preset
  */
 class ToolConfigActivity : ComponentActivity() {
+    private val repository: ToolSettingsRepository by inject()
 
     companion object {
         const val EXTRA_AGENT_PRESET = "agent_preset"
@@ -50,6 +52,7 @@ class ToolConfigActivity : ComponentActivity() {
         
         setContent {
             ToolConfigScreen(
+                repository = repository,
                 isAgentPreset = isAgentPreset,
                 onBack = { finish() },
                 onSave = {
@@ -64,21 +67,21 @@ class ToolConfigActivity : ComponentActivity() {
 
 @Composable
 fun ToolConfigScreen(
+    repository: ToolSettingsRepository,
     isAgentPreset: Boolean,
     onBack: () -> Unit,
     onSave: () -> Unit
 ) {
     val context = LocalContext.current
-    val config = AppConfig.configRepo()
     
     val allTools = remember { ToolCatalog.allTools.map { it.id to it.description } }
     
     // 加载工具状态
     val enabledTools = remember {
         if (isAgentPreset) {
-            config.getAgentToolPreset()
+            repository.getAgentToolPreset()
         } else {
-            config.getEnabledTools()
+            repository.getEnabledTools()
         }
     }
     
@@ -91,7 +94,7 @@ fun ToolConfigScreen(
         }
     }
     
-    var brightDataKey by remember { mutableStateOf(config.getBrightDataKey()) }
+    var brightDataKey by remember { mutableStateOf(repository.getBrightDataKey()) }
     
     val allChecked = toolStates.values.all { it }
     
@@ -134,11 +137,11 @@ fun ToolConfigScreen(
                     val toSave = if (selected.size == allTools.size) emptySet() else selected
                     
                     if (isAgentPreset) {
-                        config.setAgentToolPreset(toSave)
+                        repository.setAgentToolPreset(toSave)
                     } else {
-                        config.setEnabledTools(toSave)
+                        repository.setEnabledTools(toSave)
                     }
-                    config.setBrightDataKey(brightDataKey.trim())
+                    repository.setBrightDataKey(brightDataKey.trim())
                     
                     Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
                     onSave()

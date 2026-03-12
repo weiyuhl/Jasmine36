@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.AppConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -22,16 +21,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lhzkml.jasmine.repository.TimeoutSettingsRepository
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class TimeoutConfigActivity : ComponentActivity() {
+
+    private val timeoutRepository: TimeoutSettingsRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 TimeoutConfigScreen(
+                    repository = timeoutRepository,
                     onBack = { finish() }
                 )
             }
@@ -40,23 +44,24 @@ class TimeoutConfigActivity : ComponentActivity() {
 }
 
 @Composable
-fun TimeoutConfigScreen(onBack: () -> Unit) {
-    val config = AppConfig.configRepo()
-    
+fun TimeoutConfigScreen(
+    repository: TimeoutSettingsRepository,
+    onBack: () -> Unit
+) {
     var requestTimeout by remember { 
-        val value = config.getRequestTimeout()
+        val value = repository.getRequestTimeout()
         mutableStateOf(if (value > 0) value.toString() else "")
     }
     var socketTimeout by remember { 
-        val value = config.getSocketTimeout()
+        val value = repository.getSocketTimeout()
         mutableStateOf(if (value > 0) value.toString() else "")
     }
     var connectTimeout by remember { 
-        val value = config.getConnectTimeout()
+        val value = repository.getConnectTimeout()
         mutableStateOf(if (value > 0) value.toString() else "")
     }
-    var resumeEnabled by remember { mutableStateOf(config.isStreamResumeEnabled()) }
-    var maxRetries by remember { mutableStateOf(config.getStreamResumeMaxRetries().toString()) }
+    var resumeEnabled by remember { mutableStateOf(repository.isStreamResumeEnabled()) }
+    var maxRetries by remember { mutableStateOf(repository.getStreamResumeMaxRetries().toString()) }
     
     DisposableEffect(Unit) {
         onDispose {
@@ -65,10 +70,10 @@ fun TimeoutConfigScreen(onBack: () -> Unit) {
             val connTimeout = connectTimeout.trim().toIntOrNull() ?: 0
             val retries = (maxRetries.trim().toIntOrNull() ?: 3).coerceIn(1, 10)
             
-            config.setRequestTimeout(reqTimeout)
-            config.setSocketTimeout(sockTimeout)
-            config.setConnectTimeout(connTimeout)
-            config.setStreamResumeMaxRetries(retries)
+            repository.setRequestTimeout(reqTimeout)
+            repository.setSocketTimeout(sockTimeout)
+            repository.setConnectTimeout(connTimeout)
+            repository.setStreamResumeMaxRetries(retries)
         }
     }
     
@@ -216,7 +221,7 @@ fun TimeoutConfigScreen(onBack: () -> Unit) {
                         checked = resumeEnabled,
                         onCheckedChange = { 
                             resumeEnabled = it
-                            config.setStreamResumeEnabled(it)
+                            repository.setStreamResumeEnabled(it)
                         },
                         checkedThumbColor = Color.White,
                         checkedTrackColor = Accent,

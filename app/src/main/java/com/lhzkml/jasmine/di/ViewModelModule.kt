@@ -14,7 +14,19 @@ val viewModelModule = module {
     viewModel {
         ChatViewModel(
             application = get(),
-            conversationRepo = get()
+            conversationRepo = get(),
+            sessionRepository = get(),
+            providerRepository = get(),
+            modelSelectionRepository = get(),
+            llmSettingsRepository = get(),
+            timeoutSettingsRepository = get(),
+            toolSettingsRepository = get(),
+            agentStrategyRepository = get(),
+            ragConfigRepository = get(),
+            mcpRepository = get(),
+            compressionSettingsRepository = get(),
+            snapshotSettingsRepository = get(),
+            plannerSettingsRepository = get()
         )
     }
 }

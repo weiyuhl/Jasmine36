@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.AppConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -20,16 +19,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lhzkml.jasmine.core.agent.observe.event.EventCategory
+import com.lhzkml.jasmine.repository.EventHandlerSettingsRepository
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class EventHandlerConfigActivity : ComponentActivity() {
+
+    private val eventHandlerRepository: EventHandlerSettingsRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 EventHandlerConfigScreen(
+                    repository = eventHandlerRepository,
                     onBack = { finish() }
                 )
             }
@@ -38,9 +42,11 @@ class EventHandlerConfigActivity : ComponentActivity() {
 }
 
 @Composable
-fun EventHandlerConfigScreen(onBack: () -> Unit) {
-    val config = AppConfig.configRepo()
-    var enabled by remember { mutableStateOf(config.isEventHandlerEnabled()) }
+fun EventHandlerConfigScreen(
+    repository: EventHandlerSettingsRepository,
+    onBack: () -> Unit
+) {
+    var enabled by remember { mutableStateOf(repository.isEventHandlerEnabled()) }
     
     val eventCategories = remember {
         listOf(
@@ -54,7 +60,7 @@ fun EventHandlerConfigScreen(onBack: () -> Unit) {
         )
     }
     
-    val currentFilter = config.getEventHandlerFilter()
+    val currentFilter = remember { repository.getEventHandlerFilter() }
     val checkedStates = remember {
         mutableStateMapOf<EventCategory, Boolean>().apply {
             eventCategories.forEach { (category, _) ->
@@ -75,9 +81,9 @@ fun EventHandlerConfigScreen(onBack: () -> Unit) {
         } else {
             checked
         }
-        config.setEventHandlerFilter(selected)
+        repository.setEventHandlerFilter(selected)
         
-        val filter = config.getEventHandlerFilter()
+        val filter = repository.getEventHandlerFilter()
         summaryText = if (filter.isEmpty()) "监听全部事件" else "监听 ${filter.size} 类事件"
     }
     
@@ -154,7 +160,7 @@ fun EventHandlerConfigScreen(onBack: () -> Unit) {
                     checked = enabled,
                     onCheckedChange = { 
                         enabled = it
-                        config.setEventHandlerEnabled(it)
+                        repository.setEventHandlerEnabled(it)
                     },
                     checkedThumbColor = Color.White,
                     checkedTrackColor = Accent,

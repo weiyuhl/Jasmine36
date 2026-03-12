@@ -28,6 +28,7 @@ import com.lhzkml.jasmine.ui.components.CustomHorizontalDivider
 import com.lhzkml.jasmine.ui.components.CustomText
 import com.lhzkml.jasmine.ui.components.CustomTextButton
 import com.lhzkml.jasmine.ui.theme.Accent
+import org.koin.android.ext.android.inject
 import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
@@ -88,6 +89,8 @@ private fun buildAnnotatedStringWithLinks(
 }
 
 class OssLicensesDetailActivity : ComponentActivity() {
+    
+    private val repository: com.lhzkml.jasmine.repository.AboutRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -106,6 +109,7 @@ class OssLicensesDetailActivity : ComponentActivity() {
 
         setContent {
             OssLicensesDetailScreen(
+                repository = repository,
                 entryName = name,
                 entry = entry,
                 directLicenseUrl = licenseUrl,
@@ -117,16 +121,16 @@ class OssLicensesDetailActivity : ComponentActivity() {
 
 @Composable
 fun OssLicensesDetailScreen(
+    repository: com.lhzkml.jasmine.repository.AboutRepository,
     entryName: String,
     entry: OssLicenseEntry?,
     directLicenseUrl: String?,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
     val rawLicense = remember(entry, directLicenseUrl) {
         when {
             directLicenseUrl != null -> directLicenseUrl
-            entry != null -> OssLicenseLoader.loadLicenseText(context, entry)
+            entry != null -> repository.loadLicenseText(entry)
             else -> null
         }
     }
