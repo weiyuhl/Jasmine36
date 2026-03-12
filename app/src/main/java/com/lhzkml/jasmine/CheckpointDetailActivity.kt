@@ -1,7 +1,5 @@
 package com.lhzkml.jasmine
 
-import com.lhzkml.jasmine.config.AppConfig
-import com.lhzkml.jasmine.config.ProviderManager
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -39,6 +37,9 @@ import org.koin.android.ext.android.inject
 
 class CheckpointDetailActivity : ComponentActivity() {
     private val checkpointRepository: CheckpointRepository by inject()
+    private val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository by inject()
+    private val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository by inject()
+    private val sessionRepository: com.lhzkml.jasmine.repository.SessionRepository by inject()
 
     companion object {
         const val EXTRA_AGENT_ID = "agent_id"
@@ -63,6 +64,9 @@ class CheckpointDetailActivity : ComponentActivity() {
                 agentId = agentId,
                 checkpointId = checkpointId,
                 repository = checkpointRepository,
+                providerRepository = providerRepository,
+                llmSettingsRepository = llmSettingsRepository,
+                sessionRepository = sessionRepository,
                 onBack = { finish() },
                 onRestored = {
                     setResult(RESULT_RESTORED)
@@ -83,6 +87,9 @@ fun CheckpointDetailScreen(
     agentId: String,
     checkpointId: String,
     repository: CheckpointRepository,
+    providerRepository: com.lhzkml.jasmine.repository.ProviderRepository,
+    llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository,
+    sessionRepository: com.lhzkml.jasmine.repository.SessionRepository,
     onBack: () -> Unit,
     onRestored: (Intent) -> Unit,
     onDeleted: () -> Unit
@@ -223,17 +230,17 @@ fun CheckpointDetailScreen(
                             try {
                                 val repo = ConversationRepository(context)
                                 val timeStr = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(Date(cp.createdAt))
-                                val config = ProviderManager.getActiveConfig()
+                                val config = providerRepository.getActiveConfig()
                                 val title = "[恢复] ${cp.nodePath} $timeStr"
-                                val systemPrompt = ProviderManager.getDefaultSystemPrompt(context)
+                                val systemPrompt = llmSettingsRepository.getDefaultSystemPrompt()
                                 val conversationId = withContext(Dispatchers.IO) {
                                     val cid = repo.createConversation(
                                         title = title,
                                         providerId = config?.providerId ?: "unknown",
                                         model = config?.model ?: "unknown",
                                         systemPrompt = systemPrompt,
-                                        workspacePath = if (ProviderManager.isAgentMode(context))
-                                            ProviderManager.getWorkspacePath(context) else ""
+                                        workspacePath = if (sessionRepository.isAgentMode())
+                                            sessionRepository.getWorkspacePath() else ""
                                     )
                                     val rebuiltHistory = repository.rebuildHistory(
                                         agentId = agentId,

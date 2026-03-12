@@ -21,19 +21,23 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.prompt.executor.ApiType
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class SamplingParamsConfigActivity : ComponentActivity() {
+
+    private val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository by inject()
+    private val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 SamplingParamsConfigScreen(
+                    providerRepository = providerRepository,
+                    llmSettingsRepository = llmSettingsRepository,
                     onBack = { finish() }
                 )
             }
@@ -42,21 +46,24 @@ class SamplingParamsConfigActivity : ComponentActivity() {
 }
 
 @Composable
-fun SamplingParamsConfigScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val config = ProviderManager.getActiveConfig()
+fun SamplingParamsConfigScreen(
+    providerRepository: com.lhzkml.jasmine.repository.ProviderRepository,
+    llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository,
+    onBack: () -> Unit
+) {
+    val config = remember { providerRepository.getActiveConfig() }
     val supportsTopK = config?.apiType == ApiType.CLAUDE || config?.apiType == ApiType.GEMINI
     
     var temperature by remember { 
-        val value = ProviderManager.getTemperature(context)
+        val value = llmSettingsRepository.getTemperature()
         mutableStateOf(if (value < 0f) "" else String.format("%.2f", value))
     }
     var topP by remember { 
-        val value = ProviderManager.getTopP(context)
+        val value = llmSettingsRepository.getTopP()
         mutableStateOf(if (value < 0f) "" else String.format("%.2f", value))
     }
     var topK by remember { 
-        val value = ProviderManager.getTopK(context)
+        val value = llmSettingsRepository.getTopK()
         mutableStateOf(if (value < 0) "" else value.toString())
     }
     
@@ -66,9 +73,9 @@ fun SamplingParamsConfigScreen(onBack: () -> Unit) {
             val topPValue = topP.trim().toFloatOrNull() ?: -1f
             val topKValue = topK.trim().toIntOrNull() ?: -1
             
-            ProviderManager.setTemperature(context, tempValue)
-            ProviderManager.setTopP(context, topPValue)
-            ProviderManager.setTopK(context, topKValue)
+            llmSettingsRepository.setTemperature(tempValue.toDouble())
+            llmSettingsRepository.setTopP(topPValue.toDouble())
+            llmSettingsRepository.setTopK(topKValue)
         }
     }
     

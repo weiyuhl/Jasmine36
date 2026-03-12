@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.ProviderManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -22,18 +21,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
 import com.lhzkml.jasmine.core.prompt.llm.SystemPromptManager
 import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.android.ext.android.inject
 
 class SystemPromptConfigActivity : ComponentActivity() {
+
+    private val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JasmineTheme {
                 SystemPromptConfigScreen(
+                    llmSettingsRepository = llmSettingsRepository,
                     onBack = { finish() }
                 )
             }
@@ -42,18 +44,19 @@ class SystemPromptConfigActivity : ComponentActivity() {
 }
 
 @Composable
-fun SystemPromptConfigScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    
+fun SystemPromptConfigScreen(
+    llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository,
+    onBack: () -> Unit
+) {
     var systemPrompt by remember { 
-        mutableStateOf(ProviderManager.getDefaultSystemPrompt(context))
+        mutableStateOf(llmSettingsRepository.getDefaultSystemPrompt())
     }
     var showPresets by remember { mutableStateOf(false) }
     
     DisposableEffect(Unit) {
         onDispose {
             if (systemPrompt.trim().isNotEmpty()) {
-                ProviderManager.setDefaultSystemPrompt(context, systemPrompt.trim())
+                llmSettingsRepository.setDefaultSystemPrompt(systemPrompt.trim())
             }
         }
     }

@@ -20,7 +20,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.agent.mcp.McpToolDefinition
 import com.lhzkml.jasmine.core.config.McpServerConfig
 import com.lhzkml.jasmine.core.config.McpTransportType
@@ -105,7 +104,6 @@ fun McpServerScreen(
     onEditServer: (Int) -> Unit,
     onRefreshCallbackSet: ((()->Unit) -> Unit)? = null
 ) {
-    val config = AppConfig.configRepo()
     val scope = rememberCoroutineScope()
     
     var mcpEnabled by remember { mutableStateOf(repository.isMcpEnabled()) }
@@ -171,7 +169,7 @@ fun McpServerScreen(
         
         if (needsConnect) {
             withContext(Dispatchers.IO) {
-                AppConfig.mcpConnectionManager().preconnect()
+                repository.preconnect()
             }
             
             val updatedCache = repository.getConnectionCache()
@@ -302,7 +300,7 @@ fun McpServerScreen(
                                     
                                     repository.connectSingleServerByName(server.name)
                                     
-                                    val cached = AppConfig.mcpConnectionManager().getServerStatus(server.name)
+                                    val cached = repository.getServerStatus(server.name)
                                     if (cached != null) {
                                         connectionResults = connectionResults + (index to ConnectionResult(
                                             success = cached.success,
@@ -359,7 +357,7 @@ fun McpServerScreen(
                     CustomTextButton(
                         onClick = {
                             showActionsDialog = null
-                            config.updateMcpServer(index, server.copy(enabled = !server.enabled))
+                            repository.updateMcpServer(index, server.copy(enabled = !server.enabled))
                             servers = repository.getMcpServers()
                             connectionResults = connectionResults - index
                             if (!server.enabled) {
@@ -368,7 +366,7 @@ fun McpServerScreen(
                                     
                                     repository.connectSingleServerByName(server.copy(enabled = true).name)
                                     
-                                    val cached = AppConfig.mcpConnectionManager().getServerStatus(server.name)
+                                    val cached = repository.getServerStatus(server.name)
                                     if (cached != null) {
                                         connectionResults = connectionResults + (index to ConnectionResult(
                                             success = cached.success,
@@ -443,7 +441,7 @@ fun McpServerScreen(
                     onClick = {
                         showDeleteDialog = null
                         repository.clearServerCache(server.name)
-                        config.removeMcpServer(index)
+                        repository.removeMcpServer(index)
                         servers = repository.getMcpServers()
                         connectionResults = emptyMap()
                         connectingServers = emptySet()

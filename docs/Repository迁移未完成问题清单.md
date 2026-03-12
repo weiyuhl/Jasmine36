@@ -1,8 +1,29 @@
 # Repository 迁移未完成问题清单
 
+## 迁移进度总览 🎯
+
+**完成度：70.9%（79 → 24 处）**
+
+### ✅ 已完成迁移（56 处）
+- ✅ ChatViewModel.kt - 35 处（32 ProviderManager + 3 AppConfig）
+- ✅ CheckpointDetailActivity.kt - 4 处 ProviderManager
+- ✅ TokenManagementActivity.kt - 2 处 ProviderManager
+- ✅ SamplingParamsConfigActivity.kt - 5 处 ProviderManager
+- ✅ SystemPromptConfigActivity.kt - 2 处 ProviderManager
+- ✅ AppNavigation.kt - 1 处 AppConfig
+- ✅ McpServerEditActivity.kt - 1 处 AppConfig
+- ✅ McpServerActivity.kt - 4 处 AppConfig
+- ✅ AgentStrategyActivity.kt - 1 处 AppConfig
+
+### ⚠️ 待迁移（24 处）
+- ⚠️ ChatExecutor.kt - 23 处 ProviderManager（需特殊处理）
+- ⚠️ CheckpointRecovery.kt - 1 处 AppConfig（低优先级）
+
+---
+
 ## 概述
 
-虽然已创建 21 个 Repository 并完成基础迁移，但仍有大量代码直接使用 `ProviderManager` 和 `AppConfig`，未完全迁移到 Repository 模式。
+虽然已创建 21 个 Repository 并完成基础迁移，但仍有少量代码直接使用 `ProviderManager` 和 `AppConfig`，需要完成最后的迁移工作。
 
 ## 一、ChatViewModel.kt - 32 处 ProviderManager 未迁移
 
@@ -199,47 +220,55 @@
 
 ## 八、问题统计
 
-| 文件 | ProviderManager 调用次数 | AppConfig 调用次数 | 总计 |
-|------|------------------------|-------------------|------|
-| ChatViewModel.kt | 32 | 3 | 35 |
-| ChatExecutor.kt | 23 | 0 | 23 |
-| CheckpointDetailActivity.kt | 4 | 0 | 4 |
-| TokenManagementActivity.kt | 2 | 0 | 2 |
-| SamplingParamsConfigActivity.kt | 5 | 0 | 5 |
-| SystemPromptConfigActivity.kt | 2 | 0 | 2 |
-| AppNavigation.kt | 0 | 1 | 1 |
-| McpServerEditActivity.kt | 0 | 1 | 1 |
-| McpServerActivity.kt | 0 | 4 | 4 |
-| AgentStrategyActivity.kt | 0 | 1 | 1 |
-| CheckpointRecovery.kt | 0 | 1 | 1 |
-| **总计** | **68** | **11** | **79** |
+| 文件 | ProviderManager 调用次数 | AppConfig 调用次数 | 状态 | 总计 |
+|------|------------------------|-------------------|------|------|
+| ChatViewModel.kt | ~~32~~ 0 | ~~3~~ 0 | ✅ 已完成 | ~~35~~ 0 |
+| ChatExecutor.kt | 23 | 0 | ⚠️ 待迁移 | 23 |
+| CheckpointDetailActivity.kt | ~~4~~ 0 | 0 | ✅ 已完成 | ~~4~~ 0 |
+| TokenManagementActivity.kt | ~~2~~ 0 | 0 | ✅ 已完成 | ~~2~~ 0 |
+| SamplingParamsConfigActivity.kt | ~~5~~ 0 | 0 | ✅ 已完成 | ~~5~~ 0 |
+| SystemPromptConfigActivity.kt | ~~2~~ 0 | 0 | ✅ 已完成 | ~~2~~ 0 |
+| AppNavigation.kt | 0 | ~~1~~ 0 | ✅ 已完成 | ~~1~~ 0 |
+| McpServerEditActivity.kt | 0 | ~~1~~ 0 | ✅ 已完成 | ~~1~~ 0 |
+| McpServerActivity.kt | 0 | ~~4~~ 0 | ✅ 已完成 | ~~4~~ 0 |
+| AgentStrategyActivity.kt | 0 | ~~1~~ 0 | ✅ 已完成 | ~~1~~ 0 |
+| CheckpointRecovery.kt | 0 | 1 | ⚠️ 待迁移 | 1 |
+| **总计** | **23** | **1** | **70.9% 完成** | **24** |
+
+**迁移进度：79 → 24 处（减少 55 处，完成 70.9%）**
 
 ---
 
 ## 九、修复优先级
 
-### 高优先级（核心功能）
-1. **ChatViewModel.kt** - 35 处，影响聊天核心功能
-2. **ChatExecutor.kt** - 23 处，影响消息执行逻辑
+### ✅ 已完成（高优先级 - 核心功能）
+1. ✅ **ChatViewModel.kt** - 35 处，影响聊天核心功能（已完成）
 
-### 中优先级（功能完整性）
-3. **CheckpointDetailActivity.kt** - 4 处
-4. **SamplingParamsConfigActivity.kt** - 5 处
-5. **McpServerActivity.kt** - 4 处
+### ⚠️ 待处理（高优先级 - 核心功能）
+2. ⚠️ **ChatExecutor.kt** - 23 处，影响消息执行逻辑（需特殊处理）
 
-### 低优先级（UI 配置页面）
-6. **TokenManagementActivity.kt** - 2 处
-7. **SystemPromptConfigActivity.kt** - 2 处
-8. **AppNavigation.kt** - 1 处
-9. **McpServerEditActivity.kt** - 1 处
-10. **AgentStrategyActivity.kt** - 1 处
-11. **CheckpointRecovery.kt** - 1 处
+### ✅ 已完成（中优先级 - 功能完整性）
+3. ✅ **CheckpointDetailActivity.kt** - 4 处（已完成）
+4. ✅ **SamplingParamsConfigActivity.kt** - 5 处（已完成）
+5. ✅ **McpServerActivity.kt** - 4 处（已完成）
+
+### ✅ 已完成（低优先级 - UI 配置页面）
+6. ✅ **TokenManagementActivity.kt** - 2 处（已完成）
+7. ✅ **SystemPromptConfigActivity.kt** - 2 处（已完成）
+8. ✅ **AppNavigation.kt** - 1 处（已完成）
+9. ✅ **McpServerEditActivity.kt** - 1 处（已完成）
+10. ✅ **AgentStrategyActivity.kt** - 1 处（已完成）
+
+### ⚠️ 待处理（低优先级）
+11. ⚠️ **CheckpointRecovery.kt** - 1 处（低优先级）
 
 ---
 
 ## 十、修复建议
 
-### 1. ChatViewModel 修复方案
+### 1. ChatViewModel 修复方案 ✅
+**状态：已完成**
+
 已注入的 Repository：
 - ✅ SessionRepository
 - ✅ ProviderRepository
@@ -254,19 +283,39 @@
 - ✅ SnapshotSettingsRepository
 - ✅ PlannerSettingsRepository
 
-需要做的：
-- 替换所有 `ProviderManager` 调用为对应 Repository 方法
-- 移除 `ProviderManager.initialize(context)` 调用
+完成内容：
+- ✅ 替换所有 32 处 `ProviderManager` 调用为对应 Repository 方法
+- ✅ 移除 `ProviderManager.initialize(context)` 调用
+- ✅ 移除 3 处 `AppConfig` 直接调用
 
-### 2. ChatExecutor 修复方案
+### 2. ChatExecutor 修复方案 ⚠️
+**状态：待迁移（需特殊处理）**
+
 ChatExecutor 是 Service 类，不应该注入 Repository。
 
 两种方案：
 1. **方案A（推荐）**: 将所有配置作为参数传入 ChatExecutor
 2. **方案B**: 创建 ChatExecutorConfig 数据类，封装所有配置
 
-### 3. Activity 修复方案
-为每个 Activity 注入对应的 Repository，替换 ProviderManager 调用。
+**注意**：ChatExecutor 有 23 处 ProviderManager 调用，需要仔细设计参数传递方式。
+
+### 3. Activity 修复方案 ✅
+**状态：已完成**
+
+已完成的 Activity 迁移：
+- ✅ CheckpointDetailActivity - 注入 ProviderRepository, LlmSettingsRepository, SessionRepository
+- ✅ TokenManagementActivity - 注入 LlmSettingsRepository
+- ✅ SamplingParamsConfigActivity - 注入 ProviderRepository, LlmSettingsRepository
+- ✅ SystemPromptConfigActivity - 注入 LlmSettingsRepository
+- ✅ McpServerActivity - 使用 McpRepository
+- ✅ McpServerEditActivity - 使用 McpRepository
+- ✅ AgentStrategyActivity - 使用 AgentStrategyRepository
+
+### 4. Navigation 修复方案 ✅
+**状态：已完成**
+
+- ✅ AppNavigation.kt - 使用 CheckpointRepository.getCheckpointService()
+- ✅ 所有 Compose 路由正确注入对应 Repository
 
 ---
 
@@ -283,9 +332,11 @@ ChatExecutor 是 Service 类，不应该注入 Repository。
 > 页面以后只依赖对应功能域 Repository，不再直接调用 `ProviderManager`、`AppConfig` 或直接 new core `ConversationRepository`
 
 **当前违反情况：**
-- ❌ 大量页面仍直接调用 `ProviderManager`
-- ❌ ChatExecutor 等 Service 类直接调用 `ProviderManager`
-- ❌ 部分页面直接使用 `AppConfig.configRepo()`
+- ✅ 大部分页面已迁移到 Repository 模式
+- ⚠️ ChatExecutor 等 Service 类仍直接调用 `ProviderManager`（23 处）
+- ⚠️ CheckpointRecovery.kt 仍直接使用 `AppConfig.checkpointService()`（1 处）
+
+**改进进度：70.9%**
 
 ---
 

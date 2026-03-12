@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.AppConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -75,7 +74,6 @@ fun McpServerEditScreen(
     onCancel: () -> Unit,
     onSave: (Boolean) -> Unit  // 参数表示配置是否有变化
 ) {
-    val config = AppConfig.configRepo()
     val scope = rememberCoroutineScope()
     
     // 加载已有配置
@@ -167,9 +165,9 @@ fun McpServerEditScreen(
                     if (editIndex >= 0) {
                         val servers = repository.getMcpServers()
                         val oldEnabled = servers.getOrNull(editIndex)?.enabled ?: true
-                        config.updateMcpServer(editIndex, serverConfig.copy(enabled = oldEnabled))
+                        repository.updateMcpServer(editIndex, serverConfig.copy(enabled = oldEnabled))
                     } else {
-                        config.addMcpServer(serverConfig)
+                        repository.addMcpServer(serverConfig)
                     }
                     
                     onSave(configChanged)

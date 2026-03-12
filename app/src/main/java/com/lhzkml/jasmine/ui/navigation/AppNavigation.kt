@@ -20,7 +20,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.lhzkml.jasmine.AddCustomProviderScreen
 import com.lhzkml.jasmine.AgentStrategyScreen
-import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.CheckpointDetailScreen
 import com.lhzkml.jasmine.CheckpointManagerScreen
 import com.lhzkml.jasmine.CompressionConfigScreen
@@ -75,7 +74,8 @@ fun AppNavigation(
     navController: androidx.navigation.NavHostController = rememberNavController()
 ) {
     val conversationRepo: ConversationRepository = koinInject()
-    val checkpointService: CheckpointService? = remember { AppConfig.checkpointService() }
+    val checkpointRepository: com.lhzkml.jasmine.repository.CheckpointRepository = koinInject()
+    val checkpointService: CheckpointService? = remember { checkpointRepository.getCheckpointService() }
 
     NavHost(
         navController = navController,
@@ -279,18 +279,30 @@ fun AppNavigation(
         }
 
         composable(Routes.TOKEN_MANAGEMENT) {
+            val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository = koinInject()
             TokenManagementScreen(
                 conversationRepo = conversationRepo,
+                llmSettingsRepository = llmSettingsRepository,
                 onBack = { navController.popBackStack() }
             )
         }
 
         composable(Routes.SAMPLING_PARAMS) {
-            SamplingParamsConfigScreen(onBack = { navController.popBackStack() })
+            val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository = koinInject()
+            val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository = koinInject()
+            SamplingParamsConfigScreen(
+                providerRepository = providerRepository,
+                llmSettingsRepository = llmSettingsRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.SYSTEM_PROMPT) {
-            SystemPromptConfigScreen(onBack = { navController.popBackStack() })
+            val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository = koinInject()
+            SystemPromptConfigScreen(
+                llmSettingsRepository = llmSettingsRepository,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.RAG_CONFIG) {
@@ -549,10 +561,16 @@ fun AppNavigation(
             val agentId = backStackEntry.arguments?.getString("agentId") ?: return@composable
             val checkpointId = backStackEntry.arguments?.getString("checkpointId") ?: return@composable
             val checkpointRepository: com.lhzkml.jasmine.repository.CheckpointRepository = koinInject()
+            val providerRepository: com.lhzkml.jasmine.repository.ProviderRepository = koinInject()
+            val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository = koinInject()
+            val sessionRepository: com.lhzkml.jasmine.repository.SessionRepository = koinInject()
             CheckpointDetailScreen(
                 agentId = agentId,
                 checkpointId = checkpointId,
                 repository = checkpointRepository,
+                providerRepository = providerRepository,
+                llmSettingsRepository = llmSettingsRepository,
+                sessionRepository = sessionRepository,
                 onBack = { navController.popBackStack() },
                 onRestored = { intent ->
                     navController.popBackStack(Routes.MAIN, false)

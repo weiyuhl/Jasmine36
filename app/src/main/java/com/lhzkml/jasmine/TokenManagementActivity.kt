@@ -1,7 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.os.Bundle
-import com.lhzkml.jasmine.config.ProviderManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -29,10 +28,12 @@ import com.lhzkml.jasmine.ui.theme.*
 import com.lhzkml.jasmine.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.inject
 
 class TokenManagementActivity : ComponentActivity() {
 
     private lateinit var conversationRepo: ConversationRepository
+    private val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +43,7 @@ class TokenManagementActivity : ComponentActivity() {
             JasmineTheme {
                 TokenManagementScreen(
                     conversationRepo = conversationRepo,
+                    llmSettingsRepository = llmSettingsRepository,
                     onBack = { finish() }
                 )
             }
@@ -52,19 +54,18 @@ class TokenManagementActivity : ComponentActivity() {
 @Composable
 fun TokenManagementScreen(
     conversationRepo: ConversationRepository,
+    llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    
     var maxTokens by remember { 
-        val value = ProviderManager.getMaxTokens(context)
+        val value = llmSettingsRepository.getMaxTokens()
         mutableStateOf(if (value > 0) value.toString() else "")
     }
     
     DisposableEffect(Unit) {
         onDispose {
             val tokens = maxTokens.trim().toIntOrNull() ?: 0
-            ProviderManager.setMaxTokens(context, tokens)
+            llmSettingsRepository.setMaxTokens(tokens)
         }
     }
     

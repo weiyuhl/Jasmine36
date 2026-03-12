@@ -94,6 +94,12 @@ interface CheckpointRepository {
         upToCheckpointId: String,
         systemPrompt: String
     ): List<ChatMessage>
+    
+    /**
+     * 获取底层 CheckpointService 实例
+     * 用于需要直接访问 CheckpointService 的场景（如 AppNavigation）
+     */
+    fun getCheckpointService(): CheckpointService?
 }
 
 class DefaultCheckpointRepository(
@@ -154,5 +160,9 @@ class DefaultCheckpointRepository(
     ): List<ChatMessage> {
         val service = checkpointService ?: return emptyList()
         return service.rebuildHistory(agentId, upToCheckpointId, systemPrompt)
+    }
+    
+    override fun getCheckpointService(): CheckpointService? {
+        return checkpointService
     }
 }

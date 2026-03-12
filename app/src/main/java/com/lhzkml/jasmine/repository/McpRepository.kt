@@ -35,6 +35,9 @@ interface McpRepository {
     // Server 列表管理
     fun getMcpServers(): List<McpServerConfig>
     fun setMcpServers(servers: List<McpServerConfig>)
+    fun addMcpServer(server: McpServerConfig)
+    fun updateMcpServer(index: Int, server: McpServerConfig)
+    fun removeMcpServer(index: Int)
     
     // 连接管理
     suspend fun reconnect(onComplete: () -> Unit = {})
@@ -49,6 +52,8 @@ interface McpRepository {
     )
     
     fun getConnectionCache(): Map<String, CachedConnection>
+    fun getServerStatus(serverName: String): CachedConnection?
+    suspend fun preconnect()
     
     // 获取底层 ConnectionManager（用于 ChatViewModel 等需要直接访问的场景）
     fun getConnectionManager(): McpConnectionManager
@@ -69,6 +74,18 @@ class DefaultMcpRepository(
     
     override fun setMcpServers(servers: List<McpServerConfig>) {
         configRepo.setMcpServers(servers)
+    }
+    
+    override fun addMcpServer(server: McpServerConfig) {
+        configRepo.addMcpServer(server)
+    }
+    
+    override fun updateMcpServer(index: Int, server: McpServerConfig) {
+        configRepo.updateMcpServer(index, server)
+    }
+    
+    override fun removeMcpServer(index: Int) {
+        configRepo.removeMcpServer(index)
     }
     
     override suspend fun reconnect(onComplete: () -> Unit) {
@@ -92,6 +109,19 @@ class DefaultMcpRepository(
                 error = value.error
             )
         }
+    }
+    
+    override fun getServerStatus(serverName: String): McpRepository.CachedConnection? {
+        val status = mcpConnectionManager.getServerStatus(serverName) ?: return null
+        return McpRepository.CachedConnection(
+            success = status.success ?: false,
+            tools = status.tools,
+            error = status.error
+        )
+    }
+    
+    override suspend fun preconnect() {
+        mcpConnectionManager.preconnect()
     }
     
     override fun getConnectionManager(): McpConnectionManager = mcpConnectionManager

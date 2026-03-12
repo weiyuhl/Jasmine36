@@ -162,7 +162,6 @@ class ChatViewModel(
 
     fun initialize(context: Context, callbacks: LifecycleCallbacks) {
         lifecycleCallbacks = callbacks
-        ProviderManager.initialize(context)
 
         chatStateManager = ChatStateManager(chatItems) { requestScrollToBottom() }
         
@@ -277,25 +276,25 @@ class ChatViewModel(
     }
 
     private fun refreshContextCollector() {
-        val isAgent = ProviderManager.isAgentMode(ctx)
-        val wsPath = ProviderManager.getWorkspacePath(ctx)
-        val activeId = ProviderManager.getActiveId()
+        val isAgent = sessionRepository.isAgentMode()
+        val wsPath = sessionRepository.getWorkspacePath()
+        val activeId = providerRepository.getActiveProviderId()
         val modelName = if (activeId != null) {
-            overrideModel ?: ProviderManager.getModel(ctx, activeId)
+            overrideModel ?: providerRepository.getModel(activeId)
         } else ""
         val additionalProviders: List<SystemContextProvider> = buildList {
             val ragProvider = RagStore.buildRagContextProvider {
-                val rawActive = ProviderManager.getRagActiveLibraryIds(ctx)
-                val libs = ProviderManager.getRagLibraries(ctx)
+                val rawActive = ragConfigRepository.getRagActiveLibraryIds()
+                val libs = ragConfigRepository.getRagLibraries()
                 val effectiveActive = if (rawActive.isEmpty() && libs.isNotEmpty()) libs.map { it.id }.toSet() else rawActive
                 RagConfig(
-                    enabled = ProviderManager.isRagEnabled(ctx),
-                    topK = ProviderManager.getRagTopK(ctx),
-                    embeddingBaseUrl = ProviderManager.getRagEmbeddingBaseUrl(ctx),
-                    embeddingApiKey = ProviderManager.getRagEmbeddingApiKey(ctx),
-                    embeddingModel = ProviderManager.getRagEmbeddingModel(ctx),
-                    useLocalEmbedding = ProviderManager.getRagEmbeddingUseLocal(ctx),
-                    embeddingModelPath = ProviderManager.getRagEmbeddingModelPath(ctx),
+                    enabled = ragConfigRepository.isRagEnabled(),
+                    topK = ragConfigRepository.getRagTopK(),
+                    embeddingBaseUrl = ragConfigRepository.getRagEmbeddingBaseUrl(),
+                    embeddingApiKey = ragConfigRepository.getRagEmbeddingApiKey(),
+                    embeddingModel = ragConfigRepository.getRagEmbeddingModel(),
+                    useLocalEmbedding = ragConfigRepository.getRagEmbeddingUseLocal(),
+                    embeddingModelPath = ragConfigRepository.getRagEmbeddingModelPath(),
                     activeLibraryIds = effectiveActive
                 )
             }
@@ -308,7 +307,7 @@ class ChatViewModel(
     }
 
     private fun buildToolRegistry(client: ChatClient, model: String): ToolRegistry {
-        toolRegistryBuilder.workspacePath = ProviderManager.getWorkspacePath(ctx)
+        toolRegistryBuilder.workspacePath = sessionRepository.getWorkspacePath()
         toolRegistryBuilder.fallbackBasePath = ctx.getExternalFilesDir(null)?.absolutePath
         DialogHandlers.register(_uiState, toolRegistryBuilder)
         toolRegistryBuilder.subAgentClientProvider = { client }
@@ -340,7 +339,7 @@ class ChatViewModel(
                 chatStateManager.handleSubAgentResult(purpose, result)
             }
         }
-        return toolRegistryBuilder.build(ProviderManager.isAgentMode(ctx))
+        return toolRegistryBuilder.build(sessionRepository.isAgentMode())
     }
 
     private fun preconnectMcpServers() {
@@ -381,8 +380,8 @@ class ChatViewModel(
 
     private fun subscribeConversations() {
         conversationObserverJob?.cancel()
-        val isAgent = ProviderManager.isAgentMode(ctx)
-        val wp = if (isAgent) ProviderManager.getWorkspacePath(ctx) else ""
+        val isAgent = sessionRepository.isAgentMode()
+        val wp = if (isAgent) sessionRepository.getWorkspacePath() else ""
         conversationObserverJob = viewModelScope.launch {
             conversationRepo.observeConversationsByWorkspace(wp).collectLatest { list ->
                 _uiState.update { it.copy(conversations = list, conversationsEmpty = list.isEmpty()) }
@@ -391,9 +390,9 @@ class ChatViewModel(
     }
 
     private fun refreshAgentModeUI() {
-        val isAgent = ProviderManager.isAgentMode(ctx)
+        val isAgent = sessionRepository.isAgentMode()
         if (isAgent) {
-            val path = ProviderManager.getWorkspacePath(ctx)
+            val path = sessionRepository.getWorkspacePath()
             _uiState.update {
                 it.copy(
                     isAgentMode = true,
@@ -412,7 +411,7 @@ class ChatViewModel(
                 )
             }
         }
-        val currentWs = if (isAgent) ProviderManager.getWorkspacePath(ctx) else ""
+        val currentWs = if (isAgent) sessionRepository.getWorkspacePath() else ""
         if (currentConversationId != null) {
             viewModelScope.launch(Dispatchers.IO) {
                 val info = conversationRepo.getConversation(currentConversationId!!)
@@ -425,7 +424,7 @@ class ChatViewModel(
     }
 
     private fun refreshModelSelector() {
-        val activeId = ProviderManager.getActiveId()
+        val activeId = providerRepository.getActiveProviderId()
         if (activeId == null) {
             _uiState.update {
                 it.copy(currentModelDisplay = "未配置", modelList = emptyList(), currentModel = "", supportsThinkingMode = false)
@@ -433,11 +432,11 @@ class ChatViewModel(
             return
         }
 
-        val provider = ProviderManager.getProvider(activeId)
+        val provider = providerRepository.getProvider(activeId)
         if (provider?.apiType == ApiType.LOCAL) {
             val localModels = MnnModelManager.getLocalModels(ctx)
             val localModelIds = localModels.map { it.modelId }
-            val model = overrideModel ?: ProviderManager.getModel(ctx, activeId)
+            val model = overrideModel ?: providerRepository.getModel(activeId)
             val selectedModel = if (model.isNotEmpty() && model in localModelIds) model
                 else localModelIds.firstOrNull() ?: ""
             if (selectedModel != model && selectedModel.isNotEmpty()) {
@@ -449,14 +448,14 @@ class ChatViewModel(
                     currentModel = selectedModel,
                     currentModelDisplay = "${shortenModelName(selectedModel).ifEmpty { "请下载模型" }} \u02C7",
                     supportsThinkingMode = MnnModelManager.isSupportThinkingSwitch(ctx, selectedModel),
-                    isThinkingModeEnabled = ProviderManager.getMnnThinkingEnabled(ctx, selectedModel)
+                    isThinkingModeEnabled = modelSelectionRepository.isThinkingEnabled(selectedModel)
                 )
             }
             return
         }
 
-        val model = overrideModel ?: ProviderManager.getModel(ctx, activeId)
-        val selectedModels = ProviderManager.getSelectedModels(ctx, activeId)
+        val model = overrideModel ?: providerRepository.getModel(activeId)
+        val selectedModels = providerRepository.getSelectedModels(activeId)
         val list = if (selectedModels.isEmpty()) {
             if (model.isNotEmpty()) listOf(model) else emptyList()
         } else {
@@ -474,11 +473,11 @@ class ChatViewModel(
     }
 
     private fun selectModel(model: String) {
-        val activeId = ProviderManager.getActiveId() ?: return
+        val activeId = providerRepository.getActiveProviderId() ?: return
         overrideModel = model
-        val key = ProviderManager.getApiKey(ctx, activeId) ?: ""
-        val baseUrl = ProviderManager.getBaseUrl(ctx, activeId)
-        ProviderManager.saveConfig(ctx, activeId, key, baseUrl, model)
+        val key = providerRepository.getApiKey(activeId) ?: ""
+        val baseUrl = providerRepository.getBaseUrl(activeId)
+        providerRepository.saveProviderCredentials(activeId, key, baseUrl, model)
         refreshModelSelector()
     }
 
@@ -486,15 +485,15 @@ class ChatViewModel(
         val state = _uiState.value
         if (!state.supportsThinkingMode || state.currentModel.isEmpty()) return
         _uiState.update { it.copy(isThinkingModeEnabled = enabled) }
-        ProviderManager.setMnnThinkingEnabled(ctx, state.currentModel, enabled)
+        modelSelectionRepository.setThinkingEnabled(state.currentModel, enabled)
         val client = clientRouter.getClient(MnnChatClient.PROVIDER_ID) as? MnnChatClient
         client?.updateThinking(enabled)
     }
 
     private fun closeWorkspace() {
-        if (ProviderManager.isAgentMode(ctx)) {
-            ProviderManager.setLastConversationId(ctx, currentConversationId ?: "")
-            val uriStr = ProviderManager.getWorkspaceUri(ctx)
+        if (sessionRepository.isAgentMode()) {
+            sessionRepository.setLastConversationId(currentConversationId)
+            val uriStr = sessionRepository.getWorkspaceUri()
             if (uriStr.isNotEmpty()) {
                 try {
                     val uri = android.net.Uri.parse(uriStr)
@@ -504,11 +503,11 @@ class ChatViewModel(
                     )
                 } catch (_: Exception) {}
             }
-            ProviderManager.setWorkspacePath(ctx, "")
-            ProviderManager.setWorkspaceUri(ctx, "")
+            sessionRepository.setWorkspacePath("")
+            sessionRepository.setWorkspaceUri("")
         }
-        ProviderManager.setAgentMode(ctx, false)
-        ProviderManager.setLastSession(ctx, false)
+        sessionRepository.setAgentMode(false)
+        sessionRepository.setLastSession(false)
         _uiState.update { it.copy(navigationEvent = NavigationEvent.Launcher) }
     }
 
@@ -570,8 +569,8 @@ class ChatViewModel(
                 }
                 requestScrollToBottom()
             }
-            if (ProviderManager.isSnapshotEnabled(ctx)
-                && ProviderManager.getSnapshotStorage(ctx) == com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE
+            if (snapshotSettingsRepository.isSnapshotEnabled()
+                && snapshotSettingsRepository.getSnapshotStorage() == com.lhzkml.jasmine.core.config.SnapshotStorageType.FILE
             ) {
                 tryOfferStartupRecovery(conversationId)
             }
@@ -714,7 +713,7 @@ class ChatViewModel(
         }
         currentLocalModelId = null
 
-        val provider = ProviderManager.getProvider(config.providerId)
+        val provider = providerRepository.getProvider(config.providerId)
         val clientConfig = ChatClientConfig(
             providerId = config.providerId,
             providerName = provider?.name ?: config.providerId,
@@ -726,9 +725,9 @@ class ChatViewModel(
             vertexProjectId = config.vertexProjectId,
             vertexLocation = config.vertexLocation,
             vertexServiceAccountJson = config.vertexServiceAccountJson,
-            requestTimeoutMs = ProviderManager.getRequestTimeout(ctx).toLong() * 1000,
-            connectTimeoutMs = ProviderManager.getConnectTimeout(ctx).toLong() * 1000,
-            socketTimeoutMs = ProviderManager.getSocketTimeout(ctx).toLong() * 1000
+            requestTimeoutMs = timeoutSettingsRepository.getRequestTimeout().toLong() * 1000,
+            connectTimeoutMs = timeoutSettingsRepository.getConnectTimeout().toLong() * 1000,
+            socketTimeoutMs = timeoutSettingsRepository.getSocketTimeout().toLong() * 1000
         )
         val client = ChatClientFactory.create(clientConfig)
         val llmProvider = client.provider
@@ -742,7 +741,7 @@ class ChatViewModel(
     }
 
     private fun sendMessage(message: String) {
-        val config = ProviderManager.getActiveConfig()
+        val config = providerRepository.getActiveConfig()
         if (config == null) {
             showToast("请先在设置中配置模型供应商")
             _uiState.update { it.copy(navigationEvent = NavigationEvent.Settings) }

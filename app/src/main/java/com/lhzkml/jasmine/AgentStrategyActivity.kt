@@ -23,7 +23,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lhzkml.jasmine.config.AppConfig
 import com.lhzkml.jasmine.core.config.AgentStrategyType
 import com.lhzkml.jasmine.core.config.GraphToolCallMode
 import com.lhzkml.jasmine.core.config.ToolSelectionStrategyType
@@ -34,6 +33,7 @@ import com.lhzkml.jasmine.ui.theme.BgPrimary
 import com.lhzkml.jasmine.ui.theme.TextPrimary
 import com.lhzkml.jasmine.ui.theme.TextSecondary
 import com.lhzkml.jasmine.ui.components.*
+import org.koin.compose.koinInject
 
 /**
  * Agent 策略选择界面
@@ -54,29 +54,29 @@ class AgentStrategyActivity : ComponentActivity() {
 
 @Composable
 fun AgentStrategyScreen(onBack: () -> Unit) {
-    val config = AppConfig.configRepo()
+    val agentStrategyRepository: com.lhzkml.jasmine.repository.AgentStrategyRepository = koinInject()
     
-    var selectedStrategy by remember { mutableStateOf(config.getAgentStrategy()) }
-    var toolCallMode by remember { mutableStateOf(config.getGraphToolCallMode()) }
-    var toolSelectionStrategy by remember { mutableStateOf(config.getToolSelectionStrategy()) }
-    var toolChoiceMode by remember { mutableStateOf(config.getToolChoiceMode()) }
+    var selectedStrategy by remember { mutableStateOf(agentStrategyRepository.getAgentStrategy()) }
+    var toolCallMode by remember { mutableStateOf(agentStrategyRepository.getGraphToolCallMode()) }
+    var toolSelectionStrategy by remember { mutableStateOf(agentStrategyRepository.getToolSelectionStrategy()) }
+    var toolChoiceMode by remember { mutableStateOf(agentStrategyRepository.getToolChoiceMode()) }
 
-    var maxIterations by remember { mutableFloatStateOf(config.getAgentMaxIterations().toFloat()) }
-    var maxToolResultLength by remember { mutableFloatStateOf(config.getMaxToolResultLength().toFloat()) }
+    var maxIterations by remember { mutableFloatStateOf(agentStrategyRepository.getAgentMaxIterations().toFloat()) }
+    var maxToolResultLength by remember { mutableFloatStateOf(agentStrategyRepository.getMaxToolResultLength().toFloat()) }
 
-    var byNameTools by remember { mutableStateOf(config.getToolSelectionNames().joinToString(",")) }
-    var autoTaskDesc by remember { mutableStateOf(config.getToolSelectionTaskDesc()) }
-    var namedTool by remember { mutableStateOf(config.getToolChoiceNamedTool()) }
+    var byNameTools by remember { mutableStateOf(agentStrategyRepository.getToolSelectionNames().joinToString(",")) }
+    var autoTaskDesc by remember { mutableStateOf(agentStrategyRepository.getToolSelectionTaskDesc()) }
+    var namedTool by remember { mutableStateOf(agentStrategyRepository.getToolChoiceNamedTool()) }
 
     fun saveTextFields() {
         val byNameText = byNameTools.trim()
         if (byNameText.isNotEmpty()) {
-            config.setToolSelectionNames(byNameText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet())
+            agentStrategyRepository.setToolSelectionNames(byNameText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet())
         } else {
-            config.setToolSelectionNames(emptySet())
+            agentStrategyRepository.setToolSelectionNames(emptySet())
         }
-        config.setToolSelectionTaskDesc(autoTaskDesc.trim())
-        config.setToolChoiceNamedTool(namedTool.trim())
+        agentStrategyRepository.setToolSelectionTaskDesc(autoTaskDesc.trim())
+        agentStrategyRepository.setToolChoiceNamedTool(namedTool.trim())
     }
 
     LaunchedEffect(byNameTools) { saveTextFields() }
@@ -133,7 +133,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 isSelected = selectedStrategy == AgentStrategyType.SIMPLE_LOOP,
                 onClick = {
                     selectedStrategy = AgentStrategyType.SIMPLE_LOOP
-                    config.setAgentStrategy(AgentStrategyType.SIMPLE_LOOP)
+                    agentStrategyRepository.setAgentStrategy(AgentStrategyType.SIMPLE_LOOP)
                 },
                 showDiagram = true,
                 diagramContent = {
@@ -151,7 +151,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 isSelected = selectedStrategy == AgentStrategyType.SINGLE_RUN_GRAPH,
                 onClick = {
                     selectedStrategy = AgentStrategyType.SINGLE_RUN_GRAPH
-                    config.setAgentStrategy(AgentStrategyType.SINGLE_RUN_GRAPH)
+                    agentStrategyRepository.setAgentStrategy(AgentStrategyType.SINGLE_RUN_GRAPH)
                 },
                 showDiagram = true,
                 diagramContent = {
@@ -213,7 +213,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                         value = maxIterations,
                         onValueChange = { maxIterations = it },
                         onValueChangeFinished = {
-                            config.setAgentMaxIterations(maxIterations.roundToInt())
+                            agentStrategyRepository.setAgentMaxIterations(maxIterations.roundToInt())
                         },
                         valueRange = 1f..50f,
                         steps = 48,
@@ -246,7 +246,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                             maxToolResultLength = (it / 1000f).roundToInt() * 1000f
                         },
                         onValueChangeFinished = {
-                            config.setMaxToolResultLength(maxToolResultLength.roundToInt())
+                            agentStrategyRepository.setMaxToolResultLength(maxToolResultLength.roundToInt())
                         },
                         valueRange = 1000f..30000f,
                         steps = 28,
@@ -283,7 +283,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     isSelected = toolCallMode == GraphToolCallMode.SEQUENTIAL,
                     onClick = {
                         toolCallMode = GraphToolCallMode.SEQUENTIAL
-                        config.setGraphToolCallMode(GraphToolCallMode.SEQUENTIAL)
+                        agentStrategyRepository.setGraphToolCallMode(GraphToolCallMode.SEQUENTIAL)
                     }
                 )
                 
@@ -293,7 +293,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     isSelected = toolCallMode == GraphToolCallMode.PARALLEL,
                     onClick = {
                         toolCallMode = GraphToolCallMode.PARALLEL
-                        config.setGraphToolCallMode(GraphToolCallMode.PARALLEL)
+                        agentStrategyRepository.setGraphToolCallMode(GraphToolCallMode.PARALLEL)
                     }
                 )
                 
@@ -303,7 +303,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     isSelected = toolCallMode == GraphToolCallMode.SINGLE_RUN_SEQUENTIAL,
                     onClick = {
                         toolCallMode = GraphToolCallMode.SINGLE_RUN_SEQUENTIAL
-                        config.setGraphToolCallMode(GraphToolCallMode.SINGLE_RUN_SEQUENTIAL)
+                        agentStrategyRepository.setGraphToolCallMode(GraphToolCallMode.SINGLE_RUN_SEQUENTIAL)
                     }
                 )
                 
@@ -329,7 +329,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     isSelected = toolSelectionStrategy == ToolSelectionStrategyType.ALL,
                     onClick = {
                         toolSelectionStrategy = ToolSelectionStrategyType.ALL
-                        config.setToolSelectionStrategy(ToolSelectionStrategyType.ALL)
+                        agentStrategyRepository.setToolSelectionStrategy(ToolSelectionStrategyType.ALL)
                     }
                 )
                 
@@ -339,7 +339,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     isSelected = toolSelectionStrategy == ToolSelectionStrategyType.NONE,
                     onClick = {
                         toolSelectionStrategy = ToolSelectionStrategyType.NONE
-                        config.setToolSelectionStrategy(ToolSelectionStrategyType.NONE)
+                        agentStrategyRepository.setToolSelectionStrategy(ToolSelectionStrategyType.NONE)
                     }
                 )
                 
@@ -349,7 +349,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     isSelected = toolSelectionStrategy == ToolSelectionStrategyType.BY_NAME,
                     onClick = {
                         toolSelectionStrategy = ToolSelectionStrategyType.BY_NAME
-                        config.setToolSelectionStrategy(ToolSelectionStrategyType.BY_NAME)
+                        agentStrategyRepository.setToolSelectionStrategy(ToolSelectionStrategyType.BY_NAME)
                     }
                 )
                 
@@ -400,7 +400,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                     isSelected = toolSelectionStrategy == ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK,
                     onClick = {
                         toolSelectionStrategy = ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK
-                        config.setToolSelectionStrategy(ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK)
+                        agentStrategyRepository.setToolSelectionStrategy(ToolSelectionStrategyType.AUTO_SELECT_FOR_TASK)
                     }
                 )
                 
@@ -470,7 +470,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 isSelected = toolChoiceMode == ToolChoiceMode.DEFAULT,
                 onClick = {
                     toolChoiceMode = ToolChoiceMode.DEFAULT
-                    config.setToolChoiceMode(ToolChoiceMode.DEFAULT)
+                    agentStrategyRepository.setToolChoiceMode(ToolChoiceMode.DEFAULT)
                 }
             )
 
@@ -480,7 +480,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 isSelected = toolChoiceMode == ToolChoiceMode.AUTO,
                 onClick = {
                     toolChoiceMode = ToolChoiceMode.AUTO
-                    config.setToolChoiceMode(ToolChoiceMode.AUTO)
+                    agentStrategyRepository.setToolChoiceMode(ToolChoiceMode.AUTO)
                 }
             )
 
@@ -490,7 +490,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 isSelected = toolChoiceMode == ToolChoiceMode.REQUIRED,
                 onClick = {
                     toolChoiceMode = ToolChoiceMode.REQUIRED
-                    config.setToolChoiceMode(ToolChoiceMode.REQUIRED)
+                    agentStrategyRepository.setToolChoiceMode(ToolChoiceMode.REQUIRED)
                 }
             )
 
@@ -500,7 +500,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 isSelected = toolChoiceMode == ToolChoiceMode.NONE,
                 onClick = {
                     toolChoiceMode = ToolChoiceMode.NONE
-                    config.setToolChoiceMode(ToolChoiceMode.NONE)
+                    agentStrategyRepository.setToolChoiceMode(ToolChoiceMode.NONE)
                 }
             )
 
@@ -510,7 +510,7 @@ fun AgentStrategyScreen(onBack: () -> Unit) {
                 isSelected = toolChoiceMode == ToolChoiceMode.NAMED,
                 onClick = {
                     toolChoiceMode = ToolChoiceMode.NAMED
-                    config.setToolChoiceMode(ToolChoiceMode.NAMED)
+                    agentStrategyRepository.setToolChoiceMode(ToolChoiceMode.NAMED)
                 }
             )
 
