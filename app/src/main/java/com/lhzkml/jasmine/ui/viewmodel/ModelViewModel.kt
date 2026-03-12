@@ -1,4 +1,4 @@
-package com.lhzkml.jasmine.ui.viewmodel
+qwen3.5-pluspackage com.lhzkml.jasmine.ui.viewmodel
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
