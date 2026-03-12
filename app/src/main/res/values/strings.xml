@@ -2,7 +2,7 @@
     <string name="app_name">Jasmine</string>
     <string name="typing_indicator_content_description">模型正在思考</string>
     <string name="oss_licenses_title">开源许可</string>
-    <string name="about_app_description">一款支持本地 MNN 推理与云端大语言模型的智能对话应用，支持 Agent 模式、工具调用与工作区，适用于多场景对话与任务处理。</string>
+<string name="about_app_description">Jasmine 是一款基于模块化架构的 AI 智能体应用，融合本地 MNN 推理引擎与云端大语言模型。核心特性包括：GOAP 目标导向规划与多策略 Agent 协作、MCP 协议与 A2A 跨 Agent 通信、30+ 内置工具（文件操作/Shell 命令/网络搜索）、RAG 知识库检索增强、多 Provider 支持（OpenAI/Ollama/自定义）、工作区管理与实时对话追踪。适用于复杂任务自动化、多轮对话与智能助手场景。</string>
     <string name="about_copyright_line1">Copyright ©2026 莱赫茨凯姆勒.All Rights Reserved.</string>
     <string name="about_copyright_line2">莱赫茨凯姆勒 版权所有</string>
 </resources>
