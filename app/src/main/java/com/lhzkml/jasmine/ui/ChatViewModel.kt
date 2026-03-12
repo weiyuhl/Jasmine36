@@ -202,6 +202,8 @@ class ChatViewModel(
     fun onResume() {
         refreshAgentModeUI()
         refreshModelSelector()
+        // 修复问题 2：每次从设置页面返回时刷新模型选择器
+        // 这样可以确保在设置页面选择的模型能立即显示在聊天页面
     }
 
     fun onPause() {

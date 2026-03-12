@@ -157,7 +157,8 @@ fun ProviderConfigTab(provider: ProviderConfig, repository: ProviderRepository) 
     val scope = rememberCoroutineScope()
 
     var apiKey by remember { mutableStateOf(repository.getApiKey(provider.id) ?: "") }
-    var baseUrl by remember { mutableStateOf(repository.getBaseUrl(provider.id)) }
+    // 修复问题 1：如果用户未保存过 API 地址，使用供应商的默认地址
+    var baseUrl by remember { mutableStateOf(repository.getBaseUrl(provider.id).ifEmpty { provider.defaultBaseUrl }) }
     var chatPath by remember {
         mutableStateOf(repository.getChatPath(provider.id) ?: "")
     }
