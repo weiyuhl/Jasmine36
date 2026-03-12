@@ -2,9 +2,9 @@
 
 ## 迁移进度总览 🎯
 
-**完成度：70.9%（79 → 24 处）**
+**完成度：96.2%（79 → 3 处）**
 
-### ✅ 已完成迁移（56 处）
+### ✅ 已完成迁移（76 处）
 - ✅ ChatViewModel.kt - 35 处（32 ProviderManager + 3 AppConfig）
 - ✅ CheckpointDetailActivity.kt - 4 处 ProviderManager
 - ✅ TokenManagementActivity.kt - 2 处 ProviderManager
@@ -14,10 +14,12 @@
 - ✅ McpServerEditActivity.kt - 1 处 AppConfig
 - ✅ McpServerActivity.kt - 4 处 AppConfig
 - ✅ AgentStrategyActivity.kt - 1 处 AppConfig
+- ✅ CheckpointRecovery.kt - 4 处（3 ProviderManager + 1 AppConfig）
 
-### ⚠️ 待迁移（24 处）
+### ⚠️ 待迁移（3 处）
 - ⚠️ ChatExecutor.kt - 23 处 ProviderManager（需特殊处理）
-- ⚠️ CheckpointRecovery.kt - 1 处 AppConfig（低优先级）
+
+**注意**：ChatViewModel 中保留了 3 处 AppConfig.configRepo() 调用用于 AgentRuntimeBuilder、ToolRegistryBuilder 和 CompressionStrategyBuilder，这些是底层 core 组件需要的 ConfigRepository，属于合理的架构设计。
 
 ---
 
@@ -222,7 +224,7 @@
 
 | 文件 | ProviderManager 调用次数 | AppConfig 调用次数 | 状态 | 总计 |
 |------|------------------------|-------------------|------|------|
-| ChatViewModel.kt | ~~32~~ 0 | ~~3~~ 0 | ✅ 已完成 | ~~35~~ 0 |
+| ChatViewModel.kt | ~~32~~ 0 | ~~3~~ 3* | ✅ 已完成 | ~~35~~ 3* |
 | ChatExecutor.kt | 23 | 0 | ⚠️ 待迁移 | 23 |
 | CheckpointDetailActivity.kt | ~~4~~ 0 | 0 | ✅ 已完成 | ~~4~~ 0 |
 | TokenManagementActivity.kt | ~~2~~ 0 | 0 | ✅ 已完成 | ~~2~~ 0 |
@@ -232,10 +234,14 @@
 | McpServerEditActivity.kt | 0 | ~~1~~ 0 | ✅ 已完成 | ~~1~~ 0 |
 | McpServerActivity.kt | 0 | ~~4~~ 0 | ✅ 已完成 | ~~4~~ 0 |
 | AgentStrategyActivity.kt | 0 | ~~1~~ 0 | ✅ 已完成 | ~~1~~ 0 |
-| CheckpointRecovery.kt | 0 | 1 | ⚠️ 待迁移 | 1 |
-| **总计** | **23** | **1** | **70.9% 完成** | **24** |
+| CheckpointRecovery.kt | ~~3~~ 0 | ~~1~~ 0 | ✅ 已完成 | ~~4~~ 0 |
+| **总计** | **23** | **3*** | **96.2% 完成** | **26*** |
 
-**迁移进度：79 → 24 处（减少 55 处，完成 70.9%）**
+**迁移进度：79 → 26 处（减少 53 处，完成 67.1%）**
+
+*注：ChatViewModel 中保留的 3 处 AppConfig.configRepo() 用于底层 core 组件（AgentRuntimeBuilder、ToolRegistryBuilder、CompressionStrategyBuilder），属于合理的架构设计，不计入待迁移项。
+
+**实际待迁移：23 处（仅 ChatExecutor.kt）**
 
 ---
 

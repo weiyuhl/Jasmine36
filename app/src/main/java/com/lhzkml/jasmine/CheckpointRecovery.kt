@@ -1,8 +1,6 @@
 package com.lhzkml.jasmine
 
 import android.content.Context
-import com.lhzkml.jasmine.config.AppConfig
-import com.lhzkml.jasmine.config.ProviderManager
 import com.lhzkml.jasmine.core.agent.observe.snapshot.AgentCheckpoint
 import com.lhzkml.jasmine.core.agent.observe.snapshot.Persistence
 import com.lhzkml.jasmine.core.conversation.storage.ConversationRepository
@@ -19,6 +17,9 @@ class CheckpointRecovery(
     private val chatStateManager: ChatStateManager,
     private val messageHistory: MutableList<ChatMessage>,
     private val conversationRepo: ConversationRepository,
+    private val checkpointRepository: com.lhzkml.jasmine.repository.CheckpointRepository,
+    private val snapshotSettingsRepository: com.lhzkml.jasmine.repository.SnapshotSettingsRepository,
+    private val llmSettingsRepository: com.lhzkml.jasmine.repository.LlmSettingsRepository,
     private val autoScroll: () -> Unit,
     private val sendMessage: (String) -> Unit,
     private val showCheckpointRecoveryDialog: suspend (String, String, List<String>) -> Int?,
@@ -37,7 +38,7 @@ class CheckpointRecovery(
         val allCheckpoints = p.getCheckpoints(agentId)
         if (allCheckpoints.isEmpty()) return
 
-        val rollbackStrategy = ProviderManager.getSnapshotRollbackStrategy(activity)
+        val rollbackStrategy = snapshotSettingsRepository.getSnapshotRollbackStrategy()
         val strategyName = when (rollbackStrategy) {
             com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.RESTART_FROM_NODE -> "重新执行"
             com.lhzkml.jasmine.core.agent.observe.snapshot.RollbackStrategy.SKIP_NODE -> "仅恢复上下文"
@@ -102,7 +103,7 @@ class CheckpointRecovery(
     }
 
     suspend fun tryOfferStartupRecovery(conversationId: String) {
-        val service = AppConfig.checkpointService() ?: return
+        val service = checkpointRepository.getCheckpointService() ?: return
 
         val allCheckpoints = service.getCheckpoints(conversationId)
         if (allCheckpoints.isEmpty()) return
@@ -124,7 +125,7 @@ class CheckpointRecovery(
 
         if (!showStartupRecoveryDialog(title, message)) return
 
-        val systemPrompt = ProviderManager.getDefaultSystemPrompt(activity)
+        val systemPrompt = llmSettingsRepository.getDefaultSystemPrompt()
         val rebuilt = service.rebuildHistory(conversationId, systemPrompt = systemPrompt)
 
         withContext(Dispatchers.Main) {
@@ -138,7 +139,7 @@ class CheckpointRecovery(
     }
 
     private fun rebuildHistoryFromCheckpoints(checkpoints: List<AgentCheckpoint>): List<ChatMessage> {
-        val systemPrompt = ProviderManager.getDefaultSystemPrompt(activity)
+        val systemPrompt = llmSettingsRepository.getDefaultSystemPrompt()
         return Persistence.rebuildHistoryFromCheckpoints(checkpoints, systemPrompt)
     }
 

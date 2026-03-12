@@ -80,7 +80,8 @@ class ChatViewModel(
     private val mcpRepository: com.lhzkml.jasmine.repository.McpRepository,
     private val compressionSettingsRepository: com.lhzkml.jasmine.repository.CompressionSettingsRepository,
     private val snapshotSettingsRepository: com.lhzkml.jasmine.repository.SnapshotSettingsRepository,
-    private val plannerSettingsRepository: com.lhzkml.jasmine.repository.PlannerSettingsRepository
+    private val plannerSettingsRepository: com.lhzkml.jasmine.repository.PlannerSettingsRepository,
+    private val checkpointRepository: com.lhzkml.jasmine.repository.CheckpointRepository
 ) : AndroidViewModel(application) {
 
     private val ctx: Context get() = getApplication()
@@ -113,8 +114,9 @@ class ChatViewModel(
     private var eventHandler: EventHandler? = null
     private var persistence: Persistence? = null
     private var contextCollector = SystemContextCollector()
-    private val runtimeBuilder = AgentRuntimeBuilder(AppConfig.configRepo())
-    private val toolRegistryBuilder = ToolRegistryBuilder(AppConfig.configRepo())
+    private val configRepo = AppConfig.configRepo()
+    private val runtimeBuilder = AgentRuntimeBuilder(configRepo)
+    private val toolRegistryBuilder = ToolRegistryBuilder(configRepo)
     private val mcpConnectionManager get() = mcpRepository.getConnectionManager()
 
     private var currentLocalModelId: String? = null
@@ -781,6 +783,9 @@ class ChatViewModel(
             chatStateManager = chatStateManager,
             messageHistory = messageHistory,
             conversationRepo = conversationRepo,
+            checkpointRepository = checkpointRepository,
+            snapshotSettingsRepository = snapshotSettingsRepository,
+            llmSettingsRepository = llmSettingsRepository,
             autoScroll = { requestScrollToBottom() },
             sendMessage = { sendMessage(it) },
             showCheckpointRecoveryDialog = { t, m, labels -> showCheckpointRecoveryDialog(t, m, labels) },
@@ -867,6 +872,9 @@ class ChatViewModel(
             chatStateManager = chatStateManager,
             messageHistory = messageHistory,
             conversationRepo = conversationRepo,
+            checkpointRepository = checkpointRepository,
+            snapshotSettingsRepository = snapshotSettingsRepository,
+            llmSettingsRepository = llmSettingsRepository,
             autoScroll = { requestScrollToBottom() },
             sendMessage = { sendMessage(it) },
             showCheckpointRecoveryDialog = { t, m, labels -> showCheckpointRecoveryDialog(t, m, labels) },
@@ -876,7 +884,7 @@ class ChatViewModel(
     }
 
     private suspend fun tryCompressHistory(client: ChatClient, model: String) {
-        val strategy = CompressionStrategyBuilder.build(AppConfig.configRepo(), contextManager) ?: return
+        val strategy = CompressionStrategyBuilder.build(configRepo, contextManager) ?: return
 
         when (strategy) {
             is HistoryCompressionStrategy.TokenBudget -> {

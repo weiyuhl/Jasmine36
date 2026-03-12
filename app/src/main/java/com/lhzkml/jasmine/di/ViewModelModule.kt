@@ -26,7 +26,8 @@ val viewModelModule = module {
             mcpRepository = get(),
             compressionSettingsRepository = get(),
             snapshotSettingsRepository = get(),
-            plannerSettingsRepository = get()
+            plannerSettingsRepository = get(),
+            checkpointRepository = get()
         )
     }
 }
