@@ -1,7 +1,8 @@
 package com.lhzkml.jasmine.repository
 
 import android.content.Context
-import com.lhzkml.jasmine.mnn.MnnModelConfig
+import com.lhzkml.jasmine.core.prompt.mnn.MnnModelConfig
+import com.lhzkml.jasmine.core.prompt.mnn.MnnMarketModel
 import com.lhzkml.jasmine.mnn.MnnModelManager
 
 /**

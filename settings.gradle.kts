@@ -34,6 +34,7 @@ rootProject.name = "Jasmine"
 include(":app")
 include(":jasmine-core:prompt:prompt-model")
 include(":jasmine-core:prompt:prompt-llm")
+include(":jasmine-core:prompt:prompt-mnn")
 include(":jasmine-core:prompt:prompt-executor")
 include(":jasmine-core:conversation:conversation-storage")
 include(":jasmine-core:agent:agent-tools")

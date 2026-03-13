@@ -98,6 +98,7 @@ dependencies {
 
     // Jasmine 框架核心
     implementation(project(":jasmine-core:prompt:prompt-executor"))
+    implementation(project(":jasmine-core:prompt:prompt-mnn"))
     implementation(project(":jasmine-core:conversation:conversation-storage"))
     implementation(project(":jasmine-core:agent:agent-tools"))
     implementation(project(":jasmine-core:agent:agent-observe"))

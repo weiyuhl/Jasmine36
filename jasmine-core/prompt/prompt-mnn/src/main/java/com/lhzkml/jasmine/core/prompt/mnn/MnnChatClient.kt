@@ -1,0 +1,204 @@
+package com.lhzkml.jasmine.core.prompt.mnn
+
+import android.content.Context
+import android.util.Log
+import com.lhzkml.jasmine.core.prompt.llm.ChatClient
+import com.lhzkml.jasmine.core.prompt.llm.LLMProvider
+import com.lhzkml.jasmine.core.prompt.llm.StreamResult
+import com.lhzkml.jasmine.core.prompt.model.BalanceInfo
+import com.lhzkml.jasmine.core.prompt.model.ChatMessage
+import com.lhzkml.jasmine.core.prompt.model.ChatResult
+import com.lhzkml.jasmine.core.prompt.model.ModelInfo
+import com.lhzkml.jasmine.core.prompt.model.SamplingParams
+import com.lhzkml.jasmine.core.prompt.model.ToolChoice
+import com.lhzkml.jasmine.core.prompt.model.ToolDescriptor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * 本地 MNN 模型的 ChatClient 实现。
+ * 将 MnnLlmSession 适配为 ChatClient 接口，使本地推理能融入现有聊天流程。
+ */
+class MnnChatClient(
+    private val context: Context,
+    private val modelId: String,
+    private val stopSignalProvider: (() -> Boolean)? = null
+) : ChatClient {
+
+    companion object {
+        private const val TAG = "MnnChatClient"
+        const val PROVIDER_ID = "mnn_local"
+    }
+
+    override val provider: LLMProvider = LLMProvider.Custom("MNN Local")
+
+    private var session: MnnLlmSession? = null
+
+    private fun ensureSession(model: String): MnnLlmSession {
+        session?.let { return it }
+
+        val models = MnnModelManager.getLocalModels(context)
+        val targetId = model.ifEmpty { modelId }
+        val modelInfo = models.find { it.modelId == targetId }
+            ?: throw IllegalStateException("本地模型 $targetId 不存在，请先下载")
+
+        val defaults = MnnModelManager.getGlobalDefaults(context) ?: MnnModelManager.defaultGlobalConfig()
+        val mnnConfig = MnnConfig(
+            maxNewTokens = defaults.maxNewTokens ?: 2048,
+            temperature = defaults.temperature ?: 0.6f,
+            topP = defaults.topP ?: 0.95f,
+            topK = defaults.topK ?: 20,
+            systemPrompt = "",
+            enableThinking = true
+        )
+
+        val newSession = MnnLlmSession(modelInfo.modelPath, mnnConfig)
+        if (!newSession.init()) {
+            throw IllegalStateException("MNN 模型初始化失败，请检查模型文件是否完整")
+        }
+        session = newSession
+        return newSession
+    }
+
+    /**
+     * 构建 MNN 模型输入 prompt。
+     * 使用应用层的系统提示词（普通聊天 / Agent 模式各自的提示词），
+     * 格式兼容 Qwen 等 chat 模型。
+     */
+    private fun buildPrompt(messages: List<ChatMessage>): String {
+        val sb = StringBuilder()
+        for (msg in messages) {
+            when (msg.role) {
+                "system" -> {
+                    if (msg.content.isNotBlank()) {
+                        sb.appendLine("<|im_start|>system")
+                        sb.appendLine(msg.content)
+                        sb.appendLine("<|im_end|>")
+                        sb.appendLine()
+                    }
+                }
+                "user" -> {
+                    sb.appendLine("<|im_start|>user")
+                    sb.appendLine(msg.content)
+                    sb.appendLine("<|im_end|>")
+                    sb.appendLine()
+                }
+                "assistant" -> {
+                    sb.appendLine("<|im_start|>assistant")
+                    sb.appendLine(msg.content)
+                    sb.appendLine("<|im_end|>")
+                    sb.appendLine()
+                }
+            }
+        }
+        sb.appendLine("<|im_start|>assistant")
+        return sb.toString()
+    }
+
+    override suspend fun chat(
+        messages: List<ChatMessage>,
+        model: String,
+        maxTokens: Int?,
+        samplingParams: SamplingParams?,
+        tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?
+    ): String = withContext(Dispatchers.IO) {
+        val s = ensureSession(model)
+        val prompt = buildPrompt(messages)
+        s.generate(prompt)
+    }
+
+    override suspend fun chatWithUsage(
+        messages: List<ChatMessage>,
+        model: String,
+        maxTokens: Int?,
+        samplingParams: SamplingParams?,
+        tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?
+    ): ChatResult = withContext(Dispatchers.IO) {
+        val s = ensureSession(model)
+        val prompt = buildPrompt(messages)
+        val result = s.generate(prompt)
+        ChatResult(content = result, finishReason = "stop")
+    }
+
+    override fun chatStream(
+        messages: List<ChatMessage>,
+        model: String,
+        maxTokens: Int?,
+        samplingParams: SamplingParams?,
+        tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?
+    ): Flow<String> = callbackFlow {
+        launch(Dispatchers.IO) {
+            val s = ensureSession(model)
+            val prompt = buildPrompt(messages)
+            s.generate(prompt) { token ->
+                trySend(token)
+                false
+            }
+            close()
+        }
+        awaitClose()
+    }
+
+    override suspend fun chatStreamWithUsage(
+        messages: List<ChatMessage>,
+        model: String,
+        maxTokens: Int?,
+        samplingParams: SamplingParams?,
+        tools: List<ToolDescriptor>,
+        toolChoice: ToolChoice?,
+        onChunk: suspend (String) -> Unit
+    ): StreamResult {
+        val s = withContext(Dispatchers.IO) { ensureSession(model) }
+        val prompt = buildPrompt(messages)
+        val fullResult = StringBuilder()
+        withContext(Dispatchers.IO) {
+            s.generate(prompt) { token ->
+                fullResult.append(token)
+                kotlinx.coroutines.runBlocking { onChunk(token) }
+                stopSignalProvider?.invoke() ?: false
+            }
+        }
+        return StreamResult(
+            content = fullResult.toString(),
+            finishReason = "stop"
+        )
+    }
+
+    override suspend fun listModels(): List<ModelInfo> {
+        val models = MnnModelManager.getLocalModels(context)
+        return models.map { info ->
+            ModelInfo(
+                id = info.modelId,
+                ownedBy = "local",
+                displayName = info.modelName,
+                description = "本地 MNN 模型 (${MnnModelManager.formatSize(info.sizeBytes)})"
+            )
+        }
+    }
+
+    override suspend fun getBalance(): BalanceInfo? = null
+
+    /**
+     * 运行时切换 Thinking 模式（仅 Thinking 模型有效）
+     */
+    fun updateThinking(thinking: Boolean) {
+        session?.updateThinking(thinking)
+    }
+
+    override fun close() {
+        try {
+            session?.release()
+            session = null
+            Log.d(TAG, "MnnChatClient closed for model $modelId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing session", e)
+        }
+    }
+}

@@ -5,7 +5,10 @@ import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.google.gson.Gson
-import com.google.gson.JsonObject
+import com.lhzkml.jasmine.core.prompt.mnn.MnnModelManager as CoreMnnModelManager
+import com.lhzkml.jasmine.core.prompt.mnn.MnnModelConfig
+import com.lhzkml.jasmine.core.prompt.mnn.MnnModelInfo
+import com.lhzkml.jasmine.core.prompt.mnn.MnnMarketData
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -25,10 +28,13 @@ import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * 应用层 MNN 模型管理器
+ * 委托核心功能给框架层，添加下载、导入导出等应用层特定功能
+ */
 object MnnModelManager {
 
     private const val TAG = "MnnModelManager"
-    private const val MODELS_DIR = "mnn_models"
     private const val CONFIG_FILE = "config.json"
     private const val MARKET_CACHE_FILE = "mnn_market_cache.json"
     private const val MARKET_URL = "https://meta.alicdn.com/data/mnn/apis/model_market.json"
@@ -44,18 +50,19 @@ object MnnModelManager {
         }
     }
 
-    fun getModelsDir(context: Context): File {
-        val dir = File(context.filesDir, MODELS_DIR)
-        if (!dir.exists()) dir.mkdirs()
-        return dir
-    }
-
-    /** 将 modelId 转为安全的目录名（官方 demo 的 safeModelId 做法） */
-    fun safeModelId(modelId: String): String = modelId.replace("/", "_")
+    // 委托给框架层
+    fun getModelsDir(context: Context): File = CoreMnnModelManager.getModelsDir(context)
+    fun safeModelId(modelId: String): String = CoreMnnModelManager.safeModelId(modelId)
+    fun getLocalModels(context: Context): List<MnnModelInfo> = CoreMnnModelManager.getLocalModels(context)
+    fun getModelConfig(context: Context, modelId: String): MnnModelConfig? = CoreMnnModelManager.getModelConfig(context, modelId)
+    fun saveModelConfig(context: Context, modelId: String, config: MnnModelConfig): Boolean = CoreMnnModelManager.saveModelConfig(context, modelId, config)
+    fun getGlobalDefaults(context: Context): MnnModelConfig? = CoreMnnModelManager.getGlobalDefaults(context)
+    fun defaultGlobalConfig(): MnnModelConfig = CoreMnnModelManager.defaultGlobalConfig()
+    fun deleteModel(context: Context, modelId: String): Boolean = CoreMnnModelManager.deleteModel(context, modelId)
+    fun isSupportThinkingSwitch(context: Context, modelId: String): Boolean = CoreMnnModelManager.isSupportThinkingSwitch(context, modelId)
 
     /**
      * 获取模型的额外标签（来自市场缓存），用于判断能力如 ThinkingSwitch
-     * 支持精确匹配和模糊匹配（手动导入的目录名可能与市场 modelId 格式不同）
      */
     fun getExtraTagsForModel(context: Context, modelId: String): List<String> {
         val cacheFile = File(context.filesDir, MARKET_CACHE_FILE)
@@ -66,7 +73,7 @@ object MnnModelManager {
             val marketModel = data.models.find { m ->
                 val mSafe = safeModelId(m.modelId)
                 m.modelId == modelId || mSafe == safe ||
-                    mSafe.contains(modelId)  // 手动导入目录名如 Qwen3-Thinking-8B 可匹配市场 MNN/Qwen3-Thinking-8B-MNN
+                    mSafe.contains(modelId)
             }
             marketModel?.extraTags ?: emptyList()
         } catch (e: Exception) {
@@ -76,184 +83,31 @@ object MnnModelManager {
     }
 
     /**
-     * 模型是否支持 Thinking 开关。
-     * 检测顺序：1) 市场 extraTags 含 ThinkingSwitch；2) 模型目录名/模型名含 Thinking；
-     * 3) config.json 含 jinja.context.enable_thinking（部分模型在配置中声明）
+     * 保存全局默认配置
      */
-    fun isSupportThinkingSwitch(context: Context, modelId: String): Boolean {
-        val tags = getExtraTagsForModel(context, modelId)
-        if (tags.any { it.equals("ThinkingSwitch", ignoreCase = true) }) return true
-        if (modelId.contains("Thinking", ignoreCase = true)) return true
-
-        val dirName = if (modelId.contains("/")) safeModelId(modelId) else modelId
-        val modelDir = File(getModelsDir(context), dirName)
-        if (!modelDir.exists() || !modelDir.isDirectory) return false
-
-        val localInfo = getLocalModels(context).find { it.modelId == modelId }
-        if (localInfo != null && localInfo.modelName.contains("Thinking", ignoreCase = true)) return true
-
-        val configFile = File(modelDir, CONFIG_FILE)
-        if (configFile.exists()) {
-            try {
-                val root = Gson().fromJson(configFile.readText(), JsonObject::class.java) ?: return false
-                val jinja = root.getAsJsonObject("jinja")
-                val contextObj = jinja?.getAsJsonObject("context")
-                if (contextObj?.has("enable_thinking") == true) return true
-            } catch (_: Exception) {}
-        }
-
-        return false
-    }
-
-    fun getLocalModels(context: Context): List<MnnModelInfo> {
-        val modelsDir = getModelsDir(context)
-        val models = mutableListOf<MnnModelInfo>()
-
-        modelsDir.listFiles()?.forEach { dir ->
-            if (dir.isDirectory) {
-                val mnnFiles = dir.listFiles { f -> f.extension == "mnn" }
-                if (mnnFiles?.isNotEmpty() == true) {
-                    val configFile = File(dir, CONFIG_FILE)
-                    val config = if (configFile.exists()) {
-                        try {
-                            Gson().fromJson(configFile.readText(), MnnModelConfig::class.java)
-                        } catch (e: Exception) {
-                            null
-                        }
-                    } else null
-                    val modelId = dir.name
-                    val parts = modelId.split("_")
-                    val displayName = if (parts.size > 1) parts.drop(1).joinToString("_") else modelId
-                    models.add(
-                        MnnModelInfo(
-                            modelId = modelId,
-                            modelName = displayName,
-                            modelPath = mnnFiles[0].absolutePath,
-                            sizeBytes = calculateDirSize(dir),
-                            isDownloaded = true,
-                            config = config
-                        )
-                    )
-                }
-            }
-        }
-
-        return models
-    }
-
-    private const val GLOBAL_DEFAULTS_ID = "__global_defaults__"
-    private const val GLOBAL_CONFIG_FILE = "mnn_global_defaults.json"
-
-    fun getModelConfig(context: Context, modelId: String): MnnModelConfig? {
-        if (modelId == GLOBAL_DEFAULTS_ID) return getGlobalDefaults(context)
-        val dirName = if (modelId.contains("/")) safeModelId(modelId) else modelId
-        val configFile = File(getModelsDir(context), "$dirName/$CONFIG_FILE")
-        return if (configFile.exists()) {
-            try {
-                Gson().fromJson(configFile.readText(), MnnModelConfig::class.java)
-            } catch (e: Exception) {
-                null
-            }
-        } else null
-    }
-
-    fun saveModelConfig(context: Context, modelId: String, config: MnnModelConfig): Boolean {
-        if (modelId == GLOBAL_DEFAULTS_ID) return saveGlobalDefaults(context, config)
-        return try {
-            val dirName = if (modelId.contains("/")) safeModelId(modelId) else modelId
-            val modelDir = File(getModelsDir(context), dirName)
-            if (!modelDir.exists()) modelDir.mkdirs()
-            File(modelDir, CONFIG_FILE).writeText(Gson().toJson(config))
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
-
-    fun getGlobalDefaults(context: Context): MnnModelConfig? {
-        val file = File(context.filesDir, GLOBAL_CONFIG_FILE)
-        return if (file.exists()) {
-            try { Gson().fromJson(file.readText(), MnnModelConfig::class.java) }
-            catch (e: Exception) { null }
-        } else null
-    }
-
-    /** 官方 demo 的默认配置（ModelConfig.defaultConfig） */
-    fun defaultGlobalConfig(): MnnModelConfig = MnnModelConfig(
-        backendType = "cpu",
-        threadNum = 4,
-        precision = "low",
-        useMmap = false,
-        memory = "low",
-        samplerType = "mixed",
-        temperature = 0.6f,
-        topP = 0.95f,
-        topK = 20,
-        minP = 0.05f,
-        tfsZ = 1.0f,
-        typical = 0.95f,
-        penalty = 1.02f,
-        nGram = 8,
-        nGramFactor = 1.02f,
-        maxNewTokens = 2048
-    )
-
-    private fun saveGlobalDefaults(context: Context, config: MnnModelConfig): Boolean {
-        return try {
-            File(context.filesDir, GLOBAL_CONFIG_FILE).writeText(Gson().toJson(config))
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
+    fun saveGlobalDefaults(context: Context, config: MnnModelConfig): Boolean = 
+        CoreMnnModelManager.saveGlobalDefaults(context, config)
 
     /**
-     * 递归删除目录。参考官方 MNN DownloadFileUtils.deleteDirectoryRecursively，
-     * 使用 Files.walkFileTree 先删文件再删目录，相比 File.deleteRecursively() 更可靠。
+     * 获取已下载的模型 ID 集合
      */
-    private fun deleteDirectoryRecursively(dir: File?): Boolean {
-        if (dir == null || !dir.exists()) return false
-        val dirPath: Path = dir.toPath()
-        return try {
-            Files.walkFileTree(dirPath, object : SimpleFileVisitor<Path>() {
-                @Throws(IOException::class)
-                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                    Files.delete(file)
-                    return FileVisitResult.CONTINUE
-                }
-
-                @Throws(IOException::class)
-                override fun postVisitDirectory(directory: Path, exc: IOException?): FileVisitResult {
-                    Files.delete(directory)
-                    return FileVisitResult.CONTINUE
-                }
-
-                @Throws(IOException::class)
-                override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult {
-                    Log.e(TAG, "visitFileFailed: $file", exc)
-                    return FileVisitResult.TERMINATE
-                }
-            })
-            true
-        } catch (e: IOException) {
-            Log.e(TAG, "deleteDirectoryRecursively failed: ${dir.absolutePath}", e)
-            false
-        }
+    fun getDownloadedModelIds(context: Context): Set<String> {
+        return getLocalModels(context).map { it.modelId }.toSet()
     }
 
-    fun deleteModel(context: Context, modelId: String): Boolean {
-        return try {
-            val dirName = if (modelId.contains("/")) safeModelId(modelId) else modelId
-            val modelDir = File(getModelsDir(context), dirName)
-            if (!modelDir.exists()) return true // 目录不存在视为已删除
-            val ok = deleteDirectoryRecursively(modelDir)
-            if (!ok) Log.e(TAG, "deleteModel failed: $modelId -> ${modelDir.absolutePath}")
-            ok
-        } catch (e: Exception) {
-            Log.e(TAG, "deleteModel error: $modelId", e)
-            false
+    /** 检查市场 modelId（如 MNN/Qwen3.5-2B-MNN）是否已下载 */
+    fun isModelDownloaded(context: Context, marketModelId: String): Boolean {
+        val safe = safeModelId(marketModelId)
+        return getDownloadedModelIds(context).contains(safe)
+    }
+
+    fun formatSize(bytes: Long): String = CoreMnnModelManager.formatSize(bytes)
+
+    fun formatSizeB(sizeB: Double): String {
+        return when {
+            sizeB >= 1.0 -> String.format("%.1fB", sizeB)
+            sizeB >= 0.1 -> String.format("%.1fB", sizeB)
+            else -> String.format("%.2fB", sizeB)
         }
     }
 
@@ -301,41 +155,6 @@ object MnnModelManager {
             }
 
             null
-        }
-    }
-
-    fun getDownloadedModelIds(context: Context): Set<String> {
-        return getLocalModels(context).map { it.modelId }.toSet()
-    }
-
-    /** 检查市场 modelId（如 MNN/Qwen3.5-2B-MNN）是否已下载 */
-    fun isModelDownloaded(context: Context, marketModelId: String): Boolean {
-        val safe = safeModelId(marketModelId)
-        return getDownloadedModelIds(context).contains(safe)
-    }
-
-    private fun calculateDirSize(dir: File): Long {
-        var size = 0L
-        dir.listFiles()?.forEach { file ->
-            size += if (file.isDirectory) calculateDirSize(file) else file.length()
-        }
-        return size
-    }
-
-    fun formatSize(bytes: Long): String {
-        return when {
-            bytes >= 1024L * 1024 * 1024 -> String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024))
-            bytes >= 1024L * 1024 -> String.format("%.2f MB", bytes / (1024.0 * 1024))
-            bytes >= 1024L -> String.format("%.2f KB", bytes / 1024.0)
-            else -> "$bytes B"
-        }
-    }
-
-    fun formatSizeB(sizeB: Double): String {
-        return when {
-            sizeB >= 1.0 -> String.format("%.1fB", sizeB)
-            sizeB >= 0.1 -> String.format("%.1fB", sizeB)
-            else -> String.format("%.2fB", sizeB)
         }
     }
 
